@@ -324,7 +324,7 @@ export function Overview({
               </p>
             </div>
           </div>
-          <CategoryBars items={categories} limit={5} />
+          <CategoryBars items={categories} limit={5} composition />
           {categories.length > 5 ? (
             <div className="category-card-foot">
               <span>另有 {categories.length - 5} 个分类未显示</span>

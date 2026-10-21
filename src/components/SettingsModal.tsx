@@ -193,7 +193,9 @@ export function SettingsModal({
                       aria-hidden="true"
                     >
                       <span className="palette-preview-weave" />
-                      <span className="palette-preview-hero" />
+                      <span className="palette-preview-hero">
+                        <span className="palette-preview-ornament" />
+                      </span>
                       <span className="palette-preview-sheet">
                         <i />
                         <i />

@@ -67,7 +67,7 @@ export const PALETTES: PaletteMeta[] = [
         ink: '#221f19',
         hero: '#2b2418',
         on: '#fbf6e9',
-        income: '#0f6b96',
+        income: '#00846c',
         expense: '#a8552f',
         trend: '#8a6214',
       },
@@ -79,7 +79,7 @@ export const PALETTES: PaletteMeta[] = [
         ink: '#ede7da',
         hero: '#201b13',
         on: '#1c1710',
-        income: '#3a94cc',
+        income: '#33a696',
         expense: '#cf7a4e',
         trend: '#b08a2f',
       },
@@ -119,36 +119,36 @@ export const PALETTES: PaletteMeta[] = [
     themeColor: { light: '#f2f0ea', dark: '#0e1216' },
   },
   {
-    id: 'copper',
-    name: '曜石铜',
-    caption: 'OBSIDIAN COPPER',
+    id: 'rose',
+    name: '玫瑰紫',
+    caption: 'ROSE VIOLET',
     preview: {
       light: {
-        page: '#f1efea',
-        surface: '#fcfaf6',
-        accent: '#8a4b2b',
-        soft: '#f3e4da',
-        ink: '#1f1e1c',
-        hero: '#262320',
-        on: '#fbf5ee',
-        income: '#0b7d62',
-        expense: '#a34532',
-        trend: '#8a431f',
+        page: '#f5f0f4',
+        surface: '#fdfafc',
+        accent: '#6b3a5b',
+        soft: '#f1e2eb',
+        ink: '#241f26',
+        hero: '#2c1f2c',
+        on: '#fbf5f9',
+        income: '#5c408e',
+        expense: '#9c3a43',
+        trend: '#8a4b7a',
       },
       dark: {
-        page: '#111213',
-        surface: '#1b1d1e',
-        accent: '#c98f6b',
-        soft: '#32251d',
-        ink: '#e9e7e2',
-        hero: '#1e2123',
-        on: '#1a1512',
-        income: '#2f9d84',
-        expense: '#c96a55',
-        trend: '#b0703f',
+        page: '#141017',
+        surface: '#1e1821',
+        accent: '#d2a6c4',
+        soft: '#332433',
+        ink: '#ece4eb',
+        hero: '#2a1c2b',
+        on: '#1b121c',
+        income: '#8f78d0',
+        expense: '#d1747f',
+        trend: '#b07ac0',
       },
     },
-    themeColor: { light: '#f1efea', dark: '#111213' },
+    themeColor: { light: '#f5f0f4', dark: '#141017' },
   },
 ]
 
@@ -159,8 +159,13 @@ export function isPalette(value: unknown): value is Palette {
     value === 'forest' ||
     value === 'gold' ||
     value === 'navy' ||
-    value === 'copper'
+    value === 'rose'
   )
+}
+
+export function normalizePalette(value: unknown): Palette {
+  if (value === 'copper') return 'rose'
+  return isPalette(value) ? value : DEFAULT_PALETTE
 }
 
 export function paletteThemeColor(

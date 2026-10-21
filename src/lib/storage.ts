@@ -3,7 +3,7 @@ import {
   isValidTransaction,
   sortTransactions,
 } from './data'
-import { DEFAULT_PALETTE, isPalette } from './themes'
+import { isPalette, normalizePalette } from './themes'
 import {
   isDesktopApp,
   loadDesktopLedger,
@@ -73,8 +73,8 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   if (snapshot.theme === 'light' || snapshot.theme === 'dark') {
     safeSet(KEYS.theme, snapshot.theme)
   }
-  if (isPalette(snapshot.palette)) {
-    safeSet(KEYS.palette, snapshot.palette)
+  if (snapshot.palette === 'copper' || isPalette(snapshot.palette)) {
+    safeSet(KEYS.palette, normalizePalette(snapshot.palette))
   }
   if (typeof snapshot.seeded === 'boolean') {
     safeSet(KEYS.seeded, String(snapshot.seeded))
@@ -112,7 +112,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
         ? storedBudget
         : DEFAULT_BUDGET,
     theme: storedTheme === 'dark' ? 'dark' : 'light',
-    palette: isPalette(storedPalette) ? storedPalette : DEFAULT_PALETTE,
+    palette: normalizePalette(storedPalette),
     seeded: safeGet(KEYS.seeded) === 'true',
   }
 }
@@ -246,8 +246,7 @@ export function saveTheme(theme: Theme): void {
 }
 
 export function loadPalette(): Palette {
-  const stored = safeGet(KEYS.palette)
-  return isPalette(stored) ? stored : DEFAULT_PALETTE
+  return normalizePalette(safeGet(KEYS.palette))
 }
 
 export function savePalette(palette: Palette): void {

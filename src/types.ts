@@ -4,7 +4,7 @@ export type View = 'overview' | 'transactions' | 'analytics'
 
 export type Theme = 'light' | 'dark'
 
-export type Palette = 'forest' | 'gold' | 'navy' | 'copper'
+export type Palette = 'forest' | 'gold' | 'navy' | 'rose'
 
 export interface LedgerTransaction {
   id: string

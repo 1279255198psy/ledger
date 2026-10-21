@@ -1,4 +1,5 @@
 import { CategoryIcon } from '../CategoryIcon'
+import { CATEGORY_TONES } from '../../lib/data'
 import { formatMoney, formatPercent } from '../../lib/utils'
 import type { CategoryTotal } from '../../types'
 
@@ -6,12 +7,14 @@ interface CategoryBarsProps {
   items: CategoryTotal[]
   limit?: number
   emptyText?: string
+  composition?: boolean
 }
 
 export function CategoryBars({
   items,
   limit,
   emptyText = '这个月还没有支出',
+  composition = false,
 }: CategoryBarsProps) {
   const visible = limit ? items.slice(0, limit) : items
   const max = visible.reduce((value, item) => Math.max(value, item.value), 0)
@@ -21,30 +24,45 @@ export function CategoryBars({
   }
 
   return (
-    <ul className="category-bars">
-      {visible.map((item) => {
-        const width = max > 0 ? (item.value / max) * 100 : 0
-        return (
-          <li
-            key={item.category.id}
-            aria-label={`${item.category.name}，${formatMoney(item.value)}，占${formatPercent(item.share * 100)}`}
-          >
-            <div className="category-row-head">
-              <span className="category-row-name">
-                <CategoryIcon id={item.category.id} size={15} compact />
-                {item.category.name}
-              </span>
-              <span className="category-row-value">
-                {formatMoney(item.value)}
-                <small>{formatPercent(item.share * 100)}</small>
-              </span>
-            </div>
-            <div className="category-track" aria-hidden="true">
-              <span style={{ width: `${width}%` }} />
-            </div>
-          </li>
-        )
-      })}
-    </ul>
+    <div className="category-visual">
+      {composition && items.length > 1 ? (
+        <div className="category-composition" aria-hidden="true">
+          {items.map((item) => (
+            <span
+              key={item.category.id}
+              className={`tone-${CATEGORY_TONES[item.category.id] ?? 'stone'}`}
+              style={{ flexGrow: Math.max(item.value, 0.01), flexBasis: 0 }}
+            />
+          ))}
+        </div>
+      ) : null}
+      <ul className="category-bars">
+        {visible.map((item) => {
+          const width = max > 0 ? (item.value / max) * 100 : 0
+          const tone = CATEGORY_TONES[item.category.id] ?? 'stone'
+          return (
+            <li
+              key={item.category.id}
+              className={`tone-${tone}`}
+              aria-label={`${item.category.name}，${formatMoney(item.value)}，占${formatPercent(item.share * 100)}`}
+            >
+              <div className="category-row-head">
+                <span className="category-row-name">
+                  <CategoryIcon id={item.category.id} size={15} compact />
+                  {item.category.name}
+                </span>
+                <span className="category-row-value">
+                  {formatMoney(item.value)}
+                  <small>{formatPercent(item.share * 100)}</small>
+                </span>
+              </div>
+              <div className="category-track" aria-hidden="true">
+                <span style={{ width: `${width}%` }} />
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }

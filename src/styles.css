@@ -95,37 +95,55 @@
   --tone-teal: #266d65;
 
   --pattern: radial-gradient(
-      circle at 14% 82%,
-      transparent 0 120px,
-      rgba(35, 77, 59, 0.045) 120px 121px,
-      transparent 121px 170px,
-      rgba(35, 77, 59, 0.03) 170px 171px,
-      transparent 171px 220px
+      circle at 84% 12%,
+      transparent 0 148px,
+      rgba(35, 77, 59, 0.13) 148px 149px,
+      transparent 149px 204px,
+      rgba(35, 77, 59, 0.08) 204px 205px,
+      transparent 205px 262px
     ),
     radial-gradient(
-      circle at 88% 10%,
-      transparent 0 180px,
-      rgba(35, 77, 59, 0.035) 180px 181px,
-      transparent 181px 250px,
-      rgba(35, 77, 59, 0.025) 250px 251px,
-      transparent 251px
+      circle at 9% 91%,
+      transparent 0 106px,
+      rgba(35, 77, 59, 0.1) 106px 107px,
+      transparent 107px 158px,
+      rgba(35, 77, 59, 0.06) 158px 159px,
+      transparent 159px
     ),
     repeating-linear-gradient(
-      92deg,
-      rgba(45, 70, 52, 0.018) 0 1px,
-      transparent 1px 6px
+      93deg,
+      rgba(45, 70, 52, 0.05) 0 1px,
+      transparent 1px 7px
     ),
     radial-gradient(
-      1px 1px at 22% 18%,
-      rgba(45, 70, 52, 0.16),
+      1.4px 1.4px at 22% 18%,
+      rgba(45, 70, 52, 0.3),
       transparent 100%
     ),
     radial-gradient(
       1px 1px at 71% 38%,
-      rgba(45, 70, 52, 0.12),
+      rgba(45, 70, 52, 0.24),
       transparent 100%
     );
   --pattern-size: auto, auto, auto, 61px 61px, 97px 97px;
+
+  --card-motif: repeating-radial-gradient(
+    circle at 100% 0,
+    transparent 0 19px,
+    rgba(35, 77, 59, 0.14) 19px 20px,
+    transparent 20px 40px
+  );
+  --sidebar-motif: repeating-radial-gradient(
+      circle at 118% 44%,
+      transparent 0 26px,
+      rgba(35, 77, 59, 0.16) 26px 27px,
+      transparent 27px 54px
+    ),
+    repeating-linear-gradient(
+      93deg,
+      rgba(45, 70, 52, 0.05) 0 1px,
+      transparent 1px 9px
+    );
 
   color-scheme: light;
 }
@@ -158,16 +176,16 @@
   --on-accent: #fbf6e9;
   --ring: rgba(124, 90, 34, 0.32);
 
-  --positive: #0f6b96;
-  --positive-soft: #e2edf3;
+  --positive: #00846c;
+  --positive-soft: #ddefe9;
   --negative: #a8552f;
   --negative-soft: #f6e5da;
   --warning: #a8561f;
   --warning-soft: #f8e7d6;
 
-  --chart-income: #0f6b96;
+  --chart-income: #00846c;
   --chart-expense: #a8552f;
-  --chart-income-soft: #e2edf3;
+  --chart-income-soft: #ddefe9;
   --chart-expense-soft: #f6e5da;
   --chart-trend: #8a6214;
   --chart-trend-soft: #f2ead4;
@@ -185,7 +203,7 @@
   --hero-line: rgba(246, 237, 216, 0.15);
   --hero-glow: rgba(210, 178, 116, 0.2);
   --hero-glow-warm: rgba(232, 177, 137, 0.12);
-  --hero-positive: #a9c8da;
+  --hero-positive: #9fd6c4;
   --hero-negative: #e8b189;
   --hero-motif: repeating-conic-gradient(
       from 208deg at 90% 4%,
@@ -213,35 +231,55 @@
   --tone-gold: #8f6a16;
   --tone-teal: #2f6d68;
 
-  --pattern: radial-gradient(
-      circle at 78% 6%,
-      transparent 0 200px,
-      rgba(140, 100, 30, 0.06) 200px 201px,
-      transparent 201px 280px,
-      rgba(140, 100, 30, 0.04) 280px 281px,
-      transparent 281px
+  --pattern: repeating-conic-gradient(
+      from 205deg at 84% 0%,
+      rgba(140, 100, 30, 0.06) 0deg 0.45deg,
+      transparent 0.45deg 9deg
+    ),
+    repeating-conic-gradient(
+      from 25deg at 84% 0%,
+      rgba(140, 100, 30, 0.035) 0deg 0.6deg,
+      transparent 0.6deg 17deg
+    ),
+    repeating-linear-gradient(
+      44deg,
+      rgba(150, 110, 35, 0.04) 0 1px,
+      transparent 1px 21px
     ),
     radial-gradient(
-      1.1px 1.1px at 30% 22%,
-      rgba(150, 110, 35, 0.22),
+      1.3px 1.3px at 28% 24%,
+      rgba(150, 110, 35, 0.32),
       transparent 100%
     ),
     radial-gradient(
-      1px 1px at 65% 48%,
-      rgba(150, 110, 35, 0.15),
+      1px 1px at 64% 52%,
+      rgba(150, 110, 35, 0.24),
       transparent 100%
-    ),
-    radial-gradient(
-      1.4px 1.4px at 84% 76%,
-      rgba(150, 110, 35, 0.14),
-      transparent 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(255, 252, 245, 0) 0%,
-      rgba(160, 120, 45, 0.02) 100%
     );
-  --pattern-size: auto, 73px 73px, 113px 113px, 157px 157px, auto;
+  --pattern-size: auto, auto, auto, 73px 73px, 113px 113px;
+
+  --card-motif: repeating-conic-gradient(
+      from 205deg at 100% 0,
+      rgba(140, 100, 30, 0.16) 0deg 1.5deg,
+      transparent 1.5deg 13deg
+    ),
+    repeating-radial-gradient(
+      circle at 100% 0,
+      transparent 0 42px,
+      rgba(140, 100, 30, 0.12) 42px 43px,
+      transparent 43px 84px
+    );
+  --sidebar-motif: repeating-conic-gradient(
+      from 196deg at 128% 34%,
+      rgba(140, 100, 30, 0.13) 0deg 1.2deg,
+      transparent 1.2deg 11deg
+    ),
+    repeating-radial-gradient(
+      circle at 128% 34%,
+      transparent 0 46px,
+      rgba(140, 100, 30, 0.09) 46px 47px,
+      transparent 47px 94px
+    );
 
   --shadow-card: 0 1px 2px rgba(45, 40, 30, 0.025),
     0 14px 36px rgba(45, 40, 30, 0.04);
@@ -343,28 +381,66 @@
   --tone-teal: #266c72;
 
   --pattern: repeating-radial-gradient(
-      140% 105% at 50% 118%,
-      transparent 0 44px,
-      rgba(30, 58, 82, 0.045) 44px 45px,
-      transparent 45px 88px
+      145% 100% at 50% 118%,
+      transparent 0 42px,
+      rgba(30, 58, 82, 0.11) 42px 43px,
+      transparent 43px 84px
     ),
     radial-gradient(
-      circle at 10% 8%,
-      transparent 0 210px,
-      rgba(30, 58, 82, 0.035) 210px 211px,
-      transparent 211px 300px
+      circle at 8% 4%,
+      transparent 0 150px,
+      rgba(30, 58, 82, 0.09) 150px 151px,
+      transparent 151px 214px,
+      rgba(30, 58, 82, 0.055) 214px 215px,
+      transparent 215px 286px
+    ),
+    repeating-radial-gradient(
+      circle at 103% 74%,
+      transparent 0 30px,
+      rgba(30, 58, 82, 0.085) 30px 31px,
+      transparent 31px 60px
+    ),
+    repeating-linear-gradient(
+      78deg,
+      rgba(30, 58, 82, 0.038) 0 1px,
+      transparent 1px 23px
     ),
     radial-gradient(
-      1px 1px at 26% 14%,
-      rgba(30, 58, 82, 0.18),
+      1.2px 1.2px at 24% 16%,
+      rgba(30, 58, 82, 0.32),
       transparent 100%
     ),
     radial-gradient(
-      1px 1px at 72% 26%,
-      rgba(30, 58, 82, 0.12),
+      1px 1px at 70% 30%,
+      rgba(30, 58, 82, 0.24),
       transparent 100%
     );
-  --pattern-size: auto, auto, 89px 89px, 131px 131px;
+  --pattern-size: auto, auto, auto, auto, 79px 79px, 121px 121px;
+
+  --card-motif: repeating-radial-gradient(
+      160% 130% at 100% 0,
+      transparent 0 17px,
+      rgba(30, 58, 82, 0.14) 17px 18px,
+      transparent 18px 36px
+    ),
+    radial-gradient(
+      1px 1px at 70% 30%,
+      rgba(30, 58, 82, 0.24),
+      transparent 100%
+    );
+  --card-motif-size: auto, 17px 17px;
+  --sidebar-motif: repeating-radial-gradient(
+      150% 120% at 132% 66%,
+      transparent 0 24px,
+      rgba(30, 58, 82, 0.13) 24px 25px,
+      transparent 25px 48px
+    ),
+    radial-gradient(
+      1.2px 1.2px at 30% 24%,
+      rgba(30, 58, 82, 0.3),
+      transparent 100%
+    );
+  --sidebar-motif-size: auto, 61px 61px;
 
   --shadow-card: 0 1px 2px rgba(28, 38, 48, 0.025),
     0 14px 36px rgba(28, 38, 48, 0.045);
@@ -374,125 +450,171 @@
   --shadow-hero: 0 20px 50px rgba(18, 32, 46, 0.18);
 }
 
-/* ---------- Palette: Graphite Copper · light ---------- */
+/* ---------- Palette: Rose Violet · light ---------- */
 
-:root[data-palette="copper"] {
-  --page: #f1efea;
-  --page-wash: rgba(255, 253, 246, 0.62);
-  --page-wash-two: rgba(138, 75, 43, 0.035);
-  --sidebar-bg: #ecebe5;
-  --surface: #fcfaf6;
-  --surface-raised: #fefcf8;
-  --surface-soft: #f5f2ed;
-  --surface-sunken: #efebe5;
+:root[data-palette="rose"] {
+  --page: #f5f0f4;
+  --page-wash: rgba(255, 250, 253, 0.64);
+  --page-wash-two: rgba(107, 58, 91, 0.045);
+  --sidebar-bg: #efe8ef;
+  --surface: #fdfafc;
+  --surface-raised: #fffdfe;
+  --surface-soft: #f8f1f6;
+  --surface-sunken: #f1e9ef;
 
-  --ink: #1f1e1c;
-  --ink-secondary: #575450;
-  --ink-muted: #8a867f;
-  --ink-faint: #aaa59d;
+  --ink: #241f26;
+  --ink-secondary: #5f5762;
+  --ink-muted: #8e858f;
+  --ink-faint: #ada5ad;
 
-  --line: #e3dfd8;
-  --line-strong: #d4cfc6;
+  --line: #e6dee5;
+  --line-strong: #d7ccd6;
 
-  --accent: #8a4b2b;
-  --accent-hover: #733c20;
-  --accent-soft: #f3e4da;
-  --accent-mid: #c69a80;
-  --accent-ink: #6e3a20;
-  --on-accent: #fbf5ee;
-  --ring: rgba(138, 75, 43, 0.3);
+  --accent: #6b3a5b;
+  --accent-hover: #572d49;
+  --accent-soft: #f1e2eb;
+  --accent-mid: #bd92ad;
+  --accent-ink: #512b44;
+  --on-accent: #fbf5f9;
+  --ring: rgba(107, 58, 91, 0.32);
 
-  --positive: #0b7d62;
-  --positive-soft: #e0efe9;
-  --negative: #a34532;
-  --negative-soft: #f6e4dd;
-  --warning: #a36a1d;
+  --positive: #5c408e;
+  --positive-soft: #ebe4f4;
+  --negative: #9c3a43;
+  --negative-soft: #f7e4e7;
+  --warning: #9c671b;
   --warning-soft: #f8ecd8;
 
-  --chart-income: #0b7d62;
-  --chart-expense: #a34532;
-  --chart-income-soft: #e0efe9;
-  --chart-expense-soft: #f6e4dd;
-  --chart-trend: #8a431f;
-  --chart-trend-soft: #f2e4d8;
-  --chart-grid: #e6e2db;
-  --chart-axis: #c5c1b9;
-  --chart-hover: rgba(138, 75, 43, 0.045);
+  --chart-income: #5c408e;
+  --chart-expense: #9c3a43;
+  --chart-income-soft: #ebe4f4;
+  --chart-expense-soft: #f7e4e7;
+  --chart-trend: #8a4b7a;
+  --chart-trend-soft: #f2e4ee;
+  --chart-grid: #e9e1e8;
+  --chart-axis: #c9bec7;
+  --chart-hover: rgba(107, 58, 91, 0.05);
 
-  --tooltip-bg: #262321;
-  --tooltip-ink: #f4f0e8;
-  --tooltip-muted: #bdb5a9;
+  --tooltip-bg: #271f29;
+  --tooltip-ink: #f8f1f6;
+  --tooltip-muted: #c0b3bc;
 
-  --hero-base: #262320;
-  --hero-ink: #f4f0e8;
-  --hero-muted: #bdb5a9;
-  --hero-line: rgba(244, 240, 232, 0.15);
-  --hero-glow: rgba(198, 154, 128, 0.18);
-  --hero-glow-warm: rgba(201, 106, 85, 0.12);
-  --hero-positive: #a4d2be;
-  --hero-negative: #e5ad94;
+  --hero-base: #2c1f2c;
+  --hero-ink: #f7eff5;
+  --hero-muted: #c3b2bf;
+  --hero-line: rgba(247, 239, 245, 0.15);
+  --hero-glow: rgba(206, 151, 187, 0.2);
+  --hero-glow-warm: rgba(156, 58, 67, 0.13);
+  --hero-positive: #d8c2ee;
+  --hero-negative: #f0b1ba;
   --hero-motif: repeating-linear-gradient(
-      135deg,
-      transparent 0 22px,
-      rgba(230, 186, 150, 0.07) 22px 23px
+      45deg,
+      rgba(244, 211, 233, 0.075) 0 1px,
+      transparent 1px 23px
     ),
     repeating-linear-gradient(
-      45deg,
-      transparent 0 22px,
-      rgba(230, 186, 150, 0.05) 22px 23px
+      135deg,
+      rgba(244, 211, 233, 0.075) 0 1px,
+      transparent 1px 23px
+    ),
+    repeating-radial-gradient(
+      circle at 88% 6%,
+      transparent 0 26px,
+      rgba(244, 211, 233, 0.13) 26px 27px,
+      transparent 27px 52px
     ),
     radial-gradient(
-      2px 2px at 82% 22%,
-      rgba(230, 170, 120, 0.25),
+      1.6px 1.6px at 20% 32%,
+      rgba(244, 211, 233, 0.34),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 58% 18%,
+      rgba(244, 211, 233, 0.22),
       transparent 100%
     );
 
-  --tone-clay: #a34e32;
-  --tone-sky: #3f6f86;
-  --tone-plum: #7c4f66;
-  --tone-olive: #687036;
-  --tone-amber: #93661a;
-  --tone-rose: #9c4b58;
-  --tone-indigo: #585690;
-  --tone-stone: #6f6860;
-  --tone-forest: #2f6b58;
-  --tone-gold: #8c6718;
-  --tone-teal: #2c6d6b;
+  --tone-clay: #a34e3f;
+  --tone-sky: #3f6f83;
+  --tone-plum: #8a3f6a;
+  --tone-olive: #6a7042;
+  --tone-amber: #9a6a2f;
+  --tone-rose: #a63b5a;
+  --tone-indigo: #5f4f96;
+  --tone-stone: #71636d;
+  --tone-forest: #3f6b58;
+  --tone-gold: #8c6a2a;
+  --tone-teal: #2f6f72;
 
-  --pattern: repeating-linear-gradient(
-      135deg,
-      rgba(90, 75, 60, 0.028) 0 1px,
-      transparent 1px 34px
+  --pattern: repeating-radial-gradient(
+      circle at 87% 3%,
+      transparent 0 20px,
+      rgba(107, 58, 91, 0.11) 20px 21px,
+      transparent 21px 40px,
+      rgba(107, 58, 91, 0.065) 40px 41px,
+      transparent 41px 62px
     ),
     repeating-linear-gradient(
       45deg,
-      rgba(90, 75, 60, 0.022) 0 1px,
-      transparent 1px 46px
+      rgba(107, 58, 91, 0.04) 0 1px,
+      transparent 1px 26px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      rgba(107, 58, 91, 0.04) 0 1px,
+      transparent 1px 31px
     ),
     radial-gradient(
-      1.1px 1.1px at 34% 28%,
-      rgba(138, 75, 43, 0.18),
+      1.5px 1.5px at 50% 50%,
+      rgba(107, 58, 91, 0.15) 0 1.4px,
       transparent 100%
     ),
     radial-gradient(
-      1px 1px at 78% 64%,
-      rgba(138, 75, 43, 0.12),
+      1.4px 1.4px at 30% 26%,
+      rgba(107, 58, 91, 0.26),
       transparent 100%
-    ),
-    radial-gradient(
-      circle at 88% 8%,
-      transparent 0 160px,
-      rgba(138, 75, 43, 0.045) 160px 161px,
-      transparent 161px 230px
     );
-  --pattern-size: auto, auto, 83px 83px, 127px 127px, auto;
+  --pattern-size: auto, auto, auto, 47px 47px, 71px 71px;
 
-  --shadow-card: 0 1px 2px rgba(38, 36, 32, 0.025),
-    0 14px 36px rgba(38, 36, 32, 0.045);
-  --shadow-raised: 0 20px 60px rgba(30, 28, 24, 0.16);
-  --shadow-button: 0 5px 14px rgba(138, 75, 43, 0.18);
-  --shadow-mark: 0 4px 12px rgba(138, 75, 43, 0.18);
-  --shadow-hero: 0 20px 50px rgba(32, 28, 24, 0.18);
+  --card-motif: repeating-linear-gradient(
+      45deg,
+      rgba(107, 58, 91, 0.13) 0 1px,
+      transparent 1px 15px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      rgba(107, 58, 91, 0.13) 0 1px,
+      transparent 1px 15px
+    ),
+    repeating-radial-gradient(
+      circle at 100% 0,
+      transparent 0 24px,
+      rgba(107, 58, 91, 0.15) 24px 25px,
+      transparent 25px 48px
+    );
+  --sidebar-motif: repeating-linear-gradient(
+      45deg,
+      rgba(107, 58, 91, 0.11) 0 1px,
+      transparent 1px 18px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      rgba(107, 58, 91, 0.11) 0 1px,
+      transparent 1px 18px
+    ),
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      transparent 0 34px,
+      rgba(107, 58, 91, 0.13) 34px 35px,
+      transparent 35px 70px
+    );
+
+  --shadow-card: 0 1px 2px rgba(48, 38, 46, 0.025),
+    0 14px 36px rgba(48, 38, 46, 0.045);
+  --shadow-raised: 0 20px 60px rgba(40, 28, 38, 0.16);
+  --shadow-button: 0 5px 14px rgba(107, 58, 91, 0.2);
+  --shadow-mark: 0 4px 12px rgba(107, 58, 91, 0.2);
+  --shadow-hero: 0 20px 50px rgba(38, 26, 36, 0.2);
 }
 
 :root[data-theme="dark"] {
@@ -583,37 +705,55 @@
   --tone-teal: #86c3bb;
 
   --pattern: radial-gradient(
-      circle at 14% 82%,
-      transparent 0 120px,
-      rgba(190, 220, 200, 0.05) 120px 121px,
-      transparent 121px 170px,
-      rgba(190, 220, 200, 0.035) 170px 171px,
-      transparent 171px 220px
+      circle at 84% 12%,
+      transparent 0 148px,
+      rgba(190, 220, 200, 0.12) 148px 149px,
+      transparent 149px 204px,
+      rgba(190, 220, 200, 0.07) 204px 205px,
+      transparent 205px 262px
     ),
     radial-gradient(
-      circle at 88% 10%,
-      transparent 0 180px,
-      rgba(190, 220, 200, 0.04) 180px 181px,
-      transparent 181px 250px,
-      rgba(190, 220, 200, 0.028) 250px 251px,
-      transparent 251px
+      circle at 9% 91%,
+      transparent 0 106px,
+      rgba(190, 220, 200, 0.09) 106px 107px,
+      transparent 107px 158px,
+      rgba(190, 220, 200, 0.055) 158px 159px,
+      transparent 159px
     ),
     repeating-linear-gradient(
-      92deg,
-      rgba(200, 225, 205, 0.02) 0 1px,
-      transparent 1px 6px
+      93deg,
+      rgba(200, 225, 205, 0.045) 0 1px,
+      transparent 1px 7px
     ),
     radial-gradient(
-      1px 1px at 22% 18%,
-      rgba(200, 225, 205, 0.16),
+      1.4px 1.4px at 22% 18%,
+      rgba(200, 225, 205, 0.26),
       transparent 100%
     ),
     radial-gradient(
       1px 1px at 71% 38%,
-      rgba(200, 225, 205, 0.12),
+      rgba(200, 225, 205, 0.2),
       transparent 100%
     );
   --pattern-size: auto, auto, auto, 61px 61px, 97px 97px;
+
+  --card-motif: repeating-radial-gradient(
+    circle at 100% 0,
+    transparent 0 19px,
+    rgba(190, 220, 200, 0.13) 19px 20px,
+    transparent 20px 40px
+  );
+  --sidebar-motif: repeating-radial-gradient(
+      circle at 118% 44%,
+      transparent 0 26px,
+      rgba(190, 220, 200, 0.15) 26px 27px,
+      transparent 27px 54px
+    ),
+    repeating-linear-gradient(
+      93deg,
+      rgba(200, 225, 205, 0.05) 0 1px,
+      transparent 1px 9px
+    );
 
   color-scheme: dark;
 }
@@ -646,16 +786,16 @@
   --on-accent: #1c1710;
   --ring: rgba(210, 178, 116, 0.36);
 
-  --positive: #3a94cc;
-  --positive-soft: #1b2a38;
+  --positive: #33a696;
+  --positive-soft: #16302c;
   --negative: #cf7a4e;
   --negative-soft: #35221a;
   --warning: #d9a45e;
   --warning-soft: #382d1d;
 
-  --chart-income: #3a94cc;
+  --chart-income: #33a696;
   --chart-expense: #cf7a4e;
-  --chart-income-soft: #1b2a38;
+  --chart-income-soft: #16302c;
   --chart-expense-soft: #35221a;
   --chart-trend: #b08a2f;
   --chart-trend-soft: #332b1b;
@@ -673,7 +813,7 @@
   --hero-line: rgba(243, 236, 220, 0.14);
   --hero-glow: rgba(210, 178, 116, 0.14);
   --hero-glow-warm: rgba(207, 122, 78, 0.1);
-  --hero-positive: #a9c8da;
+  --hero-positive: #9fd6c4;
   --hero-negative: #e8b189;
   --hero-motif: repeating-conic-gradient(
       from 208deg at 90% 4%,
@@ -701,35 +841,55 @@
   --tone-gold: #d6b473;
   --tone-teal: #8bc1b4;
 
-  --pattern: radial-gradient(
-      circle at 78% 6%,
-      transparent 0 200px,
-      rgba(224, 190, 130, 0.06) 200px 201px,
-      transparent 201px 280px,
-      rgba(224, 190, 130, 0.04) 280px 281px,
-      transparent 281px
+  --pattern: repeating-conic-gradient(
+      from 205deg at 84% 0%,
+      rgba(224, 190, 130, 0.055) 0deg 0.45deg,
+      transparent 0.45deg 9deg
+    ),
+    repeating-conic-gradient(
+      from 25deg at 84% 0%,
+      rgba(224, 190, 130, 0.03) 0deg 0.6deg,
+      transparent 0.6deg 17deg
+    ),
+    repeating-linear-gradient(
+      44deg,
+      rgba(224, 190, 130, 0.035) 0 1px,
+      transparent 1px 21px
     ),
     radial-gradient(
-      1.1px 1.1px at 30% 22%,
+      1.3px 1.3px at 28% 24%,
+      rgba(224, 190, 130, 0.28),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 64% 52%,
       rgba(224, 190, 130, 0.2),
       transparent 100%
-    ),
-    radial-gradient(
-      1px 1px at 65% 48%,
-      rgba(224, 190, 130, 0.14),
-      transparent 100%
-    ),
-    radial-gradient(
-      1.4px 1.4px at 84% 76%,
-      rgba(224, 190, 130, 0.12),
-      transparent 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(17, 17, 16, 0) 0%,
-      rgba(224, 190, 130, 0.02) 100%
     );
-  --pattern-size: auto, 73px 73px, 113px 113px, 157px 157px, auto;
+  --pattern-size: auto, auto, auto, 73px 73px, 113px 113px;
+
+  --card-motif: repeating-conic-gradient(
+      from 205deg at 100% 0,
+      rgba(224, 190, 130, 0.14) 0deg 1.5deg,
+      transparent 1.5deg 13deg
+    ),
+    repeating-radial-gradient(
+      circle at 100% 0,
+      transparent 0 42px,
+      rgba(224, 190, 130, 0.11) 42px 43px,
+      transparent 43px 84px
+    );
+  --sidebar-motif: repeating-conic-gradient(
+      from 196deg at 128% 34%,
+      rgba(224, 190, 130, 0.12) 0deg 1.2deg,
+      transparent 1.2deg 11deg
+    ),
+    repeating-radial-gradient(
+      circle at 128% 34%,
+      transparent 0 46px,
+      rgba(224, 190, 130, 0.08) 46px 47px,
+      transparent 47px 94px
+    );
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18),
     0 18px 40px rgba(0, 0, 0, 0.14);
@@ -831,28 +991,66 @@
   --tone-teal: #86c5c5;
 
   --pattern: repeating-radial-gradient(
-      140% 105% at 50% 118%,
-      transparent 0 44px,
-      rgba(170, 200, 225, 0.055) 44px 45px,
-      transparent 45px 88px
+      145% 100% at 50% 118%,
+      transparent 0 42px,
+      rgba(170, 200, 225, 0.11) 42px 43px,
+      transparent 43px 84px
     ),
     radial-gradient(
-      circle at 10% 8%,
-      transparent 0 210px,
-      rgba(170, 200, 225, 0.04) 210px 211px,
-      transparent 211px 300px
+      circle at 8% 4%,
+      transparent 0 150px,
+      rgba(170, 200, 225, 0.09) 150px 151px,
+      transparent 151px 214px,
+      rgba(170, 200, 225, 0.055) 214px 215px,
+      transparent 215px 286px
+    ),
+    repeating-radial-gradient(
+      circle at 103% 74%,
+      transparent 0 30px,
+      rgba(170, 200, 225, 0.085) 30px 31px,
+      transparent 31px 60px
+    ),
+    repeating-linear-gradient(
+      78deg,
+      rgba(170, 200, 225, 0.038) 0 1px,
+      transparent 1px 23px
     ),
     radial-gradient(
-      1px 1px at 26% 14%,
-      rgba(190, 215, 235, 0.2),
+      1.2px 1.2px at 24% 16%,
+      rgba(190, 215, 235, 0.3),
       transparent 100%
     ),
     radial-gradient(
-      1px 1px at 72% 26%,
-      rgba(190, 215, 235, 0.14),
+      1px 1px at 70% 30%,
+      rgba(190, 215, 235, 0.22),
       transparent 100%
     );
-  --pattern-size: auto, auto, 89px 89px, 131px 131px;
+  --pattern-size: auto, auto, auto, auto, 79px 79px, 121px 121px;
+
+  --card-motif: repeating-radial-gradient(
+      160% 130% at 100% 0,
+      transparent 0 17px,
+      rgba(170, 200, 225, 0.13) 17px 18px,
+      transparent 18px 36px
+    ),
+    radial-gradient(
+      1px 1px at 70% 30%,
+      rgba(190, 215, 235, 0.24),
+      transparent 100%
+    );
+  --card-motif-size: auto, 17px 17px;
+  --sidebar-motif: repeating-radial-gradient(
+      150% 120% at 132% 66%,
+      transparent 0 24px,
+      rgba(170, 200, 225, 0.12) 24px 25px,
+      transparent 25px 48px
+    ),
+    radial-gradient(
+      1.2px 1.2px at 30% 24%,
+      rgba(190, 215, 235, 0.26),
+      transparent 100%
+    );
+  --sidebar-motif-size: auto, 61px 61px;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18),
     0 18px 40px rgba(0, 0, 0, 0.14);
@@ -862,118 +1060,164 @@
   --shadow-hero: 0 20px 50px rgba(0, 0, 0, 0.35);
 }
 
-/* ---------- Palette: Graphite Copper · dark ---------- */
+/* ---------- Palette: Rose Violet · dark ---------- */
 
-:root[data-theme="dark"][data-palette="copper"] {
-  --page: #111213;
+:root[data-theme="dark"][data-palette="rose"] {
+  --page: #141017;
   --page-wash: rgba(255, 255, 255, 0.016);
-  --page-wash-two: rgba(201, 143, 107, 0.025);
-  --sidebar-bg: #151617;
-  --surface: #1b1d1e;
-  --surface-raised: #202324;
-  --surface-soft: #222527;
-  --surface-sunken: #161819;
+  --page-wash-two: rgba(210, 166, 196, 0.032);
+  --sidebar-bg: #18131b;
+  --surface: #1e1821;
+  --surface-raised: #231c26;
+  --surface-soft: #271f2a;
+  --surface-sunken: #19141b;
 
-  --ink: #e9e7e2;
-  --ink-secondary: #b5b4b0;
-  --ink-muted: #8c8f90;
-  --ink-faint: #646769;
+  --ink: #ece4eb;
+  --ink-secondary: #b9aeb8;
+  --ink-muted: #8d818c;
+  --ink-faint: #675d66;
 
-  --line: #2e3234;
-  --line-strong: #3e4345;
+  --line: #322934;
+  --line-strong: #443849;
 
-  --accent: #c98f6b;
-  --accent-hover: #d9a383;
-  --accent-soft: #32251d;
-  --accent-mid: #7e5a45;
-  --accent-ink: #e7cbba;
-  --on-accent: #1a1512;
-  --ring: rgba(201, 143, 107, 0.34);
+  --accent: #d2a6c4;
+  --accent-hover: #e1bad4;
+  --accent-soft: #332433;
+  --accent-mid: #8a5f7e;
+  --accent-ink: #ead4e2;
+  --on-accent: #1b121c;
+  --ring: rgba(210, 166, 196, 0.36);
 
-  --positive: #2f9d84;
-  --positive-soft: #203531;
-  --negative: #c96a55;
-  --negative-soft: #3a2620;
+  --positive: #8f78d0;
+  --positive-soft: #272138;
+  --negative: #d1747f;
+  --negative-soft: #38232a;
   --warning: #d6a45e;
   --warning-soft: #382d1d;
 
-  --chart-income: #2f9d84;
-  --chart-expense: #c96a55;
-  --chart-income-soft: #203531;
-  --chart-expense-soft: #3a2620;
-  --chart-trend: #b0703f;
-  --chart-trend-soft: #38291d;
-  --chart-grid: #2b2f30;
-  --chart-axis: #474c4e;
+  --chart-income: #8f78d0;
+  --chart-expense: #d1747f;
+  --chart-income-soft: #272138;
+  --chart-expense-soft: #38232a;
+  --chart-trend: #b07ac0;
+  --chart-trend-soft: #302238;
+  --chart-grid: #302832;
+  --chart-axis: #4a3f4b;
   --chart-hover: rgba(255, 255, 255, 0.035);
 
-  --tooltip-bg: #09090a;
-  --tooltip-ink: #f3f0e7;
-  --tooltip-muted: #a6a8a8;
+  --tooltip-bg: #0c090d;
+  --tooltip-ink: #f6eff5;
+  --tooltip-muted: #aea0ac;
 
-  --hero-base: #1e2123;
-  --hero-ink: #efece6;
-  --hero-muted: #b2b0a9;
-  --hero-line: rgba(239, 236, 230, 0.14);
-  --hero-glow: rgba(201, 143, 107, 0.13);
-  --hero-glow-warm: rgba(201, 106, 85, 0.11);
-  --hero-positive: #a4d2be;
-  --hero-negative: #e5ad94;
+  --hero-base: #2a1c2b;
+  --hero-ink: #f4eef3;
+  --hero-muted: #bdaebc;
+  --hero-line: rgba(244, 238, 243, 0.14);
+  --hero-glow: rgba(206, 151, 187, 0.14);
+  --hero-glow-warm: rgba(209, 116, 127, 0.1);
+  --hero-positive: #d8c2ee;
+  --hero-negative: #f0b1ba;
   --hero-motif: repeating-linear-gradient(
-      135deg,
-      transparent 0 22px,
-      rgba(230, 186, 150, 0.08) 22px 23px
+      45deg,
+      rgba(244, 211, 233, 0.07) 0 1px,
+      transparent 1px 23px
     ),
     repeating-linear-gradient(
-      45deg,
-      transparent 0 22px,
-      rgba(230, 186, 150, 0.06) 22px 23px
+      135deg,
+      rgba(244, 211, 233, 0.07) 0 1px,
+      transparent 1px 23px
+    ),
+    repeating-radial-gradient(
+      circle at 88% 6%,
+      transparent 0 26px,
+      rgba(244, 211, 233, 0.13) 26px 27px,
+      transparent 27px 52px
     ),
     radial-gradient(
-      2px 2px at 82% 22%,
-      rgba(230, 170, 120, 0.28),
+      1.6px 1.6px at 20% 32%,
+      rgba(244, 211, 233, 0.32),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 58% 18%,
+      rgba(244, 211, 233, 0.2),
       transparent 100%
     );
 
-  --tone-clay: #e09b7e;
-  --tone-sky: #8ab5c8;
-  --tone-plum: #c4a0b3;
-  --tone-olive: #b7bf91;
-  --tone-amber: #dab273;
-  --tone-rose: #d6979f;
-  --tone-indigo: #a9a7d6;
-  --tone-stone: #b8b1a8;
-  --tone-forest: #95c3a8;
-  --tone-gold: #d2b172;
-  --tone-teal: #8ac2b8;
+  --tone-clay: #df9a84;
+  --tone-sky: #8bb7c7;
+  --tone-plum: #d18ab3;
+  --tone-olive: #b8bf90;
+  --tone-amber: #ddb477;
+  --tone-rose: #e08fa7;
+  --tone-indigo: #b0a6e2;
+  --tone-stone: #b9b0aa;
+  --tone-forest: #93c6ab;
+  --tone-gold: #d8b577;
+  --tone-teal: #8ac5c0;
 
-  --pattern: repeating-linear-gradient(
-      135deg,
-      rgba(210, 165, 130, 0.035) 0 1px,
-      transparent 1px 34px
+  --pattern: repeating-radial-gradient(
+      circle at 87% 3%,
+      transparent 0 20px,
+      rgba(230, 188, 216, 0.1) 20px 21px,
+      transparent 21px 40px,
+      rgba(230, 188, 216, 0.06) 40px 41px,
+      transparent 41px 62px
     ),
     repeating-linear-gradient(
       45deg,
-      rgba(210, 165, 130, 0.028) 0 1px,
-      transparent 1px 46px
+      rgba(230, 188, 216, 0.036) 0 1px,
+      transparent 1px 26px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      rgba(230, 188, 216, 0.036) 0 1px,
+      transparent 1px 31px
     ),
     radial-gradient(
-      1.1px 1.1px at 34% 28%,
-      rgba(220, 175, 140, 0.2),
+      1.5px 1.5px at 50% 50%,
+      rgba(230, 188, 216, 0.14) 0 1.4px,
       transparent 100%
     ),
     radial-gradient(
-      1px 1px at 78% 64%,
-      rgba(220, 175, 140, 0.14),
+      1.4px 1.4px at 30% 26%,
+      rgba(230, 188, 216, 0.24),
       transparent 100%
-    ),
-    radial-gradient(
-      circle at 88% 8%,
-      transparent 0 160px,
-      rgba(220, 175, 140, 0.05) 160px 161px,
-      transparent 161px 230px
     );
-  --pattern-size: auto, auto, 83px 83px, 127px 127px, auto;
+  --pattern-size: auto, auto, auto, 47px 47px, 71px 71px;
+
+  --card-motif: repeating-linear-gradient(
+      45deg,
+      rgba(230, 188, 216, 0.12) 0 1px,
+      transparent 1px 15px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      rgba(230, 188, 216, 0.12) 0 1px,
+      transparent 1px 15px
+    ),
+    repeating-radial-gradient(
+      circle at 100% 0,
+      transparent 0 24px,
+      rgba(230, 188, 216, 0.13) 24px 25px,
+      transparent 25px 48px
+    );
+  --sidebar-motif: repeating-linear-gradient(
+      45deg,
+      rgba(230, 188, 216, 0.1) 0 1px,
+      transparent 1px 18px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      rgba(230, 188, 216, 0.1) 0 1px,
+      transparent 1px 18px
+    ),
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      transparent 0 34px,
+      rgba(230, 188, 216, 0.12) 34px 35px,
+      transparent 35px 70px
+    );
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18),
     0 18px 40px rgba(0, 0, 0, 0.14);
@@ -1101,8 +1345,40 @@ a {
   width: 248px;
   flex-direction: column;
   padding: 28px 18px 20px;
+  overflow: hidden;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--line);
+}
+
+/* A palette ornament in the open space between navigation and the budget note. */
+.sidebar::before {
+  position: absolute;
+  right: -58px;
+  bottom: 190px;
+  width: 300px;
+  height: 300px;
+  background-image: var(--sidebar-motif);
+  background-size: var(--sidebar-motif-size, auto);
+  content: "";
+  opacity: 0.95;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(
+    circle at 52% 46%,
+    #000 6%,
+    rgba(0, 0, 0, 0.55) 40%,
+    transparent 74%
+  );
+  mask-image: radial-gradient(
+    circle at 52% 46%,
+    #000 6%,
+    rgba(0, 0, 0, 0.55) 40%,
+    transparent 74%
+  );
+}
+
+.sidebar > * {
+  position: relative;
+  z-index: 1;
 }
 
 .brand {
@@ -2051,9 +2327,72 @@ a {
   padding: 23px 24px 18px;
 }
 
+.category-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.category-card::before {
+  position: absolute;
+  top: -16px;
+  right: -24px;
+  width: 230px;
+  height: 160px;
+  background-image: var(--card-motif);
+  background-repeat: no-repeat;
+  background-size: var(--card-motif-size, auto);
+  content: "";
+  opacity: 0.85;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(
+    125% 105% at 100% 0,
+    #000 18%,
+    transparent 72%
+  );
+  mask-image: radial-gradient(125% 105% at 100% 0, #000 18%, transparent 72%);
+}
+
+.category-card > * {
+  position: relative;
+  z-index: 1;
+}
+
 .chart-card .card-head,
 .category-card .card-head {
   margin-bottom: 8px;
+}
+
+.category-visual {
+  display: flex;
+  flex-direction: column;
+}
+
+.category-composition {
+  display: flex;
+  height: 9px;
+  gap: 2px;
+  padding: 1px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.category-composition span {
+  display: block;
+  min-width: 3px;
+  height: 100%;
+  background: var(--tone);
+  border-radius: 2px;
+}
+
+.category-composition span:first-child {
+  border-radius: 999px 2px 2px 999px;
+}
+
+.category-composition span:last-child {
+  border-radius: 2px 999px 999px 2px;
 }
 
 .category-bars {
@@ -2061,6 +2400,10 @@ a {
   flex-direction: column;
   gap: 16px;
   margin-top: 18px;
+}
+
+.category-composition + .category-bars {
+  margin-top: 17px;
 }
 
 .category-row-head {
@@ -2102,14 +2445,18 @@ a {
 .category-track {
   height: 6px;
   overflow: hidden;
-  background: var(--chart-expense-soft);
+  background: color-mix(
+    in srgb,
+    var(--tone, var(--chart-expense)) 14%,
+    var(--surface-soft)
+  );
   border-radius: 999px;
 }
 
 .category-track span {
   display: block;
   height: 100%;
-  background: var(--chart-expense);
+  background: var(--tone, var(--chart-expense));
   border-radius: inherit;
   transition: width 450ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -3870,15 +4217,21 @@ a {
   background-size: auto, 19px 19px;
 }
 
-.palette-preview[data-preview-palette="copper"] .palette-preview-weave {
-  background-image: repeating-linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--p-ink) 9%, transparent) 0 1px,
-      transparent 1px 9px
+.palette-preview[data-preview-palette="rose"] .palette-preview-weave {
+  background-image: repeating-radial-gradient(
+      circle at 86% 4%,
+      transparent 0 8px,
+      color-mix(in srgb, var(--p-ink) 16%, transparent) 8px 9px,
+      transparent 9px 17px
     ),
     repeating-linear-gradient(
       45deg,
-      color-mix(in srgb, var(--p-ink) 7%, transparent) 0 1px,
+      color-mix(in srgb, var(--p-ink) 10%, transparent) 0 1px,
+      transparent 1px 9px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--p-ink) 8%, transparent) 0 1px,
       transparent 1px 13px
     );
 }
@@ -3889,8 +4242,74 @@ a {
   right: 6px;
   left: 6px;
   height: 23px;
+  overflow: hidden;
   background: var(--p-hero);
   border-radius: 5px;
+}
+
+.palette-preview-ornament {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 84px;
+  height: 100%;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 52%);
+  mask-image: linear-gradient(90deg, transparent, #000 52%);
+}
+
+.palette-preview[data-preview-palette="forest"]
+  .palette-preview-ornament {
+  background-image: repeating-radial-gradient(
+    circle at 104% -18%,
+    transparent 0 6px,
+    color-mix(in srgb, var(--p-on) 26%, transparent) 6px 6.5px,
+    transparent 6.5px 12px
+  );
+}
+
+.palette-preview[data-preview-palette="gold"]
+  .palette-preview-ornament {
+  background-image: repeating-conic-gradient(
+    from 202deg at 104% -10%,
+    color-mix(in srgb, var(--p-on) 24%, transparent) 0deg 2.4deg,
+    transparent 2.4deg 13deg
+  );
+}
+
+.palette-preview[data-preview-palette="navy"]
+  .palette-preview-ornament {
+  background-image: repeating-radial-gradient(
+      130% 200% at 50% 140%,
+      transparent 0 5px,
+      color-mix(in srgb, var(--p-on) 26%, transparent) 5px 5.5px,
+      transparent 5.5px 11px
+    ),
+    radial-gradient(
+      0.8px 0.8px at 24% 30%,
+      color-mix(in srgb, var(--p-on) 40%, transparent),
+      transparent 100%
+    );
+  background-size: auto, 13px 13px;
+}
+
+.palette-preview[data-preview-palette="rose"] .palette-preview-ornament {
+  background-image: repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--p-on) 20%, transparent) 0 1px,
+      transparent 1px 8px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--p-on) 17%, transparent) 0 1px,
+      transparent 1px 8px
+    ),
+    repeating-radial-gradient(
+      circle at 104% -14%,
+      transparent 0 7px,
+      color-mix(in srgb, var(--p-on) 24%, transparent) 7px 7.5px,
+      transparent 7.5px 14px
+    );
 }
 
 .palette-preview-hero::before {
