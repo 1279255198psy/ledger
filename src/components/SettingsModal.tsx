@@ -137,7 +137,7 @@ export function SettingsModal({
         <section className="settings-section">
           <div className="settings-heading">
             <h3>外观</h3>
-            <p>为当下的光线选一个舒适的阅读方式，再挑一套相配的墨色。</p>
+            <p>为当下的光线选一个舒适的阅读方式，再挑一套相配的主题。</p>
           </div>
           <div className="theme-switch" role="group" aria-label="明暗模式">
             <button
@@ -160,8 +160,8 @@ export function SettingsModal({
             </button>
           </div>
           <div className="palette-group">
-            <p className="palette-group-label">主题色</p>
-            <div className="palette-grid" role="radiogroup" aria-label="主题色">
+            <p className="palette-group-label">主题</p>
+            <div className="palette-grid" role="radiogroup" aria-label="主题">
               {PALETTES.map((item) => {
                 const preview = item.preview[theme]
                 const active = item.id === palette
@@ -172,6 +172,9 @@ export function SettingsModal({
                   '--p-ink': preview.ink,
                   '--p-hero': preview.hero,
                   '--p-on': preview.on,
+                  '--p-income': preview.income,
+                  '--p-expense': preview.expense,
+                  '--p-trend': preview.trend,
                 } as CSSProperties
                 return (
                   <button
@@ -184,11 +187,21 @@ export function SettingsModal({
                     style={previewStyle}
                     onClick={() => onPaletteChange(item.id)}
                   >
-                    <span className="palette-preview" aria-hidden="true">
+                    <span
+                      className="palette-preview"
+                      data-preview-palette={item.id}
+                      aria-hidden="true"
+                    >
+                      <span className="palette-preview-weave" />
                       <span className="palette-preview-hero" />
                       <span className="palette-preview-sheet">
                         <i />
                         <i />
+                        <span className="palette-preview-dots">
+                          <b />
+                          <b />
+                          <b />
+                        </span>
                       </span>
                     </span>
                     <span className="palette-option-copy">

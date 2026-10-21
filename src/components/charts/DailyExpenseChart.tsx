@@ -190,7 +190,7 @@ export function DailyExpenseChart({ data, monthKey }: DailyExpenseChartProps) {
           >
             <strong>{formatMoney(activeDatum.value)}</strong>
             <span className="chart-tooltip-label">
-              <i className="tooltip-key series-expense" aria-hidden />
+              <i className="tooltip-key series-trend" aria-hidden />
               {monthLabel(monthKey)} {activeDatum.day}日
             </span>
           </div>

@@ -122,7 +122,7 @@ export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
                 {barHeight > 0 ? (
                   <path
                     d={topRoundedBarPath(barX, barY, barWidth, barHeight)}
-                    className="chart-bar chart-bar--expense"
+                    className="chart-bar chart-bar--trend"
                   />
                 ) : (
                   <rect
@@ -188,7 +188,7 @@ export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
           >
             <strong>{formatMoney(hoveredDatum.value)}</strong>
             <span className="chart-tooltip-label">
-              <i className="tooltip-key series-expense" aria-hidden />
+              <i className="tooltip-key series-trend" aria-hidden />
               {monthLabel(hoveredDatum.key)}支出
             </span>
           </div>

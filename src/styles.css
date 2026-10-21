@@ -33,17 +33,19 @@
   --on-accent: #f8f4e9;
   --ring: rgba(35, 77, 59, 0.32);
 
-  --positive: #227449;
-  --positive-soft: #e4f1e9;
-  --negative: #b54832;
-  --negative-soft: #f7e6e0;
+  --positive: #157a5a;
+  --positive-soft: #e3f0ea;
+  --negative: #b0482f;
+  --negative-soft: #f7e7e1;
   --warning: #9c671b;
   --warning-soft: #f8ecd8;
 
-  --chart-income: #2a78d6;
-  --chart-expense: #eb6834;
-  --chart-income-soft: #e8f0fa;
-  --chart-expense-soft: #f9e9e2;
+  --chart-income: #157a5a;
+  --chart-expense: #b0482f;
+  --chart-income-soft: #e3f0ea;
+  --chart-expense-soft: #f7e7e1;
+  --chart-trend: #0f7350;
+  --chart-trend-soft: #e3eee8;
   --chart-grid: #eae4d8;
   --chart-axis: #c6bfb1;
   --chart-hover: rgba(35, 77, 59, 0.045);
@@ -59,6 +61,19 @@
   --hero-line: rgba(246, 241, 229, 0.15);
   --hero-glow: rgba(187, 213, 192, 0.17);
   --hero-glow-warm: rgba(224, 126, 83, 0.12);
+  --hero-positive: #bedfc9;
+  --hero-negative: #f2b59b;
+  --hero-motif: repeating-radial-gradient(
+      circle at 88% 8%,
+      transparent 0 30px,
+      rgba(190, 223, 201, 0.07) 30px 31px,
+      transparent 31px 62px
+    ),
+    repeating-linear-gradient(
+      112deg,
+      rgba(255, 255, 255, 0.018) 0 1px,
+      transparent 1px 9px
+    );
 
   --shadow-card: 0 1px 2px rgba(40, 43, 35, 0.025),
     0 14px 36px rgba(40, 43, 35, 0.04);
@@ -78,6 +93,39 @@
   --tone-forest: #2c664d;
   --tone-gold: #8c6a1e;
   --tone-teal: #266d65;
+
+  --pattern: radial-gradient(
+      circle at 14% 82%,
+      transparent 0 120px,
+      rgba(35, 77, 59, 0.045) 120px 121px,
+      transparent 121px 170px,
+      rgba(35, 77, 59, 0.03) 170px 171px,
+      transparent 171px 220px
+    ),
+    radial-gradient(
+      circle at 88% 10%,
+      transparent 0 180px,
+      rgba(35, 77, 59, 0.035) 180px 181px,
+      transparent 181px 250px,
+      rgba(35, 77, 59, 0.025) 250px 251px,
+      transparent 251px
+    ),
+    repeating-linear-gradient(
+      92deg,
+      rgba(45, 70, 52, 0.018) 0 1px,
+      transparent 1px 6px
+    ),
+    radial-gradient(
+      1px 1px at 22% 18%,
+      rgba(45, 70, 52, 0.16),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 71% 38%,
+      rgba(45, 70, 52, 0.12),
+      transparent 100%
+    );
+  --pattern-size: auto, auto, auto, 61px 61px, 97px 97px;
 
   color-scheme: light;
 }
@@ -110,13 +158,19 @@
   --on-accent: #fbf6e9;
   --ring: rgba(124, 90, 34, 0.32);
 
+  --positive: #0f6b96;
+  --positive-soft: #e2edf3;
+  --negative: #a8552f;
+  --negative-soft: #f6e5da;
   --warning: #a8561f;
   --warning-soft: #f8e7d6;
 
-  --chart-income: #356b8e;
-  --chart-expense: #c2662f;
-  --chart-income-soft: #e6edf3;
-  --chart-expense-soft: #f6e4d8;
+  --chart-income: #0f6b96;
+  --chart-expense: #a8552f;
+  --chart-income-soft: #e2edf3;
+  --chart-expense-soft: #f6e5da;
+  --chart-trend: #8a6214;
+  --chart-trend-soft: #f2ead4;
   --chart-grid: #ebe4d5;
   --chart-axis: #c8c0ae;
   --chart-hover: rgba(124, 90, 34, 0.045);
@@ -130,7 +184,64 @@
   --hero-muted: #c0b49a;
   --hero-line: rgba(246, 237, 216, 0.15);
   --hero-glow: rgba(210, 178, 116, 0.2);
-  --hero-glow-warm: rgba(176, 107, 63, 0.1);
+  --hero-glow-warm: rgba(232, 177, 137, 0.12);
+  --hero-positive: #a9c8da;
+  --hero-negative: #e8b189;
+  --hero-motif: repeating-conic-gradient(
+      from 208deg at 90% 4%,
+      rgba(232, 196, 137, 0.1) 0deg 1.2deg,
+      transparent 1.2deg 11deg
+    ),
+    radial-gradient(
+      circle at 90% 4%,
+      transparent 0 84px,
+      rgba(232, 196, 137, 0.1) 84px 85px,
+      transparent 85px 132px,
+      rgba(232, 196, 137, 0.07) 132px 133px,
+      transparent 133px
+    );
+
+  --tone-clay: #a6532f;
+  --tone-sky: #2f6f8a;
+  --tone-plum: #7f4f63;
+  --tone-olive: #6b6f2f;
+  --tone-amber: #93701a;
+  --tone-rose: #9e4f55;
+  --tone-indigo: #5b5688;
+  --tone-stone: #756c5e;
+  --tone-forest: #4f6b35;
+  --tone-gold: #8f6a16;
+  --tone-teal: #2f6d68;
+
+  --pattern: radial-gradient(
+      circle at 78% 6%,
+      transparent 0 200px,
+      rgba(140, 100, 30, 0.06) 200px 201px,
+      transparent 201px 280px,
+      rgba(140, 100, 30, 0.04) 280px 281px,
+      transparent 281px
+    ),
+    radial-gradient(
+      1.1px 1.1px at 30% 22%,
+      rgba(150, 110, 35, 0.22),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 65% 48%,
+      rgba(150, 110, 35, 0.15),
+      transparent 100%
+    ),
+    radial-gradient(
+      1.4px 1.4px at 84% 76%,
+      rgba(150, 110, 35, 0.14),
+      transparent 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 252, 245, 0) 0%,
+      rgba(160, 120, 45, 0.02) 100%
+    );
+  --pattern-size: auto, 73px 73px, 113px 113px, 157px 157px, auto;
 
   --shadow-card: 0 1px 2px rgba(45, 40, 30, 0.025),
     0 14px 36px rgba(45, 40, 30, 0.04);
@@ -168,10 +279,19 @@
   --on-accent: #f7f4ec;
   --ring: rgba(30, 58, 82, 0.3);
 
-  --chart-income: #2f6390;
-  --chart-expense: #c2673d;
-  --chart-income-soft: #e3ebf1;
-  --chart-expense-soft: #f6e5dc;
+  --positive: #2a6fa8;
+  --positive-soft: #e3edf5;
+  --negative: #a34d5c;
+  --negative-soft: #f5e4e7;
+  --warning: #9c671b;
+  --warning-soft: #f8ecd8;
+
+  --chart-income: #2a6fa8;
+  --chart-expense: #a34d5c;
+  --chart-income-soft: #e3edf5;
+  --chart-expense-soft: #f5e4e7;
+  --chart-trend: #30568f;
+  --chart-trend-soft: #e4ebf3;
   --chart-grid: #e5e2da;
   --chart-axis: #c3c0b8;
   --chart-hover: rgba(30, 58, 82, 0.045);
@@ -185,7 +305,66 @@
   --hero-muted: #aebbc6;
   --hero-line: rgba(242, 241, 234, 0.15);
   --hero-glow: rgba(143, 168, 188, 0.2);
-  --hero-glow-warm: rgba(176, 120, 80, 0.08);
+  --hero-glow-warm: rgba(199, 111, 128, 0.1);
+  --hero-positive: #a9c8df;
+  --hero-negative: #e0a9b4;
+  --hero-motif: repeating-radial-gradient(
+      120% 150% at 50% 118%,
+      transparent 0 36px,
+      rgba(174, 201, 224, 0.07) 36px 37px,
+      transparent 37px 74px
+    ),
+    radial-gradient(
+      1px 1px at 18% 24%,
+      rgba(255, 255, 255, 0.22),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 64% 16%,
+      rgba(255, 255, 255, 0.16),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 78% 44%,
+      rgba(255, 255, 255, 0.12),
+      transparent 100%
+    );
+
+  --tone-clay: #a2563d;
+  --tone-sky: #2f6a8f;
+  --tone-plum: #77506f;
+  --tone-olive: #5f7040;
+  --tone-amber: #8f681f;
+  --tone-rose: #9a4d62;
+  --tone-indigo: #4f5596;
+  --tone-stone: #6b6c6c;
+  --tone-forest: #2f6758;
+  --tone-gold: #8a6b23;
+  --tone-teal: #266c72;
+
+  --pattern: repeating-radial-gradient(
+      140% 105% at 50% 118%,
+      transparent 0 44px,
+      rgba(30, 58, 82, 0.045) 44px 45px,
+      transparent 45px 88px
+    ),
+    radial-gradient(
+      circle at 10% 8%,
+      transparent 0 210px,
+      rgba(30, 58, 82, 0.035) 210px 211px,
+      transparent 211px 300px
+    ),
+    radial-gradient(
+      1px 1px at 26% 14%,
+      rgba(30, 58, 82, 0.18),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 72% 26%,
+      rgba(30, 58, 82, 0.12),
+      transparent 100%
+    );
+  --pattern-size: auto, auto, 89px 89px, 131px 131px;
 
   --shadow-card: 0 1px 2px rgba(28, 38, 48, 0.025),
     0 14px 36px rgba(28, 38, 48, 0.045);
@@ -223,13 +402,19 @@
   --on-accent: #fbf5ee;
   --ring: rgba(138, 75, 43, 0.3);
 
+  --positive: #0b7d62;
+  --positive-soft: #e0efe9;
+  --negative: #a34532;
+  --negative-soft: #f6e4dd;
   --warning: #a36a1d;
   --warning-soft: #f8ecd8;
 
-  --chart-income: #3a6e8f;
-  --chart-expense: #b8613a;
-  --chart-income-soft: #e5edf2;
-  --chart-expense-soft: #f5e4db;
+  --chart-income: #0b7d62;
+  --chart-expense: #a34532;
+  --chart-income-soft: #e0efe9;
+  --chart-expense-soft: #f6e4dd;
+  --chart-trend: #8a431f;
+  --chart-trend-soft: #f2e4d8;
   --chart-grid: #e6e2db;
   --chart-axis: #c5c1b9;
   --chart-hover: rgba(138, 75, 43, 0.045);
@@ -243,7 +428,64 @@
   --hero-muted: #bdb5a9;
   --hero-line: rgba(244, 240, 232, 0.15);
   --hero-glow: rgba(198, 154, 128, 0.18);
-  --hero-glow-warm: rgba(160, 90, 60, 0.1);
+  --hero-glow-warm: rgba(201, 106, 85, 0.12);
+  --hero-positive: #a4d2be;
+  --hero-negative: #e5ad94;
+  --hero-motif: repeating-linear-gradient(
+      135deg,
+      transparent 0 22px,
+      rgba(230, 186, 150, 0.07) 22px 23px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      transparent 0 22px,
+      rgba(230, 186, 150, 0.05) 22px 23px
+    ),
+    radial-gradient(
+      2px 2px at 82% 22%,
+      rgba(230, 170, 120, 0.25),
+      transparent 100%
+    );
+
+  --tone-clay: #a34e32;
+  --tone-sky: #3f6f86;
+  --tone-plum: #7c4f66;
+  --tone-olive: #687036;
+  --tone-amber: #93661a;
+  --tone-rose: #9c4b58;
+  --tone-indigo: #585690;
+  --tone-stone: #6f6860;
+  --tone-forest: #2f6b58;
+  --tone-gold: #8c6718;
+  --tone-teal: #2c6d6b;
+
+  --pattern: repeating-linear-gradient(
+      135deg,
+      rgba(90, 75, 60, 0.028) 0 1px,
+      transparent 1px 34px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      rgba(90, 75, 60, 0.022) 0 1px,
+      transparent 1px 46px
+    ),
+    radial-gradient(
+      1.1px 1.1px at 34% 28%,
+      rgba(138, 75, 43, 0.18),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 78% 64%,
+      rgba(138, 75, 43, 0.12),
+      transparent 100%
+    ),
+    radial-gradient(
+      circle at 88% 8%,
+      transparent 0 160px,
+      rgba(138, 75, 43, 0.045) 160px 161px,
+      transparent 161px 230px
+    );
+  --pattern-size: auto, auto, 83px 83px, 127px 127px, auto;
 
   --shadow-card: 0 1px 2px rgba(38, 36, 32, 0.025),
     0 14px 36px rgba(38, 36, 32, 0.045);
@@ -279,17 +521,19 @@
   --on-accent: #15251b;
   --ring: rgba(159, 194, 174, 0.36);
 
-  --positive: #7dc49a;
-  --positive-soft: #20352a;
-  --negative: #e28d76;
+  --positive: #3fa07f;
+  --positive-soft: #20352c;
+  --negative: #cf7160;
   --negative-soft: #3a2620;
   --warning: #d6a45e;
   --warning-soft: #382d1d;
 
-  --chart-income: #3987e5;
-  --chart-expense: #d95926;
-  --chart-income-soft: #1e2c3f;
-  --chart-expense-soft: #33221b;
+  --chart-income: #3fa07f;
+  --chart-expense: #cf7160;
+  --chart-income-soft: #20352c;
+  --chart-expense-soft: #3a2620;
+  --chart-trend: #1f8f6f;
+  --chart-trend-soft: #1c332b;
   --chart-grid: #2b3029;
   --chart-axis: #4a5046;
   --chart-hover: rgba(255, 255, 255, 0.035);
@@ -304,7 +548,20 @@
   --hero-muted: #b1c0b4;
   --hero-line: rgba(243, 239, 228, 0.14);
   --hero-glow: rgba(187, 213, 192, 0.14);
-  --hero-glow-warm: rgba(224, 126, 83, 0.09);
+  --hero-glow-warm: rgba(207, 113, 96, 0.1);
+  --hero-positive: #bedfc9;
+  --hero-negative: #f2b59b;
+  --hero-motif: repeating-radial-gradient(
+      circle at 88% 8%,
+      transparent 0 30px,
+      rgba(190, 223, 201, 0.09) 30px 31px,
+      transparent 31px 62px
+    ),
+    repeating-linear-gradient(
+      112deg,
+      rgba(255, 255, 255, 0.014) 0 1px,
+      transparent 1px 9px
+    );
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18),
     0 18px 40px rgba(0, 0, 0, 0.14);
@@ -324,6 +581,39 @@
   --tone-forest: #8fc6ab;
   --tone-gold: #d1b170;
   --tone-teal: #86c3bb;
+
+  --pattern: radial-gradient(
+      circle at 14% 82%,
+      transparent 0 120px,
+      rgba(190, 220, 200, 0.05) 120px 121px,
+      transparent 121px 170px,
+      rgba(190, 220, 200, 0.035) 170px 171px,
+      transparent 171px 220px
+    ),
+    radial-gradient(
+      circle at 88% 10%,
+      transparent 0 180px,
+      rgba(190, 220, 200, 0.04) 180px 181px,
+      transparent 181px 250px,
+      rgba(190, 220, 200, 0.028) 250px 251px,
+      transparent 251px
+    ),
+    repeating-linear-gradient(
+      92deg,
+      rgba(200, 225, 205, 0.02) 0 1px,
+      transparent 1px 6px
+    ),
+    radial-gradient(
+      1px 1px at 22% 18%,
+      rgba(200, 225, 205, 0.16),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 71% 38%,
+      rgba(200, 225, 205, 0.12),
+      transparent 100%
+    );
+  --pattern-size: auto, auto, auto, 61px 61px, 97px 97px;
 
   color-scheme: dark;
 }
@@ -356,13 +646,19 @@
   --on-accent: #1c1710;
   --ring: rgba(210, 178, 116, 0.36);
 
+  --positive: #3a94cc;
+  --positive-soft: #1b2a38;
+  --negative: #cf7a4e;
+  --negative-soft: #35221a;
   --warning: #d9a45e;
   --warning-soft: #382d1d;
 
-  --chart-income: #5f97c4;
-  --chart-expense: #d97a45;
+  --chart-income: #3a94cc;
+  --chart-expense: #cf7a4e;
   --chart-income-soft: #1b2a38;
   --chart-expense-soft: #35221a;
+  --chart-trend: #b08a2f;
+  --chart-trend-soft: #332b1b;
   --chart-grid: #2e2a22;
   --chart-axis: #4c463a;
   --chart-hover: rgba(255, 255, 255, 0.035);
@@ -376,7 +672,64 @@
   --hero-muted: #bcb19a;
   --hero-line: rgba(243, 236, 220, 0.14);
   --hero-glow: rgba(210, 178, 116, 0.14);
-  --hero-glow-warm: rgba(176, 107, 63, 0.08);
+  --hero-glow-warm: rgba(207, 122, 78, 0.1);
+  --hero-positive: #a9c8da;
+  --hero-negative: #e8b189;
+  --hero-motif: repeating-conic-gradient(
+      from 208deg at 90% 4%,
+      rgba(232, 196, 137, 0.12) 0deg 1.2deg,
+      transparent 1.2deg 11deg
+    ),
+    radial-gradient(
+      circle at 90% 4%,
+      transparent 0 84px,
+      rgba(232, 196, 137, 0.12) 84px 85px,
+      transparent 85px 132px,
+      rgba(232, 196, 137, 0.08) 132px 133px,
+      transparent 133px
+    );
+
+  --tone-clay: #dda086;
+  --tone-sky: #8db4c9;
+  --tone-plum: #c3a0b4;
+  --tone-olive: #b8bf8f;
+  --tone-amber: #dcb578;
+  --tone-rose: #d39aa0;
+  --tone-indigo: #a9a7d4;
+  --tone-stone: #b8b0a2;
+  --tone-forest: #9ec39a;
+  --tone-gold: #d6b473;
+  --tone-teal: #8bc1b4;
+
+  --pattern: radial-gradient(
+      circle at 78% 6%,
+      transparent 0 200px,
+      rgba(224, 190, 130, 0.06) 200px 201px,
+      transparent 201px 280px,
+      rgba(224, 190, 130, 0.04) 280px 281px,
+      transparent 281px
+    ),
+    radial-gradient(
+      1.1px 1.1px at 30% 22%,
+      rgba(224, 190, 130, 0.2),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 65% 48%,
+      rgba(224, 190, 130, 0.14),
+      transparent 100%
+    ),
+    radial-gradient(
+      1.4px 1.4px at 84% 76%,
+      rgba(224, 190, 130, 0.12),
+      transparent 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(17, 17, 16, 0) 0%,
+      rgba(224, 190, 130, 0.02) 100%
+    );
+  --pattern-size: auto, 73px 73px, 113px 113px, 157px 157px, auto;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18),
     0 18px 40px rgba(0, 0, 0, 0.14);
@@ -414,13 +767,19 @@
   --on-accent: #0e1720;
   --ring: rgba(168, 194, 216, 0.36);
 
+  --positive: #4f8fc9;
+  --positive-soft: #1e2c3a;
+  --negative: #c76f80;
+  --negative-soft: #38232a;
   --warning: #d6a45e;
   --warning-soft: #382d1d;
 
-  --chart-income: #6197c2;
-  --chart-expense: #dd8458;
-  --chart-income-soft: #1a2a37;
-  --chart-expense-soft: #36241c;
+  --chart-income: #4f8fc9;
+  --chart-expense: #c76f80;
+  --chart-income-soft: #1e2c3a;
+  --chart-expense-soft: #38232a;
+  --chart-trend: #4f7fb8;
+  --chart-trend-soft: #1e2c3e;
   --chart-grid: #283037;
   --chart-axis: #45505a;
   --chart-hover: rgba(255, 255, 255, 0.035);
@@ -434,7 +793,66 @@
   --hero-muted: #a8b9c7;
   --hero-line: rgba(240, 240, 233, 0.14);
   --hero-glow: rgba(168, 194, 216, 0.13);
-  --hero-glow-warm: rgba(176, 120, 80, 0.07);
+  --hero-glow-warm: rgba(199, 111, 128, 0.1);
+  --hero-positive: #a9c8df;
+  --hero-negative: #e0a9b4;
+  --hero-motif: repeating-radial-gradient(
+      120% 150% at 50% 118%,
+      transparent 0 36px,
+      rgba(174, 201, 224, 0.09) 36px 37px,
+      transparent 37px 74px
+    ),
+    radial-gradient(
+      1px 1px at 18% 24%,
+      rgba(255, 255, 255, 0.24),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 64% 16%,
+      rgba(255, 255, 255, 0.18),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 78% 44%,
+      rgba(255, 255, 255, 0.13),
+      transparent 100%
+    );
+
+  --tone-clay: #dda18b;
+  --tone-sky: #8bb9d3;
+  --tone-plum: #c2a3bd;
+  --tone-olive: #b3bd94;
+  --tone-amber: #d9b474;
+  --tone-rose: #d396a7;
+  --tone-indigo: #aaa9dd;
+  --tone-stone: #b4b4b0;
+  --tone-forest: #93c6b6;
+  --tone-gold: #d1b273;
+  --tone-teal: #86c5c5;
+
+  --pattern: repeating-radial-gradient(
+      140% 105% at 50% 118%,
+      transparent 0 44px,
+      rgba(170, 200, 225, 0.055) 44px 45px,
+      transparent 45px 88px
+    ),
+    radial-gradient(
+      circle at 10% 8%,
+      transparent 0 210px,
+      rgba(170, 200, 225, 0.04) 210px 211px,
+      transparent 211px 300px
+    ),
+    radial-gradient(
+      1px 1px at 26% 14%,
+      rgba(190, 215, 235, 0.2),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 72% 26%,
+      rgba(190, 215, 235, 0.14),
+      transparent 100%
+    );
+  --pattern-size: auto, auto, 89px 89px, 131px 131px;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18),
     0 18px 40px rgba(0, 0, 0, 0.14);
@@ -472,13 +890,19 @@
   --on-accent: #1a1512;
   --ring: rgba(201, 143, 107, 0.34);
 
+  --positive: #2f9d84;
+  --positive-soft: #203531;
+  --negative: #c96a55;
+  --negative-soft: #3a2620;
   --warning: #d6a45e;
   --warning-soft: #382d1d;
 
-  --chart-income: #6498bb;
-  --chart-expense: #d88a63;
-  --chart-income-soft: #1b2a35;
-  --chart-expense-soft: #35231b;
+  --chart-income: #2f9d84;
+  --chart-expense: #c96a55;
+  --chart-income-soft: #203531;
+  --chart-expense-soft: #3a2620;
+  --chart-trend: #b0703f;
+  --chart-trend-soft: #38291d;
   --chart-grid: #2b2f30;
   --chart-axis: #474c4e;
   --chart-hover: rgba(255, 255, 255, 0.035);
@@ -492,7 +916,64 @@
   --hero-muted: #b2b0a9;
   --hero-line: rgba(239, 236, 230, 0.14);
   --hero-glow: rgba(201, 143, 107, 0.13);
-  --hero-glow-warm: rgba(160, 90, 60, 0.07);
+  --hero-glow-warm: rgba(201, 106, 85, 0.11);
+  --hero-positive: #a4d2be;
+  --hero-negative: #e5ad94;
+  --hero-motif: repeating-linear-gradient(
+      135deg,
+      transparent 0 22px,
+      rgba(230, 186, 150, 0.08) 22px 23px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      transparent 0 22px,
+      rgba(230, 186, 150, 0.06) 22px 23px
+    ),
+    radial-gradient(
+      2px 2px at 82% 22%,
+      rgba(230, 170, 120, 0.28),
+      transparent 100%
+    );
+
+  --tone-clay: #e09b7e;
+  --tone-sky: #8ab5c8;
+  --tone-plum: #c4a0b3;
+  --tone-olive: #b7bf91;
+  --tone-amber: #dab273;
+  --tone-rose: #d6979f;
+  --tone-indigo: #a9a7d6;
+  --tone-stone: #b8b1a8;
+  --tone-forest: #95c3a8;
+  --tone-gold: #d2b172;
+  --tone-teal: #8ac2b8;
+
+  --pattern: repeating-linear-gradient(
+      135deg,
+      rgba(210, 165, 130, 0.035) 0 1px,
+      transparent 1px 34px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      rgba(210, 165, 130, 0.028) 0 1px,
+      transparent 1px 46px
+    ),
+    radial-gradient(
+      1.1px 1.1px at 34% 28%,
+      rgba(220, 175, 140, 0.2),
+      transparent 100%
+    ),
+    radial-gradient(
+      1px 1px at 78% 64%,
+      rgba(220, 175, 140, 0.14),
+      transparent 100%
+    ),
+    radial-gradient(
+      circle at 88% 8%,
+      transparent 0 160px,
+      rgba(220, 175, 140, 0.05) 160px 161px,
+      transparent 161px 230px
+    );
+  --pattern-size: auto, auto, 83px 83px, 127px 127px, auto;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.18),
     0 18px 40px rgba(0, 0, 0, 0.14);
@@ -536,6 +1017,17 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* A quiet, theme-specific layer of paper, dust, contours or facets. */
+body::before {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  background-image: var(--pattern);
+  background-size: var(--pattern-size, auto);
+  content: "";
+  pointer-events: none;
 }
 
 button,
@@ -596,6 +1088,8 @@ a {
 /* ---------- Shell ---------- */
 
 .app-shell {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
 }
 
@@ -1169,7 +1663,8 @@ a {
   padding: 27px 29px 23px;
   overflow: hidden;
   color: var(--hero-ink);
-  background: radial-gradient(
+  background: var(--hero-motif),
+    radial-gradient(
       130% 160% at 102% -18%,
       var(--hero-glow) 0%,
       transparent 48%
@@ -1187,7 +1682,7 @@ a {
 
 .hero-orb {
   position: absolute;
-  border: 1px solid rgba(242, 239, 226, 0.075);
+  border: 1px solid color-mix(in srgb, var(--hero-ink) 7.5%, transparent);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -1228,7 +1723,7 @@ a {
   padding: 3px 8px;
   margin-top: 8px;
   color: var(--hero-muted);
-  background: rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--hero-ink) 3.5%, transparent);
   border: 1px solid var(--hero-line);
   border-radius: 999px;
   font-size: 9.5px;
@@ -1241,10 +1736,11 @@ a {
   height: 48px;
   flex: 0 0 auto;
   place-items: center;
-  color: rgba(246, 241, 229, 0.58);
-  border: 1px solid rgba(246, 241, 229, 0.2);
+  color: color-mix(in srgb, var(--hero-ink) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--hero-ink) 20%, transparent);
   border-radius: 13px;
-  box-shadow: inset 0 0 0 3px rgba(246, 241, 229, 0.035);
+  box-shadow: inset 0 0 0 3px
+    color-mix(in srgb, var(--hero-ink) 3.5%, transparent);
   font-size: 9.5px;
   font-weight: 500;
   letter-spacing: 0.12em;
@@ -1267,7 +1763,7 @@ a {
 
 .hero-currency {
   margin-right: 5px;
-  color: rgba(246, 241, 229, 0.64);
+  color: color-mix(in srgb, var(--hero-ink) 64%, transparent);
   font-size: 0.45em;
   font-weight: 500;
   letter-spacing: 0;
@@ -1275,7 +1771,7 @@ a {
 
 .hero-cents {
   margin-left: 2px;
-  color: rgba(246, 241, 229, 0.54);
+  color: color-mix(in srgb, var(--hero-ink) 54%, transparent);
   font-size: 0.44em;
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -1283,7 +1779,7 @@ a {
 
 .hero-minus {
   margin-right: 2px;
-  color: rgba(246, 241, 229, 0.8);
+  color: color-mix(in srgb, var(--hero-ink) 80%, transparent);
 }
 
 .hero-breakdown {
@@ -1307,16 +1803,16 @@ a {
   height: 32px;
   flex: 0 0 auto;
   place-items: center;
-  background: rgba(246, 241, 229, 0.075);
+  background: color-mix(in srgb, var(--hero-ink) 7.5%, transparent);
   border-radius: 9px;
 }
 
 .hero-metric-icon.is-income {
-  color: #bedfc9;
+  color: var(--hero-positive);
 }
 
 .hero-metric-icon.is-expense {
-  color: #f2b59b;
+  color: var(--hero-negative);
 }
 
 .hero-metric div {
@@ -1359,11 +1855,11 @@ a {
 }
 
 .hero-comparison .is-good {
-  color: #b9dbc2;
+  color: var(--hero-positive);
 }
 
 .hero-comparison .is-warning {
-  color: #f0baa1;
+  color: var(--hero-negative);
 }
 
 .hero-comparison .is-calm {
@@ -1371,7 +1867,7 @@ a {
 }
 
 .hero-comparison-note {
-  color: rgba(246, 241, 229, 0.46);
+  color: color-mix(in srgb, var(--hero-ink) 46%, transparent);
 }
 
 /* ---------- Budget card ---------- */
@@ -1919,6 +2415,10 @@ a {
   fill: var(--chart-income);
 }
 
+.chart-bar--trend {
+  fill: var(--chart-trend);
+}
+
 .chart-bar--zero {
   fill: var(--chart-axis);
 }
@@ -1972,6 +2472,10 @@ a {
 
 .legend-swatch.series-expense {
   background: var(--chart-expense);
+}
+
+.legend-swatch.series-trend {
+  background: var(--chart-trend);
 }
 
 .chart-tooltip {
@@ -2049,6 +2553,10 @@ a {
 
 .tooltip-key.series-expense {
   background: var(--chart-expense);
+}
+
+.tooltip-key.series-trend {
+  background: var(--chart-trend);
 }
 
 .chart-empty-note {
@@ -2154,13 +2662,13 @@ a {
 }
 
 .daily-area {
-  fill: var(--chart-expense);
+  fill: var(--chart-trend);
   opacity: 0.09;
 }
 
 .daily-line {
   fill: none;
-  stroke: var(--chart-expense);
+  stroke: var(--chart-trend);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -2168,7 +2676,7 @@ a {
 
 .daily-end-dot,
 .daily-active-dot {
-  fill: var(--chart-expense);
+  fill: var(--chart-trend);
   stroke: var(--surface);
   stroke-width: 2;
 }
@@ -2463,13 +2971,10 @@ a {
   overflow: hidden;
   padding: 54px 32px 48px;
   text-align: center;
-  background:
-    radial-gradient(
-      circle at 50% 4%,
-      var(--accent-soft) 0%,
-      transparent 44%
-    ),
-    var(--surface);
+  background-color: var(--surface);
+  background-image: var(--pattern),
+    radial-gradient(circle at 50% 4%, var(--accent-soft) 0%, transparent 44%);
+  background-size: var(--pattern-size), auto;
 }
 
 .empty-ledger::after {
@@ -3320,6 +3825,64 @@ a {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
+.palette-preview-weave {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+}
+
+.palette-preview[data-preview-palette="forest"] .palette-preview-weave {
+  background-image: repeating-radial-gradient(
+    circle at 88% -10%,
+    transparent 0 10px,
+    color-mix(in srgb, var(--p-ink) 14%, transparent) 10px 11px,
+    transparent 11px 20px
+  );
+}
+
+.palette-preview[data-preview-palette="gold"] .palette-preview-weave {
+  background-image: repeating-conic-gradient(
+      from 200deg at 92% -6%,
+      color-mix(in srgb, var(--p-ink) 13%, transparent) 0deg 2deg,
+      transparent 2deg 15deg
+    ),
+    radial-gradient(
+      1px 1px at 30% 78%,
+      color-mix(in srgb, var(--p-ink) 24%, transparent),
+      transparent 100%
+    );
+  background-size: auto, 23px 23px;
+}
+
+.palette-preview[data-preview-palette="navy"] .palette-preview-weave {
+  background-image: repeating-radial-gradient(
+      150% 120% at 50% 132%,
+      transparent 0 9px,
+      color-mix(in srgb, var(--p-ink) 14%, transparent) 9px 10px,
+      transparent 10px 18px
+    ),
+    radial-gradient(
+      1px 1px at 30% 20%,
+      color-mix(in srgb, var(--p-ink) 26%, transparent),
+      transparent 100%
+    );
+  background-size: auto, 19px 19px;
+}
+
+.palette-preview[data-preview-palette="copper"] .palette-preview-weave {
+  background-image: repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--p-ink) 9%, transparent) 0 1px,
+      transparent 1px 9px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--p-ink) 7%, transparent) 0 1px,
+      transparent 1px 13px
+    );
+}
+
 .palette-preview-hero {
   position: absolute;
   top: 6px;
@@ -3381,6 +3944,31 @@ a {
 
 .palette-preview-sheet i + i {
   width: 38%;
+}
+
+.palette-preview-dots {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  transform: translateY(-50%);
+}
+
+.palette-preview-dots b {
+  display: block;
+  width: 3px;
+  height: 3px;
+  background: var(--p-income);
+  border-radius: 50%;
+}
+
+.palette-preview-dots b:nth-child(2) {
+  background: var(--p-expense);
+}
+
+.palette-preview-dots b:nth-child(3) {
+  background: var(--p-trend);
 }
 
 .palette-option-copy {
@@ -3790,11 +4378,11 @@ a {
 
 .toast svg {
   flex: 0 0 auto;
-  color: #a8d8b7;
+  color: var(--hero-positive);
 }
 
 .toast--error svg {
-  color: #f0a48f;
+  color: var(--hero-negative);
 }
 
 @keyframes toast-in {

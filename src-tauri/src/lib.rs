@@ -79,11 +79,60 @@ fn write_export(path: String, contents: String) -> Result<(), String> {
     fs::write(&target, contents.as_bytes()).map_err(|error| format!("写入导出文件失败：{error}"))
 }
 
+/// Windows keeps shortcut and taskbar icons in a cache keyed by file path.
+/// When an update replaces the executable in place, Explorer can keep showing
+/// the previous icon until the cache is rebuilt. Ask the shell to refresh the
+/// icon cache once after each version change so the new icon is used.
+#[cfg(windows)]
+fn refresh_shell_icons_after_update(app: &tauri::AppHandle) {
+    let version = app.package_info().version.to_string();
+    let Ok(data_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let marker = data_dir.join("shell-icon-version");
+    if fs::read_to_string(&marker).ok().as_deref() == Some(version.as_str()) {
+        return;
+    }
+
+    #[link(name = "shell32")]
+    extern "system" {
+        fn SHChangeNotify(
+            event_id: i32,
+            flags: u32,
+            item1: *const std::ffi::c_void,
+            item2: *const std::ffi::c_void,
+        );
+    }
+
+    const SHCNE_ASSOCCHANGED: i32 = 0x0800_0000;
+    const SHCNF_IDLIST: u32 = 0x0000;
+    const SHCNF_FLUSH: u32 = 0x1000;
+
+    unsafe {
+        SHChangeNotify(
+            SHCNE_ASSOCCHANGED,
+            SHCNF_IDLIST | SHCNF_FLUSH,
+            std::ptr::null(),
+            std::ptr::null(),
+        );
+    }
+
+    let _ = fs::create_dir_all(&data_dir);
+    let _ = fs::write(marker, version);
+}
+
+#[cfg(not(windows))]
+fn refresh_shell_icons_after_update(_app: &tauri::AppHandle) {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            refresh_shell_icons_after_update(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             load_ledger,
             save_ledger,
