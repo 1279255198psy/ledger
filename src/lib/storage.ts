@@ -1,8 +1,9 @@
-import type { LedgerTransaction, Theme } from '../types'
+import type { LedgerTransaction, Palette, Theme } from '../types'
 import {
   isValidTransaction,
   sortTransactions,
 } from './data'
+import { DEFAULT_PALETTE, isPalette } from './themes'
 import {
   isDesktopApp,
   loadDesktopLedger,
@@ -13,6 +14,7 @@ const KEYS = {
   transactions: 'zhangye.transactions.v1',
   budget: 'zhangye.budget.v1',
   theme: 'zhangye.theme.v1',
+  palette: 'zhangye.palette.v1',
   seeded: 'zhangye.seeded.v1',
   updatedAt: 'zhangye.updatedAt.v1',
 } as const
@@ -42,6 +44,7 @@ interface DesktopLedgerSnapshot {
   transactions: LedgerTransaction[]
   budget: number
   theme: Theme
+  palette: Palette
   seeded: boolean
 }
 
@@ -70,6 +73,9 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   if (snapshot.theme === 'light' || snapshot.theme === 'dark') {
     safeSet(KEYS.theme, snapshot.theme)
   }
+  if (isPalette(snapshot.palette)) {
+    safeSet(KEYS.palette, snapshot.palette)
+  }
   if (typeof snapshot.seeded === 'boolean') {
     safeSet(KEYS.seeded, String(snapshot.seeded))
   }
@@ -94,6 +100,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
 
   const storedBudget = Number(safeGet(KEYS.budget))
   const storedTheme = safeGet(KEYS.theme)
+  const storedPalette = safeGet(KEYS.palette)
 
   return {
     app: '账页',
@@ -105,6 +112,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
         ? storedBudget
         : DEFAULT_BUDGET,
     theme: storedTheme === 'dark' ? 'dark' : 'light',
+    palette: isPalette(storedPalette) ? storedPalette : DEFAULT_PALETTE,
     seeded: safeGet(KEYS.seeded) === 'true',
   }
 }
@@ -234,6 +242,16 @@ export function loadTheme(): Theme {
 
 export function saveTheme(theme: Theme): void {
   safeSet(KEYS.theme, theme)
+  scheduleDesktopPersist()
+}
+
+export function loadPalette(): Palette {
+  const stored = safeGet(KEYS.palette)
+  return isPalette(stored) ? stored : DEFAULT_PALETTE
+}
+
+export function savePalette(palette: Palette): void {
+  safeSet(KEYS.palette, palette)
   scheduleDesktopPersist()
 }
 

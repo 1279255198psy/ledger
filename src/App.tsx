@@ -24,13 +24,16 @@ import {
   DEFAULT_BUDGET,
   ImportError,
   loadBudget,
+  loadPalette,
   loadTheme,
   loadTransactions,
   parseBackup,
   saveBudget,
+  savePalette,
   saveTheme,
   saveTransactions,
 } from './lib/storage'
+import { paletteThemeColor } from './lib/themes'
 import {
   currentMonthKey,
   defaultDateForMonth,
@@ -45,6 +48,7 @@ import {
 } from './lib/utils'
 import type {
   LedgerTransaction,
+  Palette,
   Theme,
   TransactionDraft,
   View,
@@ -63,6 +67,7 @@ export default function App() {
     useState<LedgerTransaction[]>(loadTransactions)
   const [budget, setBudget] = useState(loadBudget)
   const [theme, setTheme] = useState<Theme>(loadTheme)
+  const [palette, setPalette] = useState<Palette>(loadPalette)
   const [transactionModalOpen, setTransactionModalOpen] = useState(false)
   const [editing, setEditing] = useState<LedgerTransaction | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -85,11 +90,16 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
     saveTheme(theme)
+  }, [theme])
+
+  useEffect(() => {
+    document.documentElement.dataset.palette = palette
+    savePalette(palette)
     const meta = document.querySelector<HTMLMetaElement>(
       'meta[name="theme-color"]',
     )
-    if (meta) meta.content = theme === 'dark' ? '#111310' : '#f3f0e7'
-  }, [theme])
+    if (meta) meta.content = paletteThemeColor(palette, theme)
+  }, [palette, theme])
 
   useEffect(() => {
     if (!toast) return
@@ -379,10 +389,12 @@ export default function App() {
         open={settingsOpen}
         budget={budget}
         theme={theme}
+        palette={palette}
         updater={updater}
         onClose={() => setSettingsOpen(false)}
         onBudgetSave={handleBudgetSave}
         onThemeChange={setTheme}
+        onPaletteChange={setPalette}
         onExportJson={handleExportJson}
         onExportCsv={handleExportCsv}
         onImportFile={handleImportFile}

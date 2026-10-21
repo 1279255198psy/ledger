@@ -1,4 +1,5 @@
 import { Plus, Sparkles } from 'lucide-react'
+import { BrandMark } from './BrandMark'
 
 interface EmptyLedgerProps {
   onAdd: () => void
@@ -14,7 +15,9 @@ export function EmptyLedger({ onAdd, onLoadSample }: EmptyLedgerProps) {
       <div className="empty-ledger-art" aria-hidden="true">
         <span className="empty-ledger-sheet empty-ledger-sheet--back" />
         <span className="empty-ledger-sheet empty-ledger-sheet--middle" />
-        <span className="empty-ledger-sheet empty-ledger-sheet--front">账</span>
+        <span className="empty-ledger-sheet empty-ledger-sheet--front">
+          <BrandMark />
+        </span>
       </div>
 
       <p className="eyebrow">A FRESH PAGE</p>

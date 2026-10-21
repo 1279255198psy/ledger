@@ -13,19 +13,32 @@
     <script>
       ;(() => {
         try {
-          const stored = localStorage.getItem('zhangye.theme.v1')
+          const storedTheme = localStorage.getItem('zhangye.theme.v1')
           const theme =
-            stored === 'light' || stored === 'dark'
-              ? stored
+            storedTheme === 'light' || storedTheme === 'dark'
+              ? storedTheme
               : window.matchMedia('(prefers-color-scheme: dark)').matches
                 ? 'dark'
                 : 'light'
+          const storedPalette = localStorage.getItem('zhangye.palette.v1')
+          const palette = ['forest', 'gold', 'navy', 'copper'].includes(
+            storedPalette,
+          )
+            ? storedPalette
+            : 'forest'
+          const colors = {
+            forest: { light: '#f3f0e7', dark: '#10130f' },
+            gold: { light: '#f4f0e6', dark: '#111110' },
+            navy: { light: '#f2f0ea', dark: '#0e1216' },
+            copper: { light: '#f1efea', dark: '#111213' },
+          }
           document.documentElement.dataset.theme = theme
+          document.documentElement.dataset.palette = palette
           document
             .querySelector('meta[name="theme-color"]')
-            ?.setAttribute('content', theme === 'dark' ? '#111310' : '#f3f0e7')
+            ?.setAttribute('content', colors[palette][theme])
         } catch {
-          /* Use the light theme. */
+          /* Use the light forest palette. */
         }
       })()
     </script>

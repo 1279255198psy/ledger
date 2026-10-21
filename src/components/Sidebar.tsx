@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Sun,
 } from 'lucide-react'
+import { BrandMark } from './BrandMark'
 import { formatMoney, formatPercent } from '../lib/utils'
 import type { Theme, View } from '../types'
 
@@ -52,7 +53,7 @@ export function Sidebar({
     <aside className="sidebar">
       <div className="brand">
         <div className="brand-mark" aria-hidden="true">
-          账
+          <BrandMark />
         </div>
         <div className="brand-copy">
           <span className="brand-name">账页</span>

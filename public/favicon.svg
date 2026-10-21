@@ -1,12 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="15" fill="#1d4b3a" />
-  <text
-    x="32"
-    y="44"
-    text-anchor="middle"
-    font-family="Songti SC, Noto Serif SC, serif"
-    font-size="35"
-    font-weight="600"
-    fill="#f3f0e7"
-  >账</text>
+  <defs>
+    <linearGradient id="g" x1="9" y1="6" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F2DDA8"/>
+      <stop offset="0.5" stop-color="#CFA961"/>
+      <stop offset="1" stop-color="#916D31"/>
+    </linearGradient>
+  </defs>
+  <path
+    d="M32 17C27.8 13.2 22 11.2 15.5 11.2H6V50H15.5C22 50 27.8 52 32 55.8C36.2 52 42 50 48.5 50H58V11.2H48.5C42 11.2 36.2 13.2 32 17Z"
+    fill="#1A1611"
+    stroke="url(#g)"
+    stroke-width="1.8"
+    stroke-linejoin="round"
+  />
+  <path d="M32 17V55.8" stroke="url(#g)" stroke-width="1.1" opacity="0.65"/>
+  <path
+    d="M13.6 24.5H26M13.6 30.5H24M13.6 36.5H21.5"
+    stroke="url(#g)"
+    stroke-width="1.6"
+    stroke-linecap="round"
+  />
+  <path
+    d="M38 43L43 36L47.5 39L53.5 28"
+    fill="none"
+    stroke="url(#g)"
+    stroke-width="1.7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="53.5" cy="28" r="1.9" fill="url(#g)"/>
 </svg>

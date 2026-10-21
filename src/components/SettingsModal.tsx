@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import {
+  Check,
   Download,
   FileSpreadsheet,
   Moon,
@@ -13,17 +14,20 @@ import {
 } from 'lucide-react'
 import { Modal } from './Modal'
 import { formatMoney } from '../lib/utils'
+import { PALETTES } from '../lib/themes'
 import type { UpdaterController } from '../hooks/useUpdater'
-import type { Theme } from '../types'
+import type { Palette, Theme } from '../types'
 
 interface SettingsModalProps {
   open: boolean
   budget: number
   theme: Theme
+  palette: Palette
   updater: UpdaterController
   onClose: () => void
   onBudgetSave: (budget: number) => void
   onThemeChange: (theme: Theme) => void
+  onPaletteChange: (palette: Palette) => void
   onExportJson: () => void
   onExportCsv: () => void
   onImportFile: (file: File) => void
@@ -34,10 +38,12 @@ export function SettingsModal({
   open,
   budget,
   theme,
+  palette,
   updater,
   onClose,
   onBudgetSave,
   onThemeChange,
+  onPaletteChange,
   onExportJson,
   onExportCsv,
   onImportFile,
@@ -131,9 +137,9 @@ export function SettingsModal({
         <section className="settings-section">
           <div className="settings-heading">
             <h3>外观</h3>
-            <p>为当下的光线选一个舒适的阅读方式。</p>
+            <p>为当下的光线选一个舒适的阅读方式，再挑一套相配的墨色。</p>
           </div>
-          <div className="theme-switch" role="group" aria-label="主题">
+          <div className="theme-switch" role="group" aria-label="明暗模式">
             <button
               type="button"
               className={theme === 'light' ? 'is-active' : ''}
@@ -152,6 +158,54 @@ export function SettingsModal({
               <Moon size={16} />
               深色夜读
             </button>
+          </div>
+          <div className="palette-group">
+            <p className="palette-group-label">主题色</p>
+            <div className="palette-grid" role="radiogroup" aria-label="主题色">
+              {PALETTES.map((item) => {
+                const preview = item.preview[theme]
+                const active = item.id === palette
+                const previewStyle = {
+                  '--p-page': preview.page,
+                  '--p-surface': preview.surface,
+                  '--p-accent': preview.accent,
+                  '--p-ink': preview.ink,
+                  '--p-hero': preview.hero,
+                  '--p-on': preview.on,
+                } as CSSProperties
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={`${item.name}主题`}
+                    className={`palette-option${active ? ' is-active' : ''}`}
+                    style={previewStyle}
+                    onClick={() => onPaletteChange(item.id)}
+                  >
+                    <span className="palette-preview" aria-hidden="true">
+                      <span className="palette-preview-hero" />
+                      <span className="palette-preview-sheet">
+                        <i />
+                        <i />
+                      </span>
+                    </span>
+                    <span className="palette-option-copy">
+                      <span className="palette-option-name">{item.name}</span>
+                      <span className="palette-option-caption">
+                        {item.caption}
+                      </span>
+                    </span>
+                    {active ? (
+                      <span className="palette-check" aria-hidden="true">
+                        <Check size={10} strokeWidth={3} />
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </section>
 
