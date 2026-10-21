@@ -1,8 +1,16 @@
-import type { LedgerTransaction, Palette, Theme } from '../types'
+import type {
+  Currency,
+  FontSize,
+  LedgerTransaction,
+  Palette,
+  Theme,
+} from '../types'
 import {
   isValidTransaction,
   sortTransactions,
 } from './data'
+import { isCurrency, normalizeCurrency } from './currency'
+import { normalizeFontSize } from './fontSize'
 import { isPalette, normalizePalette } from './themes'
 import {
   isDesktopApp,
@@ -15,6 +23,8 @@ const KEYS = {
   budget: 'zhangye.budget.v1',
   theme: 'zhangye.theme.v1',
   palette: 'zhangye.palette.v1',
+  fontSize: 'zhangye.fontSize.v1',
+  currency: 'zhangye.currency.v1',
   seeded: 'zhangye.seeded.v1',
   updatedAt: 'zhangye.updatedAt.v1',
 } as const
@@ -45,6 +55,8 @@ interface DesktopLedgerSnapshot {
   budget: number
   theme: Theme
   palette: Palette
+  fontSize: FontSize
+  currency: Currency
   seeded: boolean
 }
 
@@ -75,6 +87,12 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   }
   if (snapshot.palette === 'copper' || isPalette(snapshot.palette)) {
     safeSet(KEYS.palette, normalizePalette(snapshot.palette))
+  }
+  if (snapshot.fontSize !== undefined) {
+    safeSet(KEYS.fontSize, normalizeFontSize(snapshot.fontSize))
+  }
+  if (isCurrency(snapshot.currency)) {
+    safeSet(KEYS.currency, snapshot.currency)
   }
   if (typeof snapshot.seeded === 'boolean') {
     safeSet(KEYS.seeded, String(snapshot.seeded))
@@ -113,6 +131,8 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
         : DEFAULT_BUDGET,
     theme: storedTheme === 'dark' ? 'dark' : 'light',
     palette: normalizePalette(storedPalette),
+    fontSize: normalizeFontSize(safeGet(KEYS.fontSize)),
+    currency: normalizeCurrency(safeGet(KEYS.currency)),
     seeded: safeGet(KEYS.seeded) === 'true',
   }
 }
@@ -251,6 +271,24 @@ export function loadPalette(): Palette {
 
 export function savePalette(palette: Palette): void {
   safeSet(KEYS.palette, palette)
+  scheduleDesktopPersist()
+}
+
+export function loadFontSize(): FontSize {
+  return normalizeFontSize(safeGet(KEYS.fontSize))
+}
+
+export function saveFontSize(fontSize: FontSize): void {
+  safeSet(KEYS.fontSize, fontSize)
+  scheduleDesktopPersist()
+}
+
+export function loadCurrency(): Currency {
+  return normalizeCurrency(safeGet(KEYS.currency))
+}
+
+export function saveCurrency(currency: Currency): void {
+  safeSet(KEYS.currency, currency)
   scheduleDesktopPersist()
 }
 

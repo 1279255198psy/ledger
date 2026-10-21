@@ -14,20 +14,26 @@ import {
 } from 'lucide-react'
 import { Modal } from './Modal'
 import { formatMoney } from '../lib/utils'
+import { CURRENCIES, getCurrency } from '../lib/currency'
+import { FONT_SIZES } from '../lib/fontSize'
 import { PALETTES } from '../lib/themes'
 import type { UpdaterController } from '../hooks/useUpdater'
-import type { Palette, Theme } from '../types'
+import type { Currency, FontSize, Palette, Theme } from '../types'
 
 interface SettingsModalProps {
   open: boolean
   budget: number
   theme: Theme
   palette: Palette
+  fontSize: FontSize
+  currency: Currency
   updater: UpdaterController
   onClose: () => void
   onBudgetSave: (budget: number) => void
   onThemeChange: (theme: Theme) => void
   onPaletteChange: (palette: Palette) => void
+  onFontSizeChange: (fontSize: FontSize) => void
+  onCurrencyChange: (currency: Currency) => void
   onExportJson: () => void
   onExportCsv: () => void
   onImportFile: (file: File) => void
@@ -39,11 +45,15 @@ export function SettingsModal({
   budget,
   theme,
   palette,
+  fontSize,
+  currency,
   updater,
   onClose,
   onBudgetSave,
   onThemeChange,
   onPaletteChange,
+  onFontSizeChange,
+  onCurrencyChange,
   onExportJson,
   onExportCsv,
   onImportFile,
@@ -159,6 +169,26 @@ export function SettingsModal({
               深色夜读
             </button>
           </div>
+          <div className="font-size-group">
+            <p className="palette-group-label">字体大小</p>
+            <div className="font-size-switch" role="radiogroup" aria-label="字体大小">
+              {FONT_SIZES.map((item) => {
+                const active = item.id === fontSize
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={active ? 'is-active' : ''}
+                    onClick={() => onFontSizeChange(item.id)}
+                  >
+                    {item.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <div className="palette-group">
             <p className="palette-group-label">主题</p>
             <div className="palette-grid" role="radiogroup" aria-label="主题">
@@ -226,12 +256,41 @@ export function SettingsModal({
 
         <section className="settings-section">
           <div className="settings-heading">
+            <h3>货币</h3>
+            <p>选择记账使用的货币。切换只更换金额符号，不会换算已有金额。</p>
+          </div>
+          <div className="currency-grid" role="radiogroup" aria-label="货币">
+            {CURRENCIES.map((item) => {
+              const active = item.id === currency
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={`${item.name}（${item.code}）`}
+                  className={`currency-option${active ? ' is-active' : ''}`}
+                  onClick={() => onCurrencyChange(item.id)}
+                >
+                  <span className="currency-symbol" aria-hidden="true">
+                    {item.symbol}
+                  </span>
+                  <span className="currency-name">{item.name}</span>
+                  <span className="currency-code">{item.code}</span>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-heading">
             <h3>月度预算</h3>
             <p>给每个月留一条温柔的边界，当前预算 {formatMoney(budget)}。</p>
           </div>
           <form className="budget-form" onSubmit={handleBudgetSubmit}>
             <label className="budget-input">
-              <span>¥</span>
+              <span>{getCurrency(currency).symbol}</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -330,7 +389,7 @@ export function SettingsModal({
             <h3>关于账页</h3>
             <p>
               {updater.supported
-                ? `当前版本 v${updater.currentVersion || '…'}。启动时会自动检查更新，所有下载与安装操作都在更新弹窗中完成。`
+                ? `当前版本 v${updater.currentVersion || '…'}。启动后会自动检查更新，失败时自动重试并在后台定期复查；所有下载与安装操作都在更新弹窗中完成。`
                 : '自动更新只在使用安装版时可用。'}
             </p>
           </div>

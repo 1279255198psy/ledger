@@ -8,6 +8,8 @@
     "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI",
     "Microsoft YaHei", sans-serif;
 
+  --font-scale: 1;
+
   --page: #f3f0e7;
   --page-wash: rgba(255, 253, 246, 0.62);
   --page-wash-two: rgba(35, 77, 59, 0.035);
@@ -146,6 +148,23 @@
     );
 
   color-scheme: light;
+}
+
+/* Text size preference: only type scales, layout and icons keep their size. */
+:root[data-font-size="small"] {
+  --font-scale: 0.9;
+}
+
+:root[data-font-size="standard"] {
+  --font-scale: 1;
+}
+
+:root[data-font-size="large"] {
+  --font-scale: 1.12;
+}
+
+:root[data-font-size="xlarge"] {
+  --font-scale: 1.25;
 }
 
 /* ---------- Palette: Antique Gold · light ---------- */
@@ -1243,7 +1262,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: calc(14px * var(--font-scale));
   line-height: 1.55;
   color: var(--ink);
   background-color: var(--page);
@@ -1399,7 +1418,7 @@ a {
   border-radius: 12px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.13),
     var(--shadow-mark);
-  font-size: 20px;
+  font-size: calc(20px * var(--font-scale));
   font-weight: 600;
   line-height: 1;
 }
@@ -1417,7 +1436,7 @@ a {
 }
 
 .brand-name {
-  font-size: 19px;
+  font-size: calc(19px * var(--font-scale));
   font-weight: 650;
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -1425,7 +1444,7 @@ a {
 
 .brand-caption {
   color: var(--ink-muted);
-  font-size: 8px;
+  font-size: calc(8px * var(--font-scale));
   font-weight: 650;
   letter-spacing: 0.16em;
 }
@@ -1442,7 +1461,7 @@ a {
   border: 0;
   border-radius: 12px;
   box-shadow: var(--shadow-button);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 600;
   transition: background 160ms ease, transform 160ms ease;
 }
@@ -1461,7 +1480,7 @@ a {
   color: var(--on-accent);
   background: rgba(255, 255, 255, 0.12);
   border-radius: 5px;
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
   font-weight: 650;
 }
 
@@ -1473,7 +1492,7 @@ a {
   padding: 0 12px;
   margin-bottom: 9px;
   color: var(--ink-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
   font-weight: 650;
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -1492,7 +1511,7 @@ a {
   background: transparent;
   border: 0;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 500;
   text-align: left;
   transition: color 150ms ease, background 150ms ease;
@@ -1535,7 +1554,7 @@ a {
   justify-content: space-between;
   gap: 8px;
   color: var(--ink-secondary);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
 }
 
 .sidebar-budget-head span {
@@ -1547,7 +1566,7 @@ a {
 .sidebar-budget-head strong {
   flex: 0 0 auto;
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -1573,7 +1592,7 @@ a {
 
 .sidebar-budget p {
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -1613,7 +1632,7 @@ a {
   gap: 5px;
   margin-top: 8px;
   color: var(--ink-faint);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 /* ---------- Main and top bar ---------- */
@@ -1646,7 +1665,7 @@ a {
 
 .eyebrow {
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   font-weight: 600;
   letter-spacing: 0.08em;
 }
@@ -1660,7 +1679,7 @@ a {
 
 .page-title-row h1 {
   color: var(--ink);
-  font-size: 31px;
+  font-size: calc(31px * var(--font-scale));
   font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.15;
@@ -1668,7 +1687,7 @@ a {
 
 .page-title-row p {
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   letter-spacing: 0.01em;
 }
 
@@ -1717,7 +1736,7 @@ a {
   justify-content: center;
   gap: 6px;
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--font-scale));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1728,7 +1747,7 @@ a {
   color: var(--accent-ink);
   background: var(--accent-soft);
   border-radius: 4px;
-  font-size: 8.5px;
+  font-size: calc(8.5px * var(--font-scale));
   font-style: normal;
   font-weight: 650;
   letter-spacing: 0.04em;
@@ -1739,7 +1758,7 @@ a {
   color: var(--ink-muted);
   background: transparent;
   border: 0;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   white-space: nowrap;
 }
 
@@ -1762,7 +1781,7 @@ a {
   padding: 0 15px;
   border: 1px solid transparent;
   border-radius: 10px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--font-scale));
   font-weight: 600;
   white-space: nowrap;
   transition: color 150ms ease, background 150ms ease,
@@ -1845,7 +1864,7 @@ a {
   color: var(--ink-muted);
   background: transparent;
   border: 0;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   font-weight: 550;
   white-space: nowrap;
   transition: color 150ms ease, gap 150ms ease;
@@ -1873,7 +1892,7 @@ a {
 .card-kicker {
   margin-bottom: 7px;
   color: var(--ink-muted);
-  font-size: 8.5px;
+  font-size: calc(8.5px * var(--font-scale));
   font-weight: 650;
   letter-spacing: 0.14em;
 }
@@ -1881,7 +1900,7 @@ a {
 .card-head h2,
 .section-heading h2 {
   color: var(--ink);
-  font-size: 18px;
+  font-size: calc(18px * var(--font-scale));
   font-weight: 640;
   letter-spacing: -0.025em;
   line-height: 1.25;
@@ -1890,7 +1909,7 @@ a {
 .card-sub {
   margin-top: 5px;
   color: var(--ink-muted);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   line-height: 1.55;
 }
 
@@ -1908,7 +1927,7 @@ a {
   gap: 20px;
   padding: 36px 4px 8px;
   color: var(--ink-faint);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   letter-spacing: 0.02em;
 }
 
@@ -1988,7 +2007,7 @@ a {
 
 .hero-eyebrow {
   color: var(--hero-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   font-weight: 550;
   letter-spacing: 0.04em;
 }
@@ -2002,7 +2021,7 @@ a {
   background: color-mix(in srgb, var(--hero-ink) 3.5%, transparent);
   border: 1px solid var(--hero-line);
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   letter-spacing: 0.05em;
 }
 
@@ -2017,7 +2036,7 @@ a {
   border-radius: 13px;
   box-shadow: inset 0 0 0 3px
     color-mix(in srgb, var(--hero-ink) 3.5%, transparent);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   font-weight: 500;
   letter-spacing: 0.12em;
   transform: rotate(3deg);
@@ -2030,7 +2049,7 @@ a {
   align-items: baseline;
   margin: 27px 0 25px;
   color: var(--hero-ink);
-  font-size: clamp(43px, 4.7vw, 61px);
+  font-size: calc(clamp(43px, 4.7vw, 61px) * var(--font-scale));
   font-weight: 620;
   letter-spacing: -0.055em;
   line-height: 0.98;
@@ -2099,13 +2118,13 @@ a {
 
 .hero-metric span {
   color: var(--hero-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   letter-spacing: 0.04em;
 }
 
 .hero-metric strong {
   color: var(--hero-ink);
-  font-size: 14px;
+  font-size: calc(14px * var(--font-scale));
   font-weight: 550;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
@@ -2121,7 +2140,7 @@ a {
   padding-top: 17px;
   margin-top: auto;
   color: var(--hero-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
 }
 
 .hero-comparison > span {
@@ -2163,7 +2182,7 @@ a {
 
 .budget-figure strong {
   color: var(--ink);
-  font-size: 41px;
+  font-size: calc(41px * var(--font-scale));
   font-weight: 630;
   letter-spacing: -0.055em;
   line-height: 1;
@@ -2172,7 +2191,7 @@ a {
 
 .budget-figure span {
   color: var(--ink-muted);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
 }
 
 .budget-meter {
@@ -2216,12 +2235,12 @@ a {
 
 .budget-amounts span {
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .budget-amounts strong {
   color: var(--ink);
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--font-scale));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -2234,7 +2253,7 @@ a {
   padding-top: 13px;
   margin-top: auto;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   line-height: 1.6;
 }
 
@@ -2291,14 +2310,14 @@ a {
 
 .metric-label {
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   letter-spacing: 0.02em;
 }
 
 .metric-item strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 17px;
+  font-size: calc(17px * var(--font-scale));
   font-weight: 620;
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
@@ -2308,7 +2327,7 @@ a {
 .metric-item small {
   overflow: hidden;
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2420,7 +2439,7 @@ a {
   align-items: center;
   gap: 8px;
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   font-weight: 550;
 }
 
@@ -2430,7 +2449,7 @@ a {
   align-items: baseline;
   gap: 6px;
   color: var(--ink-secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -2438,7 +2457,7 @@ a {
 .category-row-value small {
   min-width: 28px;
   color: var(--ink-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
   text-align: right;
 }
 
@@ -2471,12 +2490,12 @@ a {
   margin-top: 18px;
   border-top: 1px solid var(--line);
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
 }
 
 .category-total strong {
   color: var(--ink);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -2484,7 +2503,7 @@ a {
 .category-empty {
   padding: 40px 8px;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   text-align: center;
 }
 
@@ -2507,7 +2526,7 @@ a {
   gap: 20px;
   padding: 27px 24px 28px;
   color: var(--ink-muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
 }
 
 /* ---------- Transaction rows ---------- */
@@ -2595,7 +2614,7 @@ a {
   align-items: baseline;
   gap: 8px;
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--font-scale));
   font-weight: 600;
   line-height: 1.45;
 }
@@ -2607,7 +2626,7 @@ a {
 .transaction-note {
   overflow: hidden;
   color: var(--ink-muted);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2625,7 +2644,7 @@ a {
   gap: 6px;
   margin-top: 2px;
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   line-height: 1.4;
 }
 
@@ -2635,7 +2654,7 @@ a {
 
 .transaction-amount {
   color: var(--ink);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.015em;
@@ -2726,14 +2745,14 @@ a {
 .chart-axis-label {
   fill: var(--ink-muted);
   font-family: var(--font-sans);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
 .chart-x-label {
   fill: var(--ink-muted);
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
 }
 
 .chart-x-label.is-active {
@@ -2744,7 +2763,7 @@ a {
 .chart-direct-label {
   fill: var(--ink);
   font-family: var(--font-sans);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
@@ -2797,7 +2816,7 @@ a {
   gap: 17px;
   margin: 5px 0 0;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
 }
 
 .chart-legend span {
@@ -2844,7 +2863,7 @@ a {
 
 .chart-tooltip strong {
   color: var(--tooltip-ink);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 620;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -2856,14 +2875,14 @@ a {
   align-items: center;
   gap: 6px;
   color: var(--tooltip-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   white-space: nowrap;
 }
 
 .chart-tooltip-month {
   margin-bottom: 2px;
   color: var(--tooltip-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
   letter-spacing: 0.03em;
 }
 
@@ -2880,11 +2899,11 @@ a {
   align-items: center;
   gap: 5px;
   color: var(--tooltip-muted);
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
 }
 
 .chart-tooltip-row strong {
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
 }
 
 .tooltip-key {
@@ -2914,7 +2933,7 @@ a {
   color: var(--ink-muted);
   background: color-mix(in srgb, var(--surface) 86%, transparent);
   border-radius: 6px;
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -2929,7 +2948,7 @@ a {
   gap: 5px;
   padding: 3px 0;
   color: var(--ink-faint);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   cursor: pointer;
   list-style: none;
 }
@@ -2940,7 +2959,7 @@ a {
 
 .chart-details summary::after {
   content: "＋";
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
 }
 
 .chart-details[open] summary::after {
@@ -2963,7 +2982,7 @@ a {
   width: 100%;
   border-collapse: collapse;
   color: var(--ink-secondary);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
 }
 
 .chart-table th,
@@ -2980,7 +2999,7 @@ a {
   z-index: 1;
   color: var(--ink-muted);
   background: var(--surface-soft);
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
   font-weight: 600;
 }
 
@@ -3042,7 +3061,7 @@ a {
   background: var(--surface-soft);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
   white-space: nowrap;
 }
 
@@ -3068,13 +3087,13 @@ a {
 
 .summary-cell span {
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .summary-cell strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 19px;
+  font-size: calc(19px * var(--font-scale));
   font-weight: 620;
   letter-spacing: -0.035em;
   text-overflow: ellipsis;
@@ -3091,7 +3110,7 @@ a {
 }
 
 .summary-cell--count strong {
-  font-size: 16px;
+  font-size: calc(16px * var(--font-scale));
   letter-spacing: -0.02em;
 }
 
@@ -3135,7 +3154,7 @@ a {
   background: transparent;
   border: 0;
   outline: none;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
 }
 
 .search-box input::placeholder {
@@ -3165,7 +3184,7 @@ a {
   background: transparent;
   border: 0;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   transition: color 140ms ease, background 140ms ease,
     box-shadow 140ms ease;
 }
@@ -3197,7 +3216,7 @@ a {
   background: transparent;
   border: 0;
   outline: none;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   cursor: pointer;
 }
 
@@ -3205,7 +3224,7 @@ a {
   min-height: 36px;
   padding-inline: 9px;
   color: var(--ink-muted);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
 }
 
 .result-meta {
@@ -3216,7 +3235,7 @@ a {
   padding: 1px 3px;
   margin-bottom: -3px;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
 }
 
 .day-groups {
@@ -3242,21 +3261,21 @@ a {
 
 .day-heading h2 {
   color: var(--ink);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   font-weight: 620;
   letter-spacing: -0.01em;
 }
 
 .day-heading > div:first-child span {
   color: var(--ink-faint);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .day-total {
   display: flex;
   gap: 12px;
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -3295,7 +3314,7 @@ a {
 .empty-state h2 {
   margin-bottom: 7px;
   color: var(--ink);
-  font-size: 17px;
+  font-size: calc(17px * var(--font-scale));
   font-weight: 620;
   letter-spacing: -0.02em;
 }
@@ -3304,7 +3323,7 @@ a {
   max-width: 380px;
   margin-bottom: 19px;
   color: var(--ink-muted);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   line-height: 1.7;
 }
 
@@ -3407,7 +3426,7 @@ a {
 .empty-ledger h2 {
   max-width: 520px;
   color: var(--ink);
-  font-size: clamp(22px, 2.4vw, 28px);
+  font-size: calc(clamp(22px, 2.4vw, 28px) * var(--font-scale));
   font-weight: 620;
   letter-spacing: -0.035em;
   line-height: 1.25;
@@ -3417,7 +3436,7 @@ a {
   max-width: 430px;
   margin-top: 12px;
   color: var(--ink-secondary);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--font-scale));
   line-height: 1.85;
 }
 
@@ -3437,7 +3456,7 @@ a {
 .empty-ledger-hint {
   margin-top: 24px;
   color: var(--ink-faint);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   letter-spacing: 0.02em;
 }
 
@@ -3489,13 +3508,13 @@ a {
 .kpi-label {
   margin-bottom: 3px;
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .kpi-value {
   overflow: hidden;
   color: var(--ink);
-  font-size: clamp(19px, 1.8vw, 23px);
+  font-size: calc(clamp(19px, 1.8vw, 23px) * var(--font-scale));
   font-weight: 640;
   letter-spacing: -0.04em;
   line-height: 1.3;
@@ -3509,7 +3528,7 @@ a {
   align-items: center;
   gap: 3px;
   margin-top: 9px;
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -3524,13 +3543,13 @@ a {
 .stat-delta.is-neutral,
 .kpi-note {
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .stat-delta-label {
   margin-left: 2px;
   color: var(--ink-faint);
-  font-size: 8.5px;
+  font-size: calc(8.5px * var(--font-scale));
 }
 
 .kpi-note {
@@ -3576,13 +3595,13 @@ a {
 
 .daily-foot span {
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .daily-foot strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3608,7 +3627,7 @@ a {
 .section-heading > div > p:last-child {
   margin-top: 5px;
   color: var(--ink-muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
 }
 
 .insight-grid {
@@ -3638,14 +3657,14 @@ a {
 .insight-label {
   margin-bottom: 5px;
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .insight-card > strong {
   overflow: hidden;
   margin-bottom: 7px;
   color: var(--ink);
-  font-size: 21px;
+  font-size: calc(21px * var(--font-scale));
   font-weight: 640;
   letter-spacing: -0.035em;
   text-overflow: ellipsis;
@@ -3656,7 +3675,7 @@ a {
 .insight-copy {
   margin-top: auto;
   color: var(--ink-muted);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   line-height: 1.65;
 }
 
@@ -3666,7 +3685,7 @@ a {
   padding: 2px 6px;
   margin-left: 6px;
   border-radius: 4px;
-  font-size: 8.5px;
+  font-size: calc(8.5px * var(--font-scale));
   font-weight: 550;
   white-space: nowrap;
 }
@@ -3691,7 +3710,7 @@ a {
   background: var(--surface-soft);
   border: 1px dashed var(--line-strong);
   border-radius: 14px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
 }
 
 /* ---------- Modal ---------- */
@@ -3737,7 +3756,7 @@ a {
 .modal-header h2 {
   margin-top: 5px;
   color: var(--ink);
-  font-size: 22px;
+  font-size: calc(22px * var(--font-scale));
   font-weight: 640;
   letter-spacing: -0.035em;
   line-height: 1.25;
@@ -3789,7 +3808,7 @@ a {
   background: transparent;
   border: 0;
   border-radius: 7px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   transition: color 150ms ease, background 150ms ease,
     box-shadow 150ms ease;
 }
@@ -3811,7 +3830,7 @@ a {
   align-items: center;
   gap: 5px;
   color: var(--ink-secondary);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   font-weight: 550;
   letter-spacing: 0.01em;
 }
@@ -3837,7 +3856,7 @@ a {
 
 .currency-mark {
   color: var(--ink-muted);
-  font-size: 25px;
+  font-size: calc(25px * var(--font-scale));
   font-weight: 500;
 }
 
@@ -3849,7 +3868,7 @@ a {
   background: transparent;
   border: 0;
   outline: none;
-  font-size: 37px;
+  font-size: calc(37px * var(--font-scale));
   font-weight: 620;
   letter-spacing: -0.055em;
   line-height: 1.15;
@@ -3863,7 +3882,7 @@ a {
 .amount-preview {
   margin-top: 6px;
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .amount-preview strong {
@@ -3898,7 +3917,7 @@ a {
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 11px;
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   transition: color 140ms ease, border-color 140ms ease,
     background 140ms ease;
 }
@@ -3949,7 +3968,7 @@ a {
 
 .optional {
   color: var(--ink-faint);
-  font-size: 8.5px;
+  font-size: calc(8.5px * var(--font-scale));
   font-weight: 400;
 }
 
@@ -3963,7 +3982,7 @@ a {
   border: 1px solid var(--line);
   border-radius: 9px;
   outline: none;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   transition: border-color 150ms ease, box-shadow 150ms ease,
     background 150ms ease;
 }
@@ -3997,7 +4016,7 @@ a {
   color: var(--negative);
   background: var(--negative-soft);
   border-radius: 7px;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
 }
 
 .modal-footer {
@@ -4016,7 +4035,7 @@ a {
 
 .modal-footnote {
   color: var(--ink-faint);
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
 }
 
 .text-button {
@@ -4027,7 +4046,7 @@ a {
   color: var(--ink-muted);
   background: transparent;
   border: 0;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
 }
 
 .text-button.danger:hover {
@@ -4061,13 +4080,13 @@ a {
 .settings-heading h3 {
   margin-bottom: 4px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   font-weight: 620;
 }
 
 .settings-heading p {
   color: var(--ink-muted);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   line-height: 1.6;
 }
 
@@ -4091,7 +4110,7 @@ a {
   background: transparent;
   border: 0;
   border-radius: 7px;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
 }
 
 .theme-switch button.is-active {
@@ -4099,6 +4118,96 @@ a {
   background: var(--surface);
   box-shadow: 0 1px 3px rgba(30, 36, 31, 0.08);
   font-weight: 600;
+}
+
+.font-size-group {
+  margin-top: 15px;
+}
+
+.font-size-switch {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.font-size-switch button {
+  height: 34px;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  font-size: calc(11px * var(--font-scale));
+}
+
+.font-size-switch button.is-active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(30, 36, 31, 0.08);
+  font-weight: 600;
+}
+
+.currency-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.currency-option {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  color: var(--ink);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.currency-option:hover {
+  border-color: var(--line-strong);
+}
+
+.currency-option.is-active {
+  background: var(--surface);
+  border-color: var(--accent-mid);
+  box-shadow: 0 0 0 1px var(--accent-mid);
+}
+
+.currency-symbol {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: 7px;
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 650;
+}
+
+.currency-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: calc(11.5px * var(--font-scale));
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.currency-code {
+  color: var(--ink-faint);
+  font-size: calc(9px * var(--font-scale));
+  letter-spacing: 0.08em;
 }
 
 .palette-group {
@@ -4111,7 +4220,7 @@ a {
   gap: 8px;
   margin-bottom: 8px;
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   font-weight: 650;
   letter-spacing: 0.14em;
 }
@@ -4400,7 +4509,7 @@ a {
 
 .palette-option-name {
   overflow: hidden;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   font-weight: 600;
   letter-spacing: 0.03em;
   text-overflow: ellipsis;
@@ -4410,7 +4519,7 @@ a {
 .palette-option-caption {
   overflow: hidden;
   color: var(--ink-muted);
-  font-size: 7px;
+  font-size: calc(7px * var(--font-scale));
   font-weight: 650;
   letter-spacing: 0.1em;
   text-overflow: ellipsis;
@@ -4433,6 +4542,10 @@ a {
 
 @media (max-width: 560px) {
   .palette-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .currency-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -4467,7 +4580,7 @@ a {
   background: transparent;
   border: 0;
   outline: none;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -4522,13 +4635,13 @@ a {
 }
 
 .data-row-text strong {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   font-weight: 550;
 }
 
 .data-row-text small {
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .data-row--danger .data-row-text strong,
@@ -4542,7 +4655,7 @@ a {
   gap: 5px;
   margin-top: 11px;
   color: var(--ink-faint);
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
 }
 
 /* ---------- Update dialog ---------- */
@@ -4595,7 +4708,7 @@ a {
 
 .update-lead {
   color: var(--ink-secondary);
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   line-height: 1.7;
 }
 
@@ -4615,7 +4728,7 @@ a {
   background: var(--surface-soft);
   border: 1px solid var(--line);
   border-radius: 7px;
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -4643,7 +4756,7 @@ a {
   display: block;
   margin-bottom: 5px;
   color: var(--ink);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   font-weight: 600;
 }
 
@@ -4651,7 +4764,7 @@ a {
   max-height: 124px;
   overflow: auto;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   line-height: 1.65;
   white-space: pre-line;
 }
@@ -4667,7 +4780,7 @@ a {
   gap: 12px;
   margin-bottom: 7px;
   color: var(--ink-muted);
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -4731,13 +4844,13 @@ a {
 
 .update-ready-card strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   font-weight: 600;
 }
 
 .update-ready-card span {
   color: var(--ink-muted);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -4747,7 +4860,7 @@ a {
   gap: 5px;
   margin-top: 13px;
   color: var(--ink-faint);
-  font-size: 9px;
+  font-size: calc(9px * var(--font-scale));
   line-height: 1.55;
 }
 
@@ -4791,7 +4904,7 @@ a {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 11px;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.26);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   animation: toast-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -4905,7 +5018,7 @@ a {
     background: transparent;
     border: 0;
     border-radius: 10px;
-    font-size: 9px;
+    font-size: calc(9px * var(--font-scale));
   }
 
   .mobile-nav button.is-active {
@@ -4927,7 +5040,7 @@ a {
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 50%;
     box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
-    font-size: 22px;
+    font-size: calc(22px * var(--font-scale));
     transition: transform 150ms ease, background 150ms ease;
   }
 
@@ -4983,7 +5096,7 @@ a {
   }
 
   .page-title-row h1 {
-    font-size: 29px;
+    font-size: calc(29px * var(--font-scale));
   }
 
   .topbar-actions {
@@ -5013,7 +5126,7 @@ a {
 
   .hero-amount {
     margin: 24px 0 22px;
-    font-size: clamp(39px, 11vw, 53px);
+    font-size: calc(clamp(39px, 11vw, 53px) * var(--font-scale));
   }
 
   .hero-comparison {
@@ -5203,7 +5316,7 @@ a {
   }
 
   .hero-metric strong {
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--font-scale));
   }
 
   .hero-comparison-note {
@@ -5255,19 +5368,19 @@ a {
   }
 
   .transaction-title {
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--font-scale));
   }
 
   .transaction-note {
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--font-scale));
   }
 
   .transaction-meta {
-    font-size: 9px;
+    font-size: calc(9px * var(--font-scale));
   }
 
   .transaction-amount {
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--font-scale));
   }
 
   .day-card {
@@ -5294,7 +5407,7 @@ a {
   }
 
   .kpi-value {
-    font-size: 18px;
+    font-size: calc(18px * var(--font-scale));
   }
 
   .analytics-split {
@@ -5318,7 +5431,7 @@ a {
   }
 
   .insight-card > strong {
-    font-size: 19px;
+    font-size: calc(19px * var(--font-scale));
   }
 
   .empty-callout {
@@ -5337,15 +5450,15 @@ a {
 
   .category-option {
     min-height: 61px;
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--font-scale));
   }
 
   .amount-input-wrap input {
-    font-size: 32px;
+    font-size: calc(32px * var(--font-scale));
   }
 
   .currency-mark {
-    font-size: 22px;
+    font-size: calc(22px * var(--font-scale));
   }
 
   .modal-actions {
@@ -5398,7 +5511,7 @@ a {
   }
 
   .summary-cell strong {
-    font-size: 17px;
+    font-size: calc(17px * var(--font-scale));
   }
 
   .transaction-row,

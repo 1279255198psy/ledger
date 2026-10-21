@@ -22,8 +22,24 @@ interface UpdateState {
   publishedAt: string | null
   downloadedBytes: number
   contentLength: number | null
+  checkAttempt: number
   error: string | null
   errorStage: UpdateErrorStage
+}
+
+// GitHub is occasionally slow to respond in mainland China. Each attempt gets
+// a short timeout, and a failed attempt is retried right away instead of
+// leaving the check hanging for 20 seconds and then giving up.
+const CHECK_TIMEOUT_MS = 8_000
+const CHECK_ATTEMPTS = 3
+const RETRY_DELAYS_MS = [500, 1_500]
+// Re-check quietly while the app stays open. A failed check comes back sooner.
+const BACKGROUND_CHECK_MS = 30 * 60 * 1000
+const BACKGROUND_RETRY_MS = 5 * 60 * 1000
+const FOCUS_CHECK_AFTER_MS = 10 * 60 * 1000
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 export interface UpdaterController extends UpdateState {
@@ -45,6 +61,7 @@ const INITIAL_STATE: UpdateState = {
   publishedAt: null,
   downloadedBytes: 0,
   contentLength: null,
+  checkAttempt: 0,
   error: null,
   errorStage: null,
 }
@@ -89,6 +106,8 @@ export function useUpdater(): UpdaterController {
   const updateRef = useRef<Update | null>(null)
   const busyRef = useRef(false)
   const readyRef = useRef(false)
+  const lastAttemptRef = useRef(0)
+  const lastCheckOkRef = useRef(true)
 
   useEffect(() => {
     if (!supported) return
@@ -118,15 +137,19 @@ export function useUpdater(): UpdaterController {
     async (silent: boolean) => {
       if (!supported) return
       if (busyRef.current || readyRef.current || updateRef.current) {
-        setDialogOpen(true)
+        // A silent background check must never pop open a dialog, especially
+        // when the user already chose “下次再说” for the cached update.
+        if (!silent) setDialogOpen(true)
         return
       }
 
       busyRef.current = true
+      lastAttemptRef.current = Date.now()
       if (!silent) setDialogOpen(true)
       setState((current) => ({
         ...current,
         phase: 'checking',
+        checkAttempt: 1,
         error: null,
         errorStage: null,
         downloadedBytes: 0,
@@ -135,7 +158,31 @@ export function useUpdater(): UpdaterController {
 
       try {
         const { check } = await import('@tauri-apps/plugin-updater')
-        const next = await check({ timeout: 20_000 })
+        let next: Update | null = null
+        let lastError: unknown = null
+
+        for (let attempt = 1; attempt <= CHECK_ATTEMPTS; attempt += 1) {
+          if (attempt > 1) {
+            await wait(RETRY_DELAYS_MS[attempt - 2] ?? 2_000)
+            setState((current) =>
+              current.phase === 'checking'
+                ? { ...current, checkAttempt: attempt }
+                : current,
+            )
+          }
+          try {
+            next = await check({ timeout: CHECK_TIMEOUT_MS })
+            lastError = null
+            break
+          } catch (error) {
+            lastError = error
+            console.error(`检查更新失败（第 ${attempt} 次）`, error)
+          }
+        }
+
+        if (lastError) throw lastError
+
+        lastCheckOkRef.current = true
         updateRef.current = next
 
         if (next) {
@@ -147,6 +194,7 @@ export function useUpdater(): UpdaterController {
             publishedAt: next.date ?? null,
             downloadedBytes: 0,
             contentLength: null,
+            checkAttempt: 0,
             error: null,
             errorStage: null,
           })
@@ -159,16 +207,19 @@ export function useUpdater(): UpdaterController {
             publishedAt: null,
             downloadedBytes: 0,
             contentLength: null,
+            checkAttempt: 0,
             error: null,
             errorStage: null,
           })
         }
       } catch (error) {
         console.error('检查更新失败', error)
+        lastCheckOkRef.current = false
         if (silent && !updateRef.current) {
           setState((current) => ({
             ...current,
             phase: 'idle',
+            checkAttempt: 0,
             error: null,
             errorStage: null,
           }))
@@ -178,6 +229,7 @@ export function useUpdater(): UpdaterController {
             setState((current) => ({
               ...current,
               phase: 'available',
+              checkAttempt: 0,
               error: null,
               errorStage: null,
             }))
@@ -185,6 +237,7 @@ export function useUpdater(): UpdaterController {
             setState((current) => ({
               ...current,
               phase: 'error',
+              checkAttempt: 0,
               error: describeUpdateError(error, 'check'),
               errorStage: 'check',
             }))
@@ -304,13 +357,41 @@ export function useUpdater(): UpdaterController {
   const checkForUpdates = useCallback(() => runCheck(false), [runCheck])
 
   useEffect(() => {
-    // A packaged build quietly checks shortly after launch. Development builds
-    // can still use the manual check without a request on every hot reload.
+    // A packaged build quietly checks shortly after launch, then keeps
+    // re-checking while it stays open. Development builds can still use the
+    // manual check without a request on every hot reload.
     if (!supported || import.meta.env.DEV) return
-    const timer = window.setTimeout(() => {
+
+    let timer: number | null = null
+    let disposed = false
+
+    const schedule = (delay: number) => {
+      if (disposed) return
+      timer = window.setTimeout(async () => {
+        timer = null
+        await runCheck(true)
+        schedule(
+          lastCheckOkRef.current ? BACKGROUND_CHECK_MS : BACKGROUND_RETRY_MS,
+        )
+      }, delay)
+    }
+
+    const checkWhenBack = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastAttemptRef.current < FOCUS_CHECK_AFTER_MS) return
       void runCheck(true)
-    }, 2500)
-    return () => window.clearTimeout(timer)
+    }
+
+    schedule(2500)
+    window.addEventListener('focus', checkWhenBack)
+    document.addEventListener('visibilitychange', checkWhenBack)
+
+    return () => {
+      disposed = true
+      if (timer !== null) window.clearTimeout(timer)
+      window.removeEventListener('focus', checkWhenBack)
+      document.removeEventListener('visibilitychange', checkWhenBack)
+    }
   }, [runCheck, supported])
 
   return {

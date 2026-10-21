@@ -10,6 +10,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { CategoryBars } from '../components/charts/CategoryBars'
+import { activeCurrencySymbol } from '../lib/currency'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { ExpenseTrendChart } from '../components/charts/ExpenseTrendChart'
 import { TransactionRow } from '../components/TransactionRow'
@@ -53,7 +54,7 @@ function HeroBalance({ value }: { value: number }) {
       aria-label={`本月结余 ${negative ? '负' : ''}${formatMoney(Math.abs(value))}`}
     >
       {negative ? <span className="hero-minus">−</span> : null}
-      <span className="hero-currency">¥</span>
+      <span className="hero-currency">{activeCurrencySymbol()}</span>
       <span>{whole}</span>
       <span className="hero-cents">.{cents}</span>
     </div>

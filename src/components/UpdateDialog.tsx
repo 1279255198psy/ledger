@@ -219,14 +219,16 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
 
         {phase === 'checking' ? (
           <p className="update-lead">
-            正在读取 GitHub Releases 上的更新清单，通常只需要几秒钟。
+            {updater.checkAttempt > 1
+              ? `网络响应不稳定，正在自动重试（第 ${updater.checkAttempt} 次，共 3 次）。`
+              : '正在读取 GitHub Releases 上的更新清单，通常只需要几秒钟。'}
           </p>
         ) : null}
 
         {phase === 'up-to-date' ? (
           <p className="update-lead">
             当前版本 v{updater.currentVersion || '—'} 已经是 GitHub
-            上最新的版本。下次启动时，账页还会安静地检查一次。
+            上最新的版本。账页会在后台定期安静地复查，发现新版本时再提醒你。
           </p>
         ) : null}
 

@@ -6,6 +6,10 @@ export type Theme = 'light' | 'dark'
 
 export type Palette = 'forest' | 'gold' | 'navy' | 'rose'
 
+export type Currency = 'CNY' | 'USD' | 'GBP' | 'EUR' | 'JPY' | 'KRW'
+
+export type FontSize = 'small' | 'standard' | 'large' | 'xlarge'
+
 export interface LedgerTransaction {
   id: string
   type: TransactionType

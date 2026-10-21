@@ -24,15 +24,20 @@ import {
   DEFAULT_BUDGET,
   ImportError,
   loadBudget,
+  loadCurrency,
+  loadFontSize,
   loadPalette,
   loadTheme,
   loadTransactions,
   parseBackup,
   saveBudget,
+  saveCurrency,
+  saveFontSize,
   savePalette,
   saveTheme,
   saveTransactions,
 } from './lib/storage'
+import { getCurrency, setActiveCurrency } from './lib/currency'
 import { paletteThemeColor } from './lib/themes'
 import {
   currentMonthKey,
@@ -47,6 +52,8 @@ import {
   transactionsToCsv,
 } from './lib/utils'
 import type {
+  Currency,
+  FontSize,
   LedgerTransaction,
   Palette,
   Theme,
@@ -68,6 +75,12 @@ export default function App() {
   const [budget, setBudget] = useState(loadBudget)
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [palette, setPalette] = useState<Palette>(loadPalette)
+  const [fontSize, setFontSize] = useState<FontSize>(loadFontSize)
+  const [currency, setCurrency] = useState<Currency>(() => {
+    const stored = loadCurrency()
+    setActiveCurrency(stored)
+    return stored
+  })
   const [transactionModalOpen, setTransactionModalOpen] = useState(false)
   const [editing, setEditing] = useState<LedgerTransaction | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -91,6 +104,15 @@ export default function App() {
     document.documentElement.style.colorScheme = theme
     saveTheme(theme)
   }, [theme])
+
+  useEffect(() => {
+    document.documentElement.dataset.fontSize = fontSize
+    saveFontSize(fontSize)
+  }, [fontSize])
+
+  useEffect(() => {
+    saveCurrency(currency)
+  }, [currency])
 
   useEffect(() => {
     document.documentElement.dataset.palette = palette
@@ -211,6 +233,12 @@ export default function App() {
   const handleBudgetSave = (nextBudget: number) => {
     setBudget(nextBudget)
     showToast('月度预算已更新')
+  }
+
+  const handleCurrencyChange = (nextCurrency: Currency) => {
+    setActiveCurrency(nextCurrency)
+    setCurrency(nextCurrency)
+    showToast(`货币已切换为${getCurrency(nextCurrency).name}`)
   }
 
   const handleExportJson = async () => {
@@ -390,11 +418,15 @@ export default function App() {
         budget={budget}
         theme={theme}
         palette={palette}
+        fontSize={fontSize}
+        currency={currency}
         updater={updater}
         onClose={() => setSettingsOpen(false)}
         onBudgetSave={handleBudgetSave}
         onThemeChange={setTheme}
         onPaletteChange={setPalette}
+        onFontSizeChange={setFontSize}
+        onCurrencyChange={handleCurrencyChange}
         onExportJson={handleExportJson}
         onExportCsv={handleExportCsv}
         onImportFile={handleImportFile}

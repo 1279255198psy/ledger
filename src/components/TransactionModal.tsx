@@ -15,6 +15,7 @@ import {
   ACCOUNTS,
   getCategoriesForType,
 } from '../lib/data'
+import { activeCurrencySymbol } from '../lib/currency'
 import { formatMoney, localDateKey } from '../lib/utils'
 import type {
   LedgerTransaction,
@@ -170,7 +171,7 @@ export function TransactionModal({
               {type === 'expense' ? '这次花了多少' : '这次收入多少'}
             </span>
             <span className={`amount-input-wrap type-${type}`}>
-              <span className="currency-mark">¥</span>
+              <span className="currency-mark">{activeCurrencySymbol()}</span>
               <input
                 data-autofocus
                 type="text"

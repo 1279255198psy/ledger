@@ -1,4 +1,5 @@
 import { CATEGORIES, getAccount, getCategory } from './data'
+import { activeCurrencySymbol } from './currency'
 import type {
   CategoryTotal,
   DailyDatum,
@@ -217,7 +218,7 @@ export function formatMoney(value: number, withSymbol = true): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Math.abs(value))
-  return `${withSymbol ? '¥' : ''}${formatted}`
+  return `${withSymbol ? activeCurrencySymbol() : ''}${formatted}`
 }
 
 export function formatSignedMoney(value: number, withSymbol = true): string {
@@ -225,16 +226,17 @@ export function formatSignedMoney(value: number, withSymbol = true): string {
 }
 
 export function formatMoneyCompact(value: number): string {
+  const symbol = activeCurrencySymbol()
   const absolute = Math.abs(value)
   if (absolute >= 10000) {
     const amount = value / 10000
-    return `¥${Number.isInteger(amount) ? amount : amount.toFixed(1)}万`
+    return `${symbol}${Number.isInteger(amount) ? amount : amount.toFixed(1)}万`
   }
   if (absolute >= 1000) {
     const amount = value / 1000
-    return `¥${Number.isInteger(amount) ? amount : amount.toFixed(1)}k`
+    return `${symbol}${Number.isInteger(amount) ? amount : amount.toFixed(1)}k`
   }
-  return `¥${Math.round(value)}`
+  return `${symbol}${Math.round(value)}`
 }
 
 export function formatAxisNumber(value: number): string {
