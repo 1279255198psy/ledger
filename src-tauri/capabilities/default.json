@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "账页主窗口的默认权限",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:default", "updater:default"]
+}

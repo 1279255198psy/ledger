@@ -1,0 +1,66 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "账页",
+  "version": "1.0.0",
+  "identifier": "com.zhangye.ledger",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "账页 · 生活账簿",
+        "width": 1280,
+        "height": 850,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "账页",
+    "copyright": "© 2026 账页",
+    "category": "Finance",
+    "shortDescription": "安静、清晰的本地记账应用",
+    "longDescription": "账页是一款本地优先的桌面记账应用，记录收支、查看月度趋势与预算进度。所有数据保存在本机。",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "SimpChinese"
+        ],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU4NjdDMTE0NEE0RjMyREIKUldUYk1rOUtGTUZuV0pLa2tTQnJsMFFGanJBVUloUGFYVG9nRm9zaEZNeFRaeGpjK284ZnIrUGUK",
+      "endpoints": [
+        "https://github.com/1279255198psy/ledger/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+# crates.io is very slow on this network. Use the rsproxy sparse mirror so
+# `npm run desktop:dev` / `npm run desktop:build` can fetch dependencies.
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[net]
+git-fetch-with-cli = true
