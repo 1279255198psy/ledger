@@ -760,6 +760,23 @@ export default function App() {
     showToast('示例账本已恢复')
   }
 
+  const handleClearLedger = async () => {
+    const confirmed = await confirmDesktopAction(
+      '确定清除现有账本吗？全部流水、项目与负债会被删除，预算和起始资金会重置。分类与外观设置保留。此操作无法撤销，建议先导出备份。',
+      '清除现有账本',
+    )
+    if (!confirmed) return
+    setTransactions([])
+    setProjects([])
+    setLiabilities([])
+    setBudget(DEFAULT_BUDGET)
+    setOpeningBalance(0)
+    setMonthKey(currentMonthKey())
+    setSettingsOpen(false)
+    setView('overview')
+    showToast('账本已清除')
+  }
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -938,6 +955,7 @@ export default function App() {
         onExportCsv={handleExportCsv}
         onImportFile={handleImportFile}
         onReset={handleReset}
+        onClear={handleClearLedger}
       />
 
       <UpdateDialog

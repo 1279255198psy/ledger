@@ -9,6 +9,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Sun,
+  Trash2,
   Upload,
   X,
 } from 'lucide-react'
@@ -55,6 +56,7 @@ interface SettingsModalProps {
   onExportCsv: () => void
   onImportFile: (file: File) => void
   onReset: () => void
+  onClear: () => void
 }
 
 export function SettingsModal({
@@ -84,6 +86,7 @@ export function SettingsModal({
   onExportCsv,
   onImportFile,
   onReset,
+  onClear,
 }: SettingsModalProps) {
   const [budgetInput, setBudgetInput] = useState(String(budget))
   const [budgetError, setBudgetError] = useState('')
@@ -544,6 +547,19 @@ export function SettingsModal({
               <span className="data-row-text">
                 <strong>恢复示例账本</strong>
                 <small>清除当前数据，载入一组演示流水</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="data-row data-row--danger"
+              onClick={onClear}
+            >
+              <span className="data-row-icon">
+                <Trash2 size={18} />
+              </span>
+              <span className="data-row-text">
+                <strong>清除现有账本</strong>
+                <small>删除全部流水、项目与负债，预算和起始资金重置</small>
               </span>
             </button>
           </div>
