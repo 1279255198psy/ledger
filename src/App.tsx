@@ -16,6 +16,7 @@ import { Overview } from './pages/Overview'
 import { Transactions } from './pages/Transactions'
 import { Projects } from './pages/Projects'
 import { Analytics } from './pages/Analytics'
+import { Liabilities } from './pages/Liabilities'
 import {
   createSeedTransactions,
   newProjectId,
@@ -36,6 +37,7 @@ import {
   loadCategories,
   loadCurrency,
   loadFontSize,
+  loadLiabilities,
   loadOpeningBalance,
   loadPalette,
   loadProjects,
@@ -46,6 +48,7 @@ import {
   saveCategories,
   saveCurrency,
   saveFontSize,
+  saveLiabilities,
   saveOpeningBalance,
   savePalette,
   saveProjects,
@@ -57,6 +60,11 @@ import {
   newCategoryId,
   setActiveCategories,
 } from './lib/categories'
+import {
+  newRepaymentId,
+  newLiabilityId,
+  sortLiabilities,
+} from './lib/liabilities'
 import type { CategoryDraft } from './lib/categories'
 import { getCurrency, setActiveCurrency } from './lib/currency'
 import { paletteThemeColor } from './lib/themes'
@@ -76,9 +84,12 @@ import type {
   Currency,
   FontSize,
   LedgerTransaction,
+  Liability,
+  LiabilityDraft,
   Palette,
   Project,
   ProjectDraft,
+  RepaymentDraft,
   Theme,
   TransactionDraft,
   View,
@@ -113,6 +124,7 @@ export default function App() {
   const [transactions, setTransactions] =
     useState<LedgerTransaction[]>(loadTransactions)
   const [projects, setProjects] = useState<Project[]>(loadProjects)
+  const [liabilities, setLiabilities] = useState<Liability[]>(loadLiabilities)
   const [budget, setBudget] = useState(loadBudget)
   const [openingBalance, setOpeningBalance] = useState(loadOpeningBalance)
   const [theme, setTheme] = useState<Theme>(loadTheme)
@@ -169,6 +181,10 @@ export default function App() {
   useEffect(() => {
     saveProjects(projects)
   }, [projects])
+
+  useEffect(() => {
+    saveLiabilities(sortLiabilities(liabilities))
+  }, [liabilities])
 
   useEffect(() => {
     saveBudget(budget)
@@ -245,30 +261,38 @@ export default function App() {
     setCategories(next)
   }
 
-  const handleCreateCategory = (draft: CategoryDraft) => {
+  const handleCreateCategory = (draft: CategoryDraft): Category => {
     const category: Category = {
       id: newCategoryId(),
       type: draft.type,
       name: draft.name.trim(),
       color: draft.color,
       icon: draft.icon,
+      ...(draft.parentId ? { parentId: draft.parentId } : {}),
     }
     commitCategories([...categories, category])
-    showToast(`分类「${category.name}」已创建`)
+    showToast(
+      draft.parentId
+        ? `小分类「${category.name}」已创建`
+        : `分类「${category.name}」已创建`,
+    )
+    return category
   }
 
   const handleUpdateCategory = (id: string, draft: CategoryDraft) => {
-    const next = categories.map((category) =>
-      category.id === id
-        ? {
-            ...category,
-            type: draft.type,
-            name: draft.name.trim(),
-            color: draft.color,
-            icon: draft.icon,
-          }
-        : category,
-    )
+    const next = categories.map((category) => {
+      if (category.id !== id) return category
+      const updated: Category = {
+        ...category,
+        type: draft.type,
+        name: draft.name.trim(),
+        color: draft.color,
+        icon: draft.icon,
+      }
+      if (draft.parentId) updated.parentId = draft.parentId
+      else delete updated.parentId
+      return updated
+    })
     commitCategories(next)
     const name = draft.name.trim()
     showToast(`分类「${name}」已更新`)
@@ -277,6 +301,7 @@ export default function App() {
   const handleDeleteCategory = async (id: string) => {
     const category = categories.find((item) => item.id === id)
     if (!category) return
+    if (categories.some((item) => item.parentId === id)) return
     const confirmed = await confirmDesktopAction(
       `确定删除分类「${category.name}」吗？`,
       '删除分类',
@@ -284,6 +309,110 @@ export default function App() {
     if (!confirmed) return
     commitCategories(categories.filter((item) => item.id !== id))
     showToast(`分类「${category.name}」已删除`)
+  }
+
+  const handleCreateLiability = (draft: LiabilityDraft) => {
+    const now = new Date().toISOString()
+    const liability: Liability = {
+      id: newLiabilityId(),
+      name: draft.name.trim(),
+      principalCents: draft.principalCents,
+      ...(draft.dueDate ? { dueDate: draft.dueDate } : {}),
+      ...(draft.note ? { note: draft.note } : {}),
+      repayments: [],
+      createdAt: now,
+      updatedAt: now,
+    }
+    setLiabilities((current) => sortLiabilities([liability, ...current]))
+    showToast(`负债「${liability.name}」已记录`)
+  }
+
+  const handleUpdateLiability = (id: string, draft: LiabilityDraft) => {
+    const now = new Date().toISOString()
+    setLiabilities((current) =>
+      sortLiabilities(
+        current.map((liability) =>
+          liability.id === id
+            ? {
+                ...liability,
+                name: draft.name.trim(),
+                principalCents: draft.principalCents,
+                dueDate: draft.dueDate,
+                note: draft.note,
+                updatedAt: now,
+              }
+            : liability,
+        ),
+      ),
+    )
+    showToast(`负债「${draft.name.trim()}」已更新`)
+  }
+
+  const handleDeleteLiability = async (id: string) => {
+    const liability = liabilities.find((item) => item.id === id)
+    if (!liability) return
+    const confirmed = await confirmDesktopAction(
+      `确定删除负债「${liability.name}」吗？还款记录也会一并删除，此操作无法撤销。`,
+      '删除负债',
+    )
+    if (!confirmed) return
+    setLiabilities((current) =>
+      current.filter((item) => item.id !== id),
+    )
+    showToast(`负债「${liability.name}」已删除`)
+  }
+
+  const handleAddRepayment = (liabilityId: string, draft: RepaymentDraft) => {
+    const now = new Date().toISOString()
+    setLiabilities((current) =>
+      sortLiabilities(
+        current.map((liability) =>
+          liability.id === liabilityId
+            ? {
+                ...liability,
+                repayments: [
+                  ...liability.repayments,
+                  {
+                    id: newRepaymentId(),
+                    amountCents: draft.amountCents,
+                    date: draft.date,
+                    ...(draft.note ? { note: draft.note } : {}),
+                    createdAt: now,
+                  },
+                ],
+                updatedAt: now,
+              }
+            : liability,
+        ),
+      ),
+    )
+    showToast(`已记下还款 ${formatMoney(draft.amountCents / 100)}`)
+  }
+
+  const handleDeleteRepayment = async (
+    liabilityId: string,
+    repaymentId: string,
+  ) => {
+    const confirmed = await confirmDesktopAction(
+      '确定删除这笔还款记录吗？此操作无法撤销。',
+      '删除还款',
+    )
+    if (!confirmed) return
+    const now = new Date().toISOString()
+    setLiabilities((current) =>
+      current.map((liability) =>
+        liability.id === liabilityId
+          ? {
+              ...liability,
+              repayments: liability.repayments.filter(
+                (repayment) => repayment.id !== repaymentId,
+              ),
+              updatedAt: now,
+            }
+          : liability,
+      ),
+    )
+    showToast('还款记录已删除')
   }
 
   const openAdd = () => {
@@ -538,6 +667,7 @@ export default function App() {
       openingBalanceCents: Math.round(openingBalance * 100),
       categories,
       projects,
+      liabilities,
       transactions,
     }
     try {
@@ -579,6 +709,9 @@ export default function App() {
       if (imported.categories) commitCategories(imported.categories)
       setTransactions(sortTransactions(imported.transactions))
       setProjects(imported.projects)
+      if (imported.liabilities !== null) {
+        setLiabilities(imported.liabilities)
+      }
       if (imported.budget !== null) setBudget(imported.budget)
       if (imported.openingBalance !== null) {
         setOpeningBalance(imported.openingBalance)
@@ -599,6 +732,7 @@ export default function App() {
     commitCategories(DEFAULT_CATEGORIES)
     setTransactions(createSeedTransactions())
     setProjects([])
+    setLiabilities([])
     setMonthKey(currentMonthKey())
     setView('overview')
     showToast('示例账本已载入')
@@ -614,6 +748,7 @@ export default function App() {
     commitCategories(DEFAULT_CATEGORIES)
     setTransactions(seed)
     setProjects([])
+    setLiabilities([])
     setBudget(DEFAULT_BUDGET)
     setOpeningBalance(0)
     setMonthKey(currentMonthKey())
@@ -713,6 +848,17 @@ export default function App() {
           />
         ) : null}
 
+        {view === 'liabilities' ? (
+          <Liabilities
+            liabilities={liabilities}
+            onCreate={handleCreateLiability}
+            onUpdate={handleUpdateLiability}
+            onDelete={handleDeleteLiability}
+            onAddRepayment={handleAddRepayment}
+            onDeleteRepayment={handleDeleteRepayment}
+          />
+        ) : null}
+
         <footer className="app-footer">
           <span>账页 · 写给自己看的生活账本</span>
           <span>
@@ -744,6 +890,7 @@ export default function App() {
         onClose={closeTransactionModal}
         onSave={handleSaveTransaction}
         onDelete={handleDeleteTransaction}
+        onCreateCategory={handleCreateCategory}
       />
 
       <SettingsModal

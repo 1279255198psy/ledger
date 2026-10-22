@@ -1,6 +1,7 @@
 import {
   CalendarRange,
   ChartNoAxesColumnIncreasing,
+  CreditCard,
   LayoutDashboard,
   ReceiptText,
 } from 'lucide-react'
@@ -15,6 +16,7 @@ const ITEMS: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = 
   { id: 'overview', label: '概览', icon: LayoutDashboard },
   { id: 'transactions', label: '流水', icon: ReceiptText },
   { id: 'projects', label: '项目', icon: CalendarRange },
+  { id: 'liabilities', label: '负债', icon: CreditCard },
   { id: 'analytics', label: '统计', icon: ChartNoAxesColumnIncreasing },
 ]
 

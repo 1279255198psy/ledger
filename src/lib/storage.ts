@@ -3,6 +3,7 @@ import type {
   Currency,
   FontSize,
   LedgerTransaction,
+  Liability,
   Palette,
   Project,
   Theme,
@@ -18,7 +19,12 @@ import {
   getActiveCategories,
   normalizeCategories,
   setActiveCategories,
+  withPresetSubcategories,
 } from './categories'
+import {
+  isValidLiability,
+  sortLiabilities,
+} from './liabilities'
 import { makeDailyAllocation } from './allocations'
 import { isCurrency, normalizeCurrency } from './currency'
 import { normalizeFontSize } from './fontSize'
@@ -33,7 +39,9 @@ const KEYS = {
   transactions: 'zhangye.transactions.v2',
   transactionsV1: 'zhangye.transactions.v1',
   categories: 'zhangye.categories.v1',
+  categoryPresets: 'zhangye.categoryPresets.v1',
   projects: 'zhangye.projects.v1',
+  liabilities: 'zhangye.liabilities.v1',
   budget: 'zhangye.budget.v2',
   budgetV1: 'zhangye.budget.v1',
   openingBalance: 'zhangye.openingBalanceCents.v1',
@@ -69,6 +77,7 @@ interface DesktopLedgerSnapshot {
   updatedAt: string
   categories: Category[]
   projects: Project[]
+  liabilities: Liability[]
   transactions: LedgerTransaction[]
   budgetCents: number
   openingBalanceCents: number
@@ -89,18 +98,33 @@ let persistTimer: number | null = null
 let persistChain: Promise<void> = Promise.resolve()
 let flushHooksInstalled = false
 
+/**
+ * Older ledgers have only top-level categories. Add the ready-made
+ * subcategories once; the marker keeps presets from returning after the user
+ * deliberately deletes them.
+ */
+function applyPresetMigration(categories: Category[]): Category[] {
+  if (safeGet(KEYS.categoryPresets) === 'true') return categories
+  const merged = withPresetSubcategories(categories)
+  if (merged !== categories) {
+    safeSet(KEYS.categories, JSON.stringify(merged))
+  }
+  safeSet(KEYS.categoryPresets, 'true')
+  return merged
+}
+
 function readStoredCategories(): Category[] {
   const raw = safeGet(KEYS.categories)
   if (raw !== null) {
     try {
       const parsed: unknown = JSON.parse(raw)
       const normalized = normalizeCategories(parsed)
-      if (normalized) return normalized
+      if (normalized) return applyPresetMigration(normalized)
     } catch {
       // An invalid category list falls back to the built-in set below.
     }
   }
-  return DEFAULT_CATEGORIES
+  return applyPresetMigration(DEFAULT_CATEGORIES)
 }
 
 function readStoredTransactions(
@@ -170,6 +194,23 @@ function readStoredProjects(
   return []
 }
 
+function readStoredLiabilities(): Liability[] {
+  const raw = safeGet(KEYS.liabilities)
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (
+      Array.isArray(parsed) &&
+      parsed.every(isValidLiability)
+    ) {
+      return sortLiabilities(parsed)
+    }
+  } catch {
+    // A broken liability list must not block the rest of the ledger.
+  }
+  return []
+}
+
 function readOpeningBalanceCents(): number {
   const raw = safeGet(KEYS.openingBalance)
   if (raw === null) return 0
@@ -205,11 +246,21 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   if (Array.isArray(snapshot.categories)) {
     const normalized = normalizeCategories(snapshot.categories)
     if (normalized) {
-      categories = normalized
+      categories = applyPresetMigration(normalized)
       safeSet(KEYS.categories, JSON.stringify(categories))
     }
   }
   setActiveCategories(categories)
+
+  if (Array.isArray(snapshot.liabilities)) {
+    const liabilities = snapshot.liabilities.filter(isValidLiability)
+    if (liabilities.length === snapshot.liabilities.length) {
+      safeSet(
+        KEYS.liabilities,
+        JSON.stringify(sortLiabilities(liabilities)),
+      )
+    }
+  }
 
   if (Array.isArray(snapshot.transactions)) {
     const normalized = snapshot.transactions.map((item) =>
@@ -292,6 +343,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     updatedAt: safeGet(KEYS.updatedAt) ?? new Date().toISOString(),
     categories,
     projects: readStoredProjects(categories),
+    liabilities: readStoredLiabilities(),
     transactions,
     budgetCents: readBudgetCents(),
     openingBalanceCents: readOpeningBalanceCents(),
@@ -413,6 +465,15 @@ export function saveProjects(projects: Project[]): void {
   scheduleDesktopPersist()
 }
 
+export function loadLiabilities(): Liability[] {
+  return readStoredLiabilities()
+}
+
+export function saveLiabilities(liabilities: Liability[]): void {
+  safeSet(KEYS.liabilities, JSON.stringify(liabilities))
+  scheduleDesktopPersist()
+}
+
 export function loadBudget(): number {
   return readBudgetCents() / 100
 }
@@ -480,6 +541,8 @@ export interface ImportedBackup {
   projects: Project[]
   budget: number | null
   openingBalance: number | null
+  /** null when the backup predates liability export and the local list should stay. */
+  liabilities: Liability[] | null
   /** null when the backup predates category export and the local list should stay. */
   categories: Category[] | null
 }
@@ -518,7 +581,7 @@ export function parseBackup(text: string): ImportedBackup {
     if (!normalizedCategories) {
       throw new ImportError('分类数据格式不兼容，请使用账页导出的备份文件')
     }
-    categories = normalizedCategories
+    categories = withPresetSubcategories(normalizedCategories)
     hasCategoryData = true
   }
 
@@ -538,6 +601,15 @@ export function parseBackup(text: string): ImportedBackup {
   )
   if (projects.length !== rawProjects.length) {
     throw new ImportError('项目数据格式不兼容，请使用账页导出的备份文件')
+  }
+
+  let liabilities: Liability[] | null = null
+  if (Array.isArray(record.liabilities)) {
+    const valid = record.liabilities.filter(isValidLiability)
+    if (valid.length !== record.liabilities.length) {
+      throw new ImportError('负债数据格式不兼容，请使用账页导出的备份文件')
+    }
+    liabilities = sortLiabilities(valid)
   }
 
   let budget: number | null = null
@@ -571,6 +643,7 @@ export function parseBackup(text: string): ImportedBackup {
     projects,
     budget,
     openingBalance,
+    liabilities,
     categories: hasCategoryData ? categories : null,
   }
 }

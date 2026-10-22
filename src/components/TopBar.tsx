@@ -20,6 +20,7 @@ const PAGE_META: Record<View, { title: string; subtitle: string }> = {
   overview: { title: '概览', subtitle: '钱花在哪里，日子就长成什么样。' },
   transactions: { title: '流水', subtitle: '每一笔，都有迹可循。' },
   projects: { title: '项目', subtitle: '在日历上铺开一段时间，把花销归到一处。' },
+  liabilities: { title: '负债', subtitle: '欠下的与还上的，都一笔一笔记清楚。' },
   analytics: { title: '统计', subtitle: '从数字里，读懂生活的方向。' },
 }
 
@@ -47,7 +48,7 @@ export function TopBar({
       </div>
 
       <div className="topbar-actions">
-        {view !== 'projects' ? (
+        {view !== 'projects' && view !== 'liabilities' ? (
           <>
             <div className="month-switcher">
               <button

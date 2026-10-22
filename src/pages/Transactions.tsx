@@ -8,7 +8,10 @@ import {
 import { EmptyLedger } from '../components/EmptyLedger'
 import { TransactionRow } from '../components/TransactionRow'
 import { ACCOUNTS } from '../lib/data'
-import { getCategory } from '../lib/categories'
+import {
+  getCategory,
+  getCategoryPathName,
+} from '../lib/categories'
 import {
   formatDayHeading,
   formatMoney,
@@ -62,18 +65,29 @@ export function Transactions({
   const monthTransactions = getMonthTransactions(transactions, monthKey)
   const totals = getTotals(monthTransactions)
 
-  const expenseCategories = categories.filter(
-    (category) => category.type === 'expense',
+  const categoryTree = useMemo(() => {
+    const scoped =
+      typeFilter === 'all'
+        ? categories
+        : categories.filter((category) => category.type === typeFilter)
+    return scoped
+      .filter((category) => !category.parentId)
+      .map((parent) => ({
+        parent,
+        children: scoped.filter(
+          (category) => category.parentId === parent.id,
+        ),
+      }))
+  }, [categories, typeFilter])
+
+  const expenseTree = useMemo(
+    () => categoryTree.filter(({ parent }) => parent.type === 'expense'),
+    [categoryTree],
   )
-  const incomeCategories = categories.filter(
-    (category) => category.type === 'income',
+  const incomeTree = useMemo(
+    () => categoryTree.filter(({ parent }) => parent.type === 'income'),
+    [categoryTree],
   )
-  const categoryOptions =
-    typeFilter === 'expense'
-      ? expenseCategories
-      : typeFilter === 'income'
-        ? incomeCategories
-        : categories
 
   useEffect(() => {
     if (!categoryFilter) return
@@ -90,17 +104,42 @@ export function Transactions({
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
+    const selectedCategory = categoryFilter
+      ? categories.find((category) => category.id === categoryFilter)
+      : undefined
     return monthTransactions.filter((item) => {
       if (typeFilter !== 'all' && item.type !== typeFilter) return false
-      if (categoryFilter && item.categoryId !== categoryFilter) return false
+      if (selectedCategory) {
+        const itemCategory = categories.find(
+          (category) => category.id === item.categoryId,
+        )
+        // Picking a big category includes everything filed under it.
+        const matchesParent =
+          !selectedCategory.parentId &&
+          itemCategory?.parentId === selectedCategory.id
+        if (
+          item.categoryId !== selectedCategory.id &&
+          !matchesParent
+        ) {
+          return false
+        }
+      }
       if (accountFilter && item.accountId !== accountFilter) return false
       if (normalizedQuery) {
-        const haystack = `${getCategory(item.categoryId, item.type).name} ${item.note}`.toLowerCase()
+        const category = getCategory(item.categoryId, item.type)
+        const haystack = `${category.name} ${getCategoryPathName(category)} ${item.note}`.toLowerCase()
         if (!haystack.includes(normalizedQuery)) return false
       }
       return true
     })
-  }, [monthTransactions, query, typeFilter, categoryFilter, accountFilter])
+  }, [
+    monthTransactions,
+    query,
+    typeFilter,
+    categoryFilter,
+    accountFilter,
+    categories,
+  ])
 
   const grouped = useMemo(() => {
     const groups = new Map<string, LedgerTransaction[]>()
@@ -135,6 +174,19 @@ export function Transactions({
       if (!valid) setCategoryFilter('')
     }
   }
+
+  const renderTreeOptions = (nodes: typeof categoryTree) =>
+    nodes.flatMap(({ parent, children }) => [
+      <option key={parent.id} value={parent.id}>
+        {parent.name}
+      </option>,
+      ...children.map((child) => (
+        <option key={child.id} value={child.id}>
+          {'　└ '}
+          {child.name}
+        </option>
+      )),
+    ])
 
   if (transactions.length === 0) {
     return (
@@ -210,31 +262,19 @@ export function Transactions({
               <option value="">全部分类</option>
               {typeFilter === 'all' ? (
                 <>
-                  {expenseCategories.length > 0 ? (
+                  {expenseTree.length > 0 ? (
                     <optgroup label="支出">
-                      {expenseCategories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
+                      {renderTreeOptions(expenseTree)}
                     </optgroup>
                   ) : null}
-                  {incomeCategories.length > 0 ? (
+                  {incomeTree.length > 0 ? (
                     <optgroup label="收入">
-                      {incomeCategories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
+                      {renderTreeOptions(incomeTree)}
                     </optgroup>
                   ) : null}
                 </>
               ) : (
-                categoryOptions.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))
+                renderTreeOptions(categoryTree)
               )}
             </select>
           </label>

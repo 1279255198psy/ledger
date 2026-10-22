@@ -34,7 +34,11 @@ import {
   UtensilsCrossed,
   Wrench,
 } from 'lucide-react'
-import { categoryTone, getCategory } from '../lib/categories'
+import {
+  categoryCustomColor,
+  categoryToneKey,
+  getCategory,
+} from '../lib/categories'
 import type { Category } from '../types'
 
 interface IconOption {
@@ -125,9 +129,12 @@ export function CategoryIcon({
 }: CategoryIconProps) {
   const resolved = category ?? getCategory(id ?? '')
   const Icon = getCategoryIcon(resolved)
-  const toneClass = resolved.color ? '' : ` tone-${categoryTone(resolved.id)}`
-  const style = resolved.color
-    ? ({ '--tone': resolved.color } as CSSProperties)
+  const customColor = categoryCustomColor(resolved)
+  const toneClass = customColor
+    ? ''
+    : ` tone-${categoryToneKey(resolved)}`
+  const style = customColor
+    ? ({ '--tone': customColor } as CSSProperties)
     : undefined
 
   return (

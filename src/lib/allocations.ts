@@ -8,6 +8,7 @@ import type {
   ProjectSummary,
   TransactionScope,
 } from '../types'
+import { getRootCategoryId } from './categories'
 
 function makeId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -378,10 +379,8 @@ export function getProjectCategoryCents(
 
   for (const posting of toPostings(transactions)) {
     if (posting.projectId !== projectId || posting.kind !== 'expense') continue
-    totals.set(
-      posting.categoryId,
-      (totals.get(posting.categoryId) ?? 0) + posting.signedCents,
-    )
+    const rootId = getRootCategoryId(posting.categoryId)
+    totals.set(rootId, (totals.get(rootId) ?? 0) + posting.signedCents)
   }
 
   return totals

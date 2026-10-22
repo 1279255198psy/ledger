@@ -11,7 +11,16 @@ import {
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
-import { CategoryIcon } from './CategoryIcon'
+import {
+  CATEGORY_ICON_OPTIONS,
+  CategoryIcon,
+} from './CategoryIcon'
+import {
+  CATEGORY_COLORS,
+  categoryColor,
+  defaultCategoryColor,
+} from '../lib/categories'
+import type { CategoryDraft } from '../lib/categories'
 import { ACCOUNTS } from '../lib/data'
 import {
   getProjectIds,
@@ -44,6 +53,7 @@ interface TransactionModalProps {
   onClose: () => void
   onSave: (draft: TransactionDraft) => void
   onDelete: (id: string) => void
+  onCreateCategory: (draft: CategoryDraft) => Category
 }
 
 type SplitMode = 'ratio' | 'amount'
@@ -246,6 +256,7 @@ export function TransactionModal({
   onClose,
   onSave,
   onDelete,
+  onCreateCategory,
 }: TransactionModalProps) {
   const [type, setType] = useState<TransactionType>('expense')
   const [amount, setAmount] = useState('')
@@ -258,11 +269,99 @@ export function TransactionModal({
   const [splitMode, setSplitMode] = useState<SplitMode>('ratio')
   const [splitRows, setSplitRows] = useState<SplitRow[]>([])
   const [error, setError] = useState('')
+  const [creatorOpen, setCreatorOpen] = useState(false)
+  const [creatorName, setCreatorName] = useState('')
+  const [creatorParentId, setCreatorParentId] = useState('')
+  const [creatorColor, setCreatorColor] = useState(CATEGORY_COLORS[0])
+  const [creatorIcon, setCreatorIcon] = useState(
+    type === 'expense' ? 'shapes' : 'ellipsis',
+  )
+  const [creatorError, setCreatorError] = useState('')
 
   const categories = useMemo(
     () => allCategories.filter((category) => category.type === type),
     [allCategories, type],
   )
+
+  const categoryTree = useMemo(() => {
+    const childrenByParent = new Map<string, Category[]>()
+    for (const category of categories) {
+      if (!category.parentId) continue
+      const list = childrenByParent.get(category.parentId) ?? []
+      list.push(category)
+      childrenByParent.set(category.parentId, list)
+    }
+    return categories
+      .filter((category) => !category.parentId)
+      .map((parent) => ({
+        parent,
+        children: childrenByParent.get(parent.id) ?? [],
+      }))
+  }, [categories])
+
+  const selectedCategory = categories.find(
+    (category) => category.id === categoryId,
+  )
+  const selectedRootId = selectedCategory?.parentId ?? selectedCategory?.id
+
+  const openCategoryCreator = (parentId = '') => {
+    const parent = parentId
+      ? categories.find((category) => category.id === parentId)
+      : undefined
+    setCreatorOpen(true)
+    setCreatorName('')
+    setCreatorParentId(parentId)
+    setCreatorColor(
+      parent
+        ? categoryColor(parent)
+        : defaultCategoryColor(categories.length),
+    )
+    setCreatorIcon(type === 'expense' ? 'shapes' : 'ellipsis')
+    setCreatorError('')
+  }
+
+  const closeCategoryCreator = () => {
+    setCreatorOpen(false)
+    setCreatorName('')
+    setCreatorParentId('')
+    setCreatorError('')
+  }
+
+  const handleCreateCategory = () => {
+    const name = creatorName.trim()
+    if (!name) {
+      setCreatorError('给这个分类起一个名字')
+      return
+    }
+    if (name.length > 20) {
+      setCreatorError('分类名称最多 20 个字')
+      return
+    }
+    if (
+      categories.some(
+        (category) =>
+          (category.parentId ?? '') === creatorParentId &&
+          category.name.trim().toLowerCase() === name.toLowerCase(),
+      )
+    ) {
+      setCreatorError(
+        creatorParentId
+          ? '这个大分类下已经有同名小分类'
+          : '已经有同名的大分类',
+      )
+      return
+    }
+    const created = onCreateCategory({
+      type,
+      name,
+      color: creatorColor,
+      icon: creatorIcon,
+      ...(creatorParentId ? { parentId: creatorParentId } : {}),
+    })
+    setCategoryId(created.id)
+    closeCategoryCreator()
+    setError('')
+  }
 
   const editingProjectIds = useMemo(
     () => new Set(editing ? getProjectIds(editing) : []),
@@ -298,7 +397,9 @@ export function TransactionModal({
   )
 
   const firstExpenseCategoryId =
-    allCategories.find((category) => category.type === 'expense')?.id ?? ''
+    allCategories.find(
+      (category) => category.type === 'expense' && !category.parentId,
+    )?.id ?? allCategories.find((category) => category.type === 'expense')?.id ?? ''
 
   useEffect(() => {
     if (!open) return
@@ -339,6 +440,10 @@ export function TransactionModal({
       setSplitRows([])
     }
     setError('')
+    setCreatorOpen(false)
+    setCreatorName('')
+    setCreatorParentId('')
+    setCreatorError('')
   }, [
     open,
     editing,
@@ -351,11 +456,16 @@ export function TransactionModal({
   const handleTypeChange = (nextType: TransactionType) => {
     setType(nextType)
     setError('')
+    setCreatorOpen(false)
     const nextCategories = allCategories.filter(
       (category) => category.type === nextType,
     )
     if (!nextCategories.some((category) => category.id === categoryId)) {
-      setCategoryId(nextCategories[0]?.id ?? '')
+      setCategoryId(
+        nextCategories.find((category) => !category.parentId)?.id ??
+          nextCategories[0]?.id ??
+          '',
+      )
     }
   }
 
@@ -759,23 +869,187 @@ export function TransactionModal({
 
           <fieldset className="form-section">
             <legend className="field-label">分类</legend>
-            <div className="category-picker">
-              {categories.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  className={`category-option${categoryId === category.id ? ' is-selected' : ''}`}
-                  onClick={() => setCategoryId(category.id)}
-                  aria-pressed={categoryId === category.id}
+            <div className="category-tree-picker">
+              {categoryTree.map(({ parent, children }) => (
+                <div
+                  className={`category-group${
+                    selectedRootId === parent.id ? ' is-current' : ''
+                  }`}
+                  key={parent.id}
                 >
-                  <CategoryIcon category={category} size={19} />
-                  <span>{category.name}</span>
-                  {categoryId === category.id ? (
-                    <Check className="category-check" size={13} aria-hidden />
-                  ) : null}
-                </button>
+                  <button
+                    type="button"
+                    className={`category-option category-option--parent${
+                      categoryId === parent.id ? ' is-selected' : ''
+                    }`}
+                    onClick={() => setCategoryId(parent.id)}
+                    aria-pressed={categoryId === parent.id}
+                  >
+                    <CategoryIcon category={parent} size={19} />
+                    <span>{parent.name}</span>
+                    {categoryId === parent.id ? (
+                      <Check
+                        className="category-check"
+                        size={13}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+
+                  <div className="subcategory-row">
+                    {children.map((child) => (
+                      <button
+                        key={child.id}
+                        type="button"
+                        className={`subcategory-option${
+                          categoryId === child.id ? ' is-selected' : ''
+                        }`}
+                        onClick={() => setCategoryId(child.id)}
+                        aria-pressed={categoryId === child.id}
+                        title={child.name}
+                      >
+                        <CategoryIcon category={child} size={13} />
+                        <span>{child.name}</span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="subcategory-option subcategory-option--add"
+                      onClick={() => openCategoryCreator(parent.id)}
+                      title={`在「${parent.name}」下新建小分类`}
+                    >
+                      <Plus size={12} />
+                      <span>小分类</span>
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
+
+            <button
+              type="button"
+              className="category-create-trigger"
+              onClick={() => openCategoryCreator()}
+            >
+              <Plus size={14} />
+              新建分类
+            </button>
+
+            {creatorOpen ? (
+              <div className="category-inline-creator">
+                <div className="category-inline-head">
+                  <strong>
+                    {creatorParentId ? '新建小分类' : '新建大分类'}
+                  </strong>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={closeCategoryCreator}
+                    aria-label="关闭新建分类"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="category-inline-top">
+                  <label className="field">
+                    <span className="field-label">名称</span>
+                    <input
+                      type="text"
+                      value={creatorName}
+                      onChange={(event) => {
+                        setCreatorName(event.target.value)
+                        setCreatorError('')
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          handleCreateCategory()
+                        }
+                      }}
+                      placeholder="例如：咖啡"
+                      maxLength={20}
+                      aria-label="新分类名称"
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field-label">归入大分类</span>
+                    <select
+                      value={creatorParentId}
+                      onChange={(event) => {
+                        setCreatorParentId(event.target.value)
+                        setCreatorError('')
+                      }}
+                    >
+                      <option value="">无（作为大分类）</option>
+                      {categoryTree.map(({ parent }) => (
+                        <option key={parent.id} value={parent.id}>
+                          {parent.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="category-inline-colors">
+                  {CATEGORY_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`category-color-swatch${
+                        creatorColor.toLowerCase() === color.toLowerCase()
+                          ? ' is-active'
+                          : ''
+                      }`}
+                      style={{ background: color }}
+                      onClick={() => setCreatorColor(color)}
+                      aria-label={`使用颜色 ${color}`}
+                      aria-pressed={
+                        creatorColor.toLowerCase() === color.toLowerCase()
+                      }
+                    >
+                      {creatorColor.toLowerCase() === color.toLowerCase() ? (
+                        <Check size={11} strokeWidth={3} />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+                <div className="category-inline-icons">
+                  {CATEGORY_ICON_OPTIONS.map(({ key, label, Icon }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={creatorIcon === key ? 'is-active' : ''}
+                      onClick={() => setCreatorIcon(key)}
+                      aria-label={label}
+                      aria-pressed={creatorIcon === key}
+                      title={label}
+                    >
+                      <Icon size={15} strokeWidth={1.8} />
+                    </button>
+                  ))}
+                </div>
+                {creatorError ? (
+                  <p className="form-error" role="alert">
+                    {creatorError}
+                  </p>
+                ) : null}
+                <div className="category-inline-actions">
+                  <button
+                    type="button"
+                    className="button ghost"
+                    onClick={closeCategoryCreator}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="button primary"
+                    onClick={handleCreateCategory}
+                  >
+                    创建并使用
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </fieldset>
 
           <div className="form-row">

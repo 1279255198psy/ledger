@@ -1,6 +1,7 @@
 import {
   CalendarRange,
   ChartNoAxesColumnIncreasing,
+  CreditCard,
   LayoutDashboard,
   Moon,
   Plus,
@@ -33,6 +34,7 @@ const NAV_ITEMS: Array<{
   { id: 'overview', label: '概览', icon: LayoutDashboard },
   { id: 'transactions', label: '流水', icon: ReceiptText },
   { id: 'projects', label: '项目', icon: CalendarRange },
+  { id: 'liabilities', label: '负债', icon: CreditCard },
   { id: 'analytics', label: '统计', icon: ChartNoAxesColumnIncreasing },
 ]
 

@@ -1,5 +1,10 @@
 import { getAccount } from './data'
-import { getCategoriesForType, getCategory } from './categories'
+import {
+  getCategoriesForType,
+  getCategory,
+  getCategoryPathName,
+  getRootCategoryId,
+} from './categories'
 import { toPostings } from './allocations'
 import { activeCurrencySymbol } from './currency'
 import type {
@@ -132,12 +137,12 @@ export function getCategoryTotals(
     (sum, item) => sum + item.amountCents,
     0,
   )
+  // Subcategory spending rolls up into its top-level category so charts and
+  // monthly totals stay at the level people budget at.
   const grouped = new Map<string, number>()
   for (const item of filtered) {
-    grouped.set(
-      item.categoryId,
-      (grouped.get(item.categoryId) ?? 0) + item.amountCents,
-    )
+    const rootId = getRootCategoryId(item.categoryId)
+    grouped.set(rootId, (grouped.get(rootId) ?? 0) + item.amountCents)
   }
 
   return [...grouped.entries()]
@@ -303,6 +308,13 @@ export function categoryNameById(
   return getCategory(id, type).name
 }
 
+export function categoryPathNameById(
+  id: string,
+  type: TransactionType = 'expense',
+): string {
+  return getCategoryPathName(getCategory(id, type))
+}
+
 export function allCategoryIds(type: TransactionType): string[] {
   return getCategoriesForType(type).map((category) => category.id)
 }
@@ -320,7 +332,7 @@ export function transactionsToCsv(
   const rows = transactions.map((item) => [
     item.date,
     item.type === 'expense' ? '支出' : '收入',
-    categoryNameById(item.categoryId, item.type),
+    categoryPathNameById(item.categoryId, item.type),
     getAccount(item.accountId).name,
     (item.amountCents / 100).toFixed(2),
     item.note,

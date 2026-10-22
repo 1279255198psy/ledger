@@ -5,6 +5,7 @@ export interface CategoryDraft {
   name: string
   color: string
   icon: string
+  parentId?: string
 }
 
 /**
@@ -78,10 +79,69 @@ export const DEFAULT_INCOME_CATEGORIES: Category[] = [
   { id: 'other_income', name: '其他', type: 'income', icon: 'ellipsis' },
 ]
 
+/** Ready-made subcategories. They inherit their parent's color. */
+export const PRESET_EXPENSE_SUBCATEGORIES: Category[] = [
+  { id: 'food-meal', name: '吃饭开销', type: 'expense', parentId: 'food', icon: 'utensils' },
+  { id: 'food-drink', name: '饮料奶茶', type: 'expense', parentId: 'food', icon: 'coffee' },
+  { id: 'food-snack', name: '零食水果', type: 'expense', parentId: 'food', icon: 'leaf' },
+  { id: 'transport-metro', name: '公交地铁', type: 'expense', parentId: 'transport', icon: 'bus' },
+  { id: 'transport-taxi', name: '打车', type: 'expense', parentId: 'transport', icon: 'car' },
+  { id: 'transport-fuel', name: '加油停车', type: 'expense', parentId: 'transport', icon: 'wrench' },
+  { id: 'shopping-daily', name: '日用品', type: 'expense', parentId: 'shopping', icon: 'shopping' },
+  { id: 'shopping-clothes', name: '衣物鞋包', type: 'expense', parentId: 'shopping', icon: 'shopping' },
+  { id: 'shopping-digital', name: '数码家电', type: 'expense', parentId: 'shopping', icon: 'smartphone' },
+  { id: 'housing-rent', name: '房租房贷', type: 'expense', parentId: 'housing', icon: 'house' },
+  { id: 'housing-utilities', name: '水电燃气', type: 'expense', parentId: 'housing', icon: 'receipt' },
+  { id: 'housing-repair', name: '物业维修', type: 'expense', parentId: 'housing', icon: 'wrench' },
+  { id: 'entertainment-movie', name: '电影演出', type: 'expense', parentId: 'entertainment', icon: 'clapperboard' },
+  { id: 'entertainment-game', name: '游戏订阅', type: 'expense', parentId: 'entertainment', icon: 'gamepad' },
+  { id: 'entertainment-travel', name: '旅行度假', type: 'expense', parentId: 'entertainment', icon: 'plane' },
+  { id: 'medical-clinic', name: '门诊买药', type: 'expense', parentId: 'medical', icon: 'stethoscope' },
+  { id: 'medical-checkup', name: '体检保健', type: 'expense', parentId: 'medical', icon: 'heart' },
+  { id: 'education-course', name: '课程培训', type: 'expense', parentId: 'education', icon: 'graduation' },
+  { id: 'education-books', name: '书籍文具', type: 'expense', parentId: 'education', icon: 'book' },
+]
+
+export const PRESET_INCOME_SUBCATEGORIES: Category[] = [
+  { id: 'salary-base', name: '基本工资', type: 'income', parentId: 'salary', icon: 'briefcase' },
+  { id: 'salary-overtime', name: '加班补贴', type: 'income', parentId: 'salary', icon: 'banknote' },
+  { id: 'bonus-year', name: '年终奖', type: 'income', parentId: 'bonus', icon: 'award' },
+  { id: 'bonus-performance', name: '绩效奖金', type: 'income', parentId: 'bonus', icon: 'trend' },
+  { id: 'investment-interest', name: '利息', type: 'income', parentId: 'investment', icon: 'piggy' },
+  { id: 'investment-dividend', name: '分红', type: 'income', parentId: 'investment', icon: 'trend' },
+  { id: 'freelance-gig', name: '外快', type: 'income', parentId: 'freelance', icon: 'laptop' },
+  { id: 'gift-cash', name: '礼金', type: 'income', parentId: 'gift', icon: 'gift' },
+]
+
+export const PRESET_SUBCATEGORIES: Category[] = [
+  ...PRESET_EXPENSE_SUBCATEGORIES,
+  ...PRESET_INCOME_SUBCATEGORIES,
+]
+
 export const DEFAULT_CATEGORIES: Category[] = [
   ...DEFAULT_EXPENSE_CATEGORIES,
+  ...PRESET_EXPENSE_SUBCATEGORIES,
   ...DEFAULT_INCOME_CATEGORIES,
+  ...PRESET_INCOME_SUBCATEGORIES,
 ]
+
+/**
+ * Adds the ready-made subcategories that are still missing. Used once when an
+ * older ledger is upgraded; a marker prevents deleted presets from returning.
+ */
+export function withPresetSubcategories(categories: Category[]): Category[] {
+  const existingIds = new Set(categories.map((category) => category.id))
+  const additions = PRESET_SUBCATEGORIES.filter((subcategory) => {
+    if (existingIds.has(subcategory.id)) return false
+    const parent = categories.find(
+      (category) => category.id === subcategory.parentId,
+    )
+    return Boolean(
+      parent && parent.type === subcategory.type && !parent.parentId,
+    )
+  })
+  return additions.length > 0 ? [...categories, ...additions] : categories
+}
 
 // Categories are read from lists rendered all over the app (rows, charts,
 // filters). Like the active currency, the current list lives in module state
@@ -98,6 +158,52 @@ export function getActiveCategories(): Category[] {
 
 export function getCategoriesForType(type: TransactionType): Category[] {
   return activeCategories.filter((category) => category.type === type)
+}
+
+export function getTopLevelCategories(type: TransactionType): Category[] {
+  return activeCategories.filter(
+    (category) => category.type === type && !category.parentId,
+  )
+}
+
+export function getSubcategories(parentId: string): Category[] {
+  return activeCategories.filter(
+    (category) => category.parentId === parentId,
+  )
+}
+
+export interface CategoryNode {
+  category: Category
+  children: Category[]
+}
+
+/** One level of nesting: every top-level category with its subcategories. */
+export function getCategoryTree(type: TransactionType): CategoryNode[] {
+  return getTopLevelCategories(type).map((category) => ({
+    category,
+    children: getSubcategories(category.id),
+  }))
+}
+
+export function getParentCategory(
+  category: Category,
+): Category | undefined {
+  if (!category.parentId) return undefined
+  return activeCategories.find(
+    (item) => item.id === category.parentId,
+  )
+}
+
+/** The top-level category used for totals and filters. */
+export function getRootCategoryId(id: string): string {
+  const category = activeCategories.find((item) => item.id === id)
+  return category?.parentId ?? id
+}
+
+/** Full name for a subcategory, e.g. 「餐饮 · 饮料奶茶」. */
+export function getCategoryPathName(category: Category): string {
+  const parent = getParentCategory(category)
+  return parent ? `${parent.name} · ${category.name}` : category.name
 }
 
 /**
@@ -122,9 +228,27 @@ export function categoryTone(id: string): string {
   return DEFAULT_CATEGORY_TONES[id] ?? 'stone'
 }
 
-export function categoryColor(category: Category): string {
+/**
+ * A custom color that should override the theme tone. Subcategories without
+ * their own color inherit the one chosen for their parent.
+ */
+export function categoryCustomColor(
+  category: Category,
+): string | undefined {
   if (category.color) return category.color
-  return TONE_HEX[categoryTone(category.id)] ?? '#6f6c63'
+  return getParentCategory(category)?.color
+}
+
+/** Theme tone key, inherited from the parent for subcategories. */
+export function categoryToneKey(category: Category): string {
+  const parent = getParentCategory(category)
+  return categoryTone(parent?.id ?? category.id)
+}
+
+export function categoryColor(category: Category): string {
+  const custom = categoryCustomColor(category)
+  if (custom) return custom
+  return TONE_HEX[categoryToneKey(category)] ?? '#6f6c63'
 }
 
 export function defaultCategoryColor(index: number): string {
@@ -153,7 +277,11 @@ export function isValidCategory(value: unknown): value is Category {
       (typeof item.color === 'string' &&
         /^#[0-9a-fA-F]{6}$/.test(item.color))) &&
     (item.icon === undefined ||
-      (typeof item.icon === 'string' && item.icon.length <= 40))
+      (typeof item.icon === 'string' && item.icon.length <= 40)) &&
+    (item.parentId === undefined ||
+      (typeof item.parentId === 'string' &&
+        item.parentId.length > 0 &&
+        item.parentId.length <= 80))
   )
 }
 
@@ -170,10 +298,25 @@ export function normalizeCategories(value: unknown): Category[] | null {
     if (ids.has(category.id)) return null
     ids.add(category.id)
   }
-  // Both sides of the ledger need at least one category to record against.
+  // Subcategories are one level deep, share their parent's type, and may not
+  // point at another subcategory.
+  const byId = new Map(value.map((category) => [category.id, category]))
+  for (const category of value) {
+    if (!category.parentId) continue
+    if (category.parentId === category.id) return null
+    const parent = byId.get(category.parentId)
+    if (
+      !parent ||
+      parent.type !== category.type ||
+      Boolean(parent.parentId)
+    ) {
+      return null
+    }
+  }
+  // Both sides of the ledger need at least one top-level category.
   if (
-    !value.some((category) => category.type === 'expense') ||
-    !value.some((category) => category.type === 'income')
+    !value.some((category) => category.type === 'expense' && !category.parentId) ||
+    !value.some((category) => category.type === 'income' && !category.parentId)
   ) {
     return null
   }

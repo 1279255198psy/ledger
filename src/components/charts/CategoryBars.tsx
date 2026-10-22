@@ -1,6 +1,9 @@
 import type { CSSProperties } from 'react'
 import { CategoryIcon } from '../CategoryIcon'
-import { categoryTone } from '../../lib/categories'
+import {
+  categoryCustomColor,
+  categoryToneKey,
+} from '../../lib/categories'
 import { formatMoney, formatPercent } from '../../lib/utils'
 import type { Category, CategoryTotal } from '../../types'
 
@@ -12,13 +15,14 @@ interface CategoryBarsProps {
 }
 
 function toneClass(category: Category): string {
-  return category.color ? '' : `tone-${categoryTone(category.id)}`
+  return categoryCustomColor(category)
+    ? ''
+    : `tone-${categoryToneKey(category)}`
 }
 
 function toneStyle(category: Category): CSSProperties | undefined {
-  return category.color
-    ? ({ '--tone': category.color } as CSSProperties)
-    : undefined
+  const color = categoryCustomColor(category)
+  return color ? ({ '--tone': color } as CSSProperties) : undefined
 }
 
 export function CategoryBars({

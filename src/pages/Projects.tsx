@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { TransactionRow } from '../components/TransactionRow'
-import { getCategoriesForType } from '../lib/categories'
+import { getTopLevelCategories } from '../lib/categories'
 import {
   getProjectCategoryCents,
   getProjectSummary,
@@ -174,7 +174,7 @@ function parseCents(value: string): number | null {
 
 function emptyForm(startDate = localDateKey()): ProjectFormState {
   const categoryBudgets: Record<string, string> = {}
-  for (const category of getCategoriesForType('expense')) {
+  for (const category of getTopLevelCategories('expense')) {
     categoryBudgets[category.id] = ''
   }
   return {
@@ -189,7 +189,7 @@ function emptyForm(startDate = localDateKey()): ProjectFormState {
 
 function formFromProject(project: Project): ProjectFormState {
   const categoryBudgets: Record<string, string> = {}
-  for (const category of getCategoriesForType('expense')) {
+  for (const category of getTopLevelCategories('expense')) {
     const cents = project.categoryBudgetsCents?.[category.id]
     categoryBudgets[category.id] = cents ? centsToInput(cents) : ''
   }
@@ -318,7 +318,7 @@ export function Projects({
     ? draft.endDate
     : (selectedProject?.endDate ?? '')
 
-  const categoryBudgetTotal = getCategoriesForType('expense').reduce(
+  const categoryBudgetTotal = getTopLevelCategories('expense').reduce(
     (total, category) => {
       const cents = parseCents(draft.categoryBudgets[category.id] ?? '')
       return total + (cents ?? 0)
@@ -427,7 +427,7 @@ export function Projects({
     }
 
     const categoryBudgetsCents: Record<string, number> = {}
-    for (const category of getCategoriesForType('expense')) {
+    for (const category of getTopLevelCategories('expense')) {
       const raw = draft.categoryBudgets[category.id] ?? ''
       if (!raw.trim()) continue
       const cents = parseCents(raw)
@@ -606,7 +606,7 @@ export function Projects({
           ) : null}
         </div>
         <div className="project-category-budget-grid">
-          {getCategoriesForType('expense').map((category) => (
+          {getTopLevelCategories('expense').map((category) => (
             <label
               className="project-category-budget-item"
               key={category.id}
@@ -698,7 +698,7 @@ export function Projects({
       totalBudgetCents && totalBudgetCents > 0
         ? totalExpenseCents / totalBudgetCents
         : 0
-    const categoryRows = getCategoriesForType('expense').map((category) => ({
+    const categoryRows = getTopLevelCategories('expense').map((category) => ({
       category,
       spentCents: stats?.categoryCents.get(category.id) ?? 0,
       budgetCents: project.categoryBudgetsCents?.[category.id],

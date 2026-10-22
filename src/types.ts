@@ -1,6 +1,11 @@
 export type TransactionType = 'expense' | 'income'
 
-export type View = 'overview' | 'transactions' | 'projects' | 'analytics'
+export type View =
+  | 'overview'
+  | 'transactions'
+  | 'projects'
+  | 'analytics'
+  | 'liabilities'
 
 export type Theme = 'light' | 'dark'
 
@@ -77,6 +82,47 @@ export interface Category {
   color?: string
   /** Key into the shared category icon set. */
   icon?: string
+  /** Top-level category this belongs to. Subcategories are one level deep. */
+  parentId?: string
+}
+
+export interface LiabilityRepayment {
+  id: string
+  amountCents: number
+  date: string
+  note?: string
+  createdAt: string
+}
+
+export interface Liability {
+  id: string
+  name: string
+  principalCents: number
+  dueDate?: string
+  note?: string
+  repayments: LiabilityRepayment[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LiabilityDraft {
+  name: string
+  principalCents: number
+  dueDate?: string
+  note?: string
+}
+
+export interface RepaymentDraft {
+  amountCents: number
+  date: string
+  note?: string
+}
+
+export interface LiabilitySummary {
+  repaidCents: number
+  remainingCents: number
+  settled: boolean
+  overdue: boolean
 }
 
 export interface Account {
