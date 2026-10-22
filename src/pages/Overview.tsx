@@ -9,6 +9,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react'
+import { BalanceSummary } from '../components/BalanceSummary'
 import { CategoryBars } from '../components/charts/CategoryBars'
 import { activeCurrencySymbol } from '../lib/currency'
 import { EmptyLedger } from '../components/EmptyLedger'
@@ -36,6 +37,7 @@ interface OverviewProps {
   projects: Project[]
   monthKey: string
   budget: number
+  openingBalance: number
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
   onDelete: (id: string) => void
@@ -65,6 +67,7 @@ export function Overview({
   projects,
   monthKey,
   budget,
+  openingBalance,
   onAdd,
   onEdit,
   onDelete,
@@ -75,6 +78,12 @@ export function Overview({
   if (transactions.length === 0) {
     return (
       <div className="page-stack overview-page">
+        <BalanceSummary
+          transactions={transactions}
+          monthKey={monthKey}
+          openingBalance={openingBalance}
+          onAdjustOpeningBalance={onOpenBudget}
+        />
         <EmptyLedger onAdd={onAdd} onLoadSample={onLoadSample} />
       </div>
     )
@@ -251,6 +260,13 @@ export function Overview({
           </div>
         </section>
       </div>
+
+      <BalanceSummary
+        transactions={transactions}
+        monthKey={monthKey}
+        openingBalance={openingBalance}
+        onAdjustOpeningBalance={onOpenBudget}
+      />
 
       <section className="card metric-strip" aria-label="本月摘要">
         <div className="metric-item">

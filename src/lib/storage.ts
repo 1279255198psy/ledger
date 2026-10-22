@@ -1,4 +1,5 @@
 import type {
+  Category,
   Currency,
   FontSize,
   LedgerTransaction,
@@ -12,6 +13,12 @@ import {
   normalizeTransaction,
   sortTransactions,
 } from './data'
+import {
+  DEFAULT_CATEGORIES,
+  getActiveCategories,
+  normalizeCategories,
+  setActiveCategories,
+} from './categories'
 import { makeDailyAllocation } from './allocations'
 import { isCurrency, normalizeCurrency } from './currency'
 import { normalizeFontSize } from './fontSize'
@@ -25,9 +32,11 @@ import {
 const KEYS = {
   transactions: 'zhangye.transactions.v2',
   transactionsV1: 'zhangye.transactions.v1',
+  categories: 'zhangye.categories.v1',
   projects: 'zhangye.projects.v1',
   budget: 'zhangye.budget.v2',
   budgetV1: 'zhangye.budget.v1',
+  openingBalance: 'zhangye.openingBalanceCents.v1',
   theme: 'zhangye.theme.v1',
   palette: 'zhangye.palette.v1',
   fontSize: 'zhangye.fontSize.v1',
@@ -58,9 +67,11 @@ interface DesktopLedgerSnapshot {
   app: string
   version: 2
   updatedAt: string
+  categories: Category[]
   projects: Project[]
   transactions: LedgerTransaction[]
   budgetCents: number
+  openingBalanceCents: number
   theme: Theme
   palette: Palette
   fontSize: FontSize
@@ -78,13 +89,31 @@ let persistTimer: number | null = null
 let persistChain: Promise<void> = Promise.resolve()
 let flushHooksInstalled = false
 
-function readStoredTransactions(): TransactionReadResult {
+function readStoredCategories(): Category[] {
+  const raw = safeGet(KEYS.categories)
+  if (raw !== null) {
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      const normalized = normalizeCategories(parsed)
+      if (normalized) return normalized
+    } catch {
+      // An invalid category list falls back to the built-in set below.
+    }
+  }
+  return DEFAULT_CATEGORIES
+}
+
+function readStoredTransactions(
+  categories: Category[] = getActiveCategories(),
+): TransactionReadResult {
   const rawV2 = safeGet(KEYS.transactions)
   if (rawV2 !== null) {
     try {
       const parsed: unknown = JSON.parse(rawV2)
       if (Array.isArray(parsed)) {
-        const normalized = parsed.map(normalizeTransaction)
+        const normalized = parsed.map((item) =>
+          normalizeTransaction(item, categories),
+        )
         const valid = normalized.filter(
           (item): item is LedgerTransaction => item !== null,
         )
@@ -104,7 +133,9 @@ function readStoredTransactions(): TransactionReadResult {
     try {
       const parsed: unknown = JSON.parse(rawV1)
       if (Array.isArray(parsed)) {
-        const migrated = parsed.map(migrateV1Transaction)
+        const migrated = parsed.map((item) =>
+          migrateV1Transaction(item, categories),
+        )
         const valid = migrated.filter(
           (item): item is LedgerTransaction => item !== null,
         )
@@ -120,18 +151,31 @@ function readStoredTransactions(): TransactionReadResult {
   return { transactions: [], migrated: false }
 }
 
-function readStoredProjects(): Project[] {
+function readStoredProjects(
+  categories: Category[] = getActiveCategories(),
+): Project[] {
   const raw = safeGet(KEYS.projects)
   if (!raw) return []
   try {
     const parsed: unknown = JSON.parse(raw)
-    if (Array.isArray(parsed) && parsed.every(isValidProject)) {
+    if (
+      Array.isArray(parsed) &&
+      parsed.every((item) => isValidProject(item, categories))
+    ) {
       return parsed
     }
   } catch {
     // An invalid project list should not take the ledger down with it.
   }
   return []
+}
+
+function readOpeningBalanceCents(): number {
+  const raw = safeGet(KEYS.openingBalance)
+  if (raw === null) return 0
+  const cents = Number(raw)
+  if (!Number.isFinite(cents) || cents < 0) return 0
+  return Math.round(cents)
 }
 
 function readBudgetCents(): number {
@@ -155,8 +199,22 @@ function readBudgetCents(): number {
 }
 
 function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
+  // Categories must be resolved first: transaction and project validation
+  // checks every category id against this list.
+  let categories = readStoredCategories()
+  if (Array.isArray(snapshot.categories)) {
+    const normalized = normalizeCategories(snapshot.categories)
+    if (normalized) {
+      categories = normalized
+      safeSet(KEYS.categories, JSON.stringify(categories))
+    }
+  }
+  setActiveCategories(categories)
+
   if (Array.isArray(snapshot.transactions)) {
-    const normalized = snapshot.transactions.map(normalizeTransaction)
+    const normalized = snapshot.transactions.map((item) =>
+      normalizeTransaction(item, categories),
+    )
     const valid = normalized.filter(
       (item): item is LedgerTransaction => item !== null,
     )
@@ -169,7 +227,9 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   }
 
   if (Array.isArray(snapshot.projects)) {
-    const projects = snapshot.projects.filter(isValidProject)
+    const projects = snapshot.projects.filter((item) =>
+      isValidProject(item, categories),
+    )
     if (projects.length === snapshot.projects.length) {
       safeSet(KEYS.projects, JSON.stringify(projects))
     }
@@ -187,6 +247,17 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
     budgetCents > 0
   ) {
     safeSet(KEYS.budget, String(Math.round(budgetCents)))
+  }
+
+  if (
+    typeof snapshot.openingBalanceCents === 'number' &&
+    Number.isFinite(snapshot.openingBalanceCents) &&
+    snapshot.openingBalanceCents >= 0
+  ) {
+    safeSet(
+      KEYS.openingBalance,
+      String(Math.round(snapshot.openingBalanceCents)),
+    )
   }
 
   if (snapshot.theme === 'light' || snapshot.theme === 'dark') {
@@ -210,7 +281,8 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
 }
 
 function readDesktopSnapshot(): DesktopLedgerSnapshot {
-  const { transactions } = readStoredTransactions()
+  const categories = readStoredCategories()
+  const { transactions } = readStoredTransactions(categories)
   const storedTheme = safeGet(KEYS.theme)
   const storedPalette = safeGet(KEYS.palette)
 
@@ -218,9 +290,11 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     app: '账页',
     version: 2,
     updatedAt: safeGet(KEYS.updatedAt) ?? new Date().toISOString(),
-    projects: readStoredProjects(),
+    categories,
+    projects: readStoredProjects(categories),
     transactions,
     budgetCents: readBudgetCents(),
+    openingBalanceCents: readOpeningBalanceCents(),
     theme: storedTheme === 'dark' ? 'dark' : 'light',
     palette: normalizePalette(storedPalette),
     fontSize: normalizeFontSize(safeGet(KEYS.fontSize)),
@@ -304,6 +378,17 @@ export async function hydrateDesktopStorage(): Promise<void> {
   }
 }
 
+export function loadCategories(): Category[] {
+  const categories = readStoredCategories()
+  setActiveCategories(categories)
+  return categories
+}
+
+export function saveCategories(categories: Category[]): void {
+  safeSet(KEYS.categories, JSON.stringify(categories))
+  scheduleDesktopPersist()
+}
+
 export function loadTransactions(): LedgerTransaction[] {
   const { transactions, migrated } = readStoredTransactions()
   if (migrated) {
@@ -320,7 +405,7 @@ export function saveTransactions(transactions: LedgerTransaction[]): void {
 }
 
 export function loadProjects(): Project[] {
-  return readStoredProjects()
+  return readStoredProjects(getActiveCategories())
 }
 
 export function saveProjects(projects: Project[]): void {
@@ -334,6 +419,15 @@ export function loadBudget(): number {
 
 export function saveBudget(budget: number): void {
   safeSet(KEYS.budget, String(Math.round(budget * 100)))
+  scheduleDesktopPersist()
+}
+
+export function loadOpeningBalance(): number {
+  return readOpeningBalanceCents() / 100
+}
+
+export function saveOpeningBalance(balance: number): void {
+  safeSet(KEYS.openingBalance, String(Math.round(balance * 100)))
   scheduleDesktopPersist()
 }
 
@@ -385,6 +479,9 @@ export interface ImportedBackup {
   transactions: LedgerTransaction[]
   projects: Project[]
   budget: number | null
+  openingBalance: number | null
+  /** null when the backup predates category export and the local list should stay. */
+  categories: Category[] | null
 }
 
 export class ImportError extends Error {}
@@ -412,8 +509,23 @@ export function parseBackup(text: string): ImportedBackup {
     throw new ImportError('备份中没有找到流水数据')
   }
 
+  // The backup's own category list takes precedence, so custom categories
+  // survive even when restoring on another device. Older backups have none.
+  let categories = getActiveCategories()
+  let hasCategoryData = false
+  if (Array.isArray(record.categories)) {
+    const normalizedCategories = normalizeCategories(record.categories)
+    if (!normalizedCategories) {
+      throw new ImportError('分类数据格式不兼容，请使用账页导出的备份文件')
+    }
+    categories = normalizedCategories
+    hasCategoryData = true
+  }
+
   const normalized = rawTransactions
-    .map((item, index) => normalizeImportedTransaction(item, index))
+    .map((item, index) =>
+      normalizeImportedTransaction(item, index, categories),
+    )
     .filter((item): item is LedgerTransaction => item !== null)
 
   if (normalized.length === 0 && rawTransactions.length > 0) {
@@ -421,7 +533,9 @@ export function parseBackup(text: string): ImportedBackup {
   }
 
   const rawProjects = Array.isArray(record.projects) ? record.projects : []
-  const projects = rawProjects.filter(isValidProject)
+  const projects = rawProjects.filter((item) =>
+    isValidProject(item, categories),
+  )
   if (projects.length !== rawProjects.length) {
     throw new ImportError('项目数据格式不兼容，请使用账页导出的备份文件')
   }
@@ -437,18 +551,36 @@ export function parseBackup(text: string): ImportedBackup {
     budget = record.budget
   }
 
+  let openingBalance: number | null = null
+  if (
+    typeof record.openingBalanceCents === 'number' &&
+    Number.isFinite(record.openingBalanceCents) &&
+    record.openingBalanceCents >= 0
+  ) {
+    openingBalance = record.openingBalanceCents / 100
+  } else if (
+    typeof record.openingBalance === 'number' &&
+    Number.isFinite(record.openingBalance) &&
+    record.openingBalance >= 0
+  ) {
+    openingBalance = record.openingBalance
+  }
+
   return {
     transactions: sortTransactions(normalized),
     projects,
     budget,
+    openingBalance,
+    categories: hasCategoryData ? categories : null,
   }
 }
 
 function normalizeImportedTransaction(
   value: unknown,
   index: number,
+  categories: Category[],
 ): LedgerTransaction | null {
-  const normalized = normalizeTransaction(value)
+  const normalized = normalizeTransaction(value, categories)
   if (normalized) return normalized
   if (!value || typeof value !== 'object') return null
 
@@ -499,19 +631,18 @@ function normalizeImportedTransaction(
         ? (accountMap[item.account] ?? 'bank')
         : 'bank'
 
-  const knownCategory =
-    type === 'expense'
-      ? [
-          'food',
-          'transport',
-          'shopping',
-          'housing',
-          'entertainment',
-          'medical',
-          'education',
-          'other_expense',
-        ]
-      : ['salary', 'bonus', 'investment', 'freelance', 'gift', 'other_income']
+  const fallbackCategory =
+    categories.find(
+      (category) =>
+        category.type === type &&
+        category.id ===
+          (type === 'expense' ? 'other_expense' : 'other_income'),
+    ) ?? categories.find((category) => category.type === type)
+  if (!fallbackCategory) return null
+
+  const matchedCategory = categories.find(
+    (category) => category.id === categoryId && category.type === type,
+  )
 
   const id =
     typeof item.id === 'string' && item.id.length > 0
@@ -523,11 +654,7 @@ function normalizeImportedTransaction(
     schemaVersion: 2,
     type,
     amountCents,
-    categoryId: knownCategory.includes(categoryId)
-      ? categoryId
-      : type === 'expense'
-        ? 'other_expense'
-        : 'other_income',
+    categoryId: (matchedCategory ?? fallbackCategory).id,
     accountId,
     date,
     note: typeof item.note === 'string' ? item.note : '',

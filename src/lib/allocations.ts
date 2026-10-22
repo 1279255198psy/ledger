@@ -180,6 +180,52 @@ export function getProjectAmountCents(
   )
 }
 
+/**
+ * Removes a project from every allocation while keeping the gross amount in
+ * the ledger. Freed money joins the daily line (or creates one), so deleting a
+ * project never makes its transactions disappear from daily totals.
+ */
+export function detachProjectAllocations(
+  allocations: AllocationLine[],
+  projectId: string,
+): AllocationLine[] {
+  let movedCents = 0
+  const remaining: AllocationLine[] = []
+
+  for (const line of allocations) {
+    if (line.targetType === 'project' && line.projectId === projectId) {
+      movedCents += line.amountCents
+    } else {
+      remaining.push(line)
+    }
+  }
+
+  if (movedCents === 0) return allocations
+
+  const dailyIndex = remaining.findIndex(
+    (line) => line.targetType === 'daily',
+  )
+  if (dailyIndex >= 0) {
+    remaining[dailyIndex] = {
+      ...remaining[dailyIndex],
+      amountCents: remaining[dailyIndex].amountCents + movedCents,
+    }
+  } else {
+    remaining.unshift(
+      makeDailyAllocation(movedCents, undefined, 'migrated'),
+    )
+  }
+
+  const totalCents = sumAllocationCents(remaining)
+  return remaining.map((line) => ({
+    ...line,
+    ratioBp:
+      totalCents > 0
+        ? Math.round((line.amountCents / totalCents) * 10000)
+        : 0,
+  }))
+}
+
 export function toPostings(
   transactions: LedgerTransaction[],
 ): Posting[] {

@@ -508,7 +508,7 @@ export function Analytics({
             </strong>
             <p className="insight-copy">
               {biggest
-                ? `${getCategory(biggest.categoryId).name} · ${biggest.note || formatShortDate(biggest.date)}`
+                ? `${getCategory(biggest.categoryId, biggest.type).name} · ${biggest.note || formatShortDate(biggest.date)}`
                 : '等第一笔记录来填满这里。'}
             </p>
           </article>

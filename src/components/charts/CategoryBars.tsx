@@ -1,13 +1,24 @@
+import type { CSSProperties } from 'react'
 import { CategoryIcon } from '../CategoryIcon'
-import { CATEGORY_TONES } from '../../lib/data'
+import { categoryTone } from '../../lib/categories'
 import { formatMoney, formatPercent } from '../../lib/utils'
-import type { CategoryTotal } from '../../types'
+import type { Category, CategoryTotal } from '../../types'
 
 interface CategoryBarsProps {
   items: CategoryTotal[]
   limit?: number
   emptyText?: string
   composition?: boolean
+}
+
+function toneClass(category: Category): string {
+  return category.color ? '' : `tone-${categoryTone(category.id)}`
+}
+
+function toneStyle(category: Category): CSSProperties | undefined {
+  return category.color
+    ? ({ '--tone': category.color } as CSSProperties)
+    : undefined
 }
 
 export function CategoryBars({
@@ -30,8 +41,12 @@ export function CategoryBars({
           {items.map((item) => (
             <span
               key={item.category.id}
-              className={`tone-${CATEGORY_TONES[item.category.id] ?? 'stone'}`}
-              style={{ flexGrow: Math.max(item.value, 0.01), flexBasis: 0 }}
+              className={toneClass(item.category)}
+              style={{
+                flexGrow: Math.max(item.value, 0.01),
+                flexBasis: 0,
+                ...toneStyle(item.category),
+              }}
             />
           ))}
         </div>
@@ -39,16 +54,16 @@ export function CategoryBars({
       <ul className="category-bars">
         {visible.map((item) => {
           const width = max > 0 ? (item.value / max) * 100 : 0
-          const tone = CATEGORY_TONES[item.category.id] ?? 'stone'
           return (
             <li
               key={item.category.id}
-              className={`tone-${tone}`}
+              className={toneClass(item.category)}
+              style={toneStyle(item.category)}
               aria-label={`${item.category.name}，${formatMoney(item.value)}，占${formatPercent(item.share * 100)}`}
             >
               <div className="category-row-head">
                 <span className="category-row-name">
-                  <CategoryIcon id={item.category.id} size={15} compact />
+                  <CategoryIcon category={item.category} size={15} compact />
                   {item.category.name}
                 </span>
                 <span className="category-row-value">

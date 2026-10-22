@@ -10,11 +10,12 @@ import {
   Pencil,
   Play,
   Plus,
+  Trash2,
   X,
 } from 'lucide-react'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { TransactionRow } from '../components/TransactionRow'
-import { EXPENSE_CATEGORIES } from '../lib/data'
+import { getCategoriesForType } from '../lib/categories'
 import {
   getProjectCategoryCents,
   getProjectSummary,
@@ -43,6 +44,7 @@ interface ProjectsProps {
   onUpdateProject: (id: string, draft: ProjectDraft) => void
   onToggleProjectStatus: (id: string) => void
   onToggleProjectArchive: (id: string) => void
+  onDeleteProject: (id: string) => void
   onAddTransaction: (projectId: string) => void
   onEditTransaction: (transaction: LedgerTransaction) => void
   onDeleteTransaction: (id: string) => void
@@ -172,7 +174,7 @@ function parseCents(value: string): number | null {
 
 function emptyForm(startDate = localDateKey()): ProjectFormState {
   const categoryBudgets: Record<string, string> = {}
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of getCategoriesForType('expense')) {
     categoryBudgets[category.id] = ''
   }
   return {
@@ -187,7 +189,7 @@ function emptyForm(startDate = localDateKey()): ProjectFormState {
 
 function formFromProject(project: Project): ProjectFormState {
   const categoryBudgets: Record<string, string> = {}
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of getCategoriesForType('expense')) {
     const cents = project.categoryBudgetsCents?.[category.id]
     categoryBudgets[category.id] = cents ? centsToInput(cents) : ''
   }
@@ -218,6 +220,7 @@ export function Projects({
   onUpdateProject,
   onToggleProjectStatus,
   onToggleProjectArchive,
+  onDeleteProject,
   onAddTransaction,
   onEditTransaction,
   onDeleteTransaction,
@@ -315,10 +318,13 @@ export function Projects({
     ? draft.endDate
     : (selectedProject?.endDate ?? '')
 
-  const categoryBudgetTotal = EXPENSE_CATEGORIES.reduce((total, category) => {
-    const cents = parseCents(draft.categoryBudgets[category.id] ?? '')
-    return total + (cents ?? 0)
-  }, 0)
+  const categoryBudgetTotal = getCategoriesForType('expense').reduce(
+    (total, category) => {
+      const cents = parseCents(draft.categoryBudgets[category.id] ?? '')
+      return total + (cents ?? 0)
+    },
+    0,
+  )
 
   const budgetCents = parseCents(draft.budget)
 
@@ -421,7 +427,7 @@ export function Projects({
     }
 
     const categoryBudgetsCents: Record<string, number> = {}
-    for (const category of EXPENSE_CATEGORIES) {
+    for (const category of getCategoriesForType('expense')) {
       const raw = draft.categoryBudgets[category.id] ?? ''
       if (!raw.trim()) continue
       const cents = parseCents(raw)
@@ -600,7 +606,7 @@ export function Projects({
           ) : null}
         </div>
         <div className="project-category-budget-grid">
-          {EXPENSE_CATEGORIES.map((category) => (
+          {getCategoriesForType('expense').map((category) => (
             <label
               className="project-category-budget-item"
               key={category.id}
@@ -692,7 +698,7 @@ export function Projects({
       totalBudgetCents && totalBudgetCents > 0
         ? totalExpenseCents / totalBudgetCents
         : 0
-    const categoryRows = EXPENSE_CATEGORIES.map((category) => ({
+    const categoryRows = getCategoriesForType('expense').map((category) => ({
       category,
       spentCents: stats?.categoryCents.get(category.id) ?? 0,
       budgetCents: project.categoryBudgetsCents?.[category.id],
@@ -799,25 +805,27 @@ export function Projects({
           {archived ? (
             <button
               type="button"
+              className="project-manage-primary"
               onClick={() => onToggleProjectArchive(project.id)}
             >
-              <Archive size={13} />
+              <Archive size={15} />
               恢复项目
             </button>
           ) : (
             <>
               <button
                 type="button"
+                className="project-manage-primary"
                 onClick={() => onToggleProjectStatus(project.id)}
               >
                 {project.status === 'active' ? (
                   <>
-                    <Pause size={13} />
+                    <Pause size={15} />
                     结束项目
                   </>
                 ) : (
                   <>
-                    <Play size={13} />
+                    <Play size={15} />
                     重新启用
                   </>
                 )}
@@ -831,6 +839,15 @@ export function Projects({
               </button>
             </>
           )}
+          <button
+            type="button"
+            className="project-manage-danger"
+            onClick={() => onDeleteProject(project.id)}
+            title="删除项目，已归入该项目的流水会转为日常支出"
+          >
+            <Trash2 size={14} />
+            删除项目
+          </button>
         </div>
 
         <section className="project-detail-section" aria-labelledby="project-category-heading">

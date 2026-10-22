@@ -13,23 +13,40 @@ import {
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
+import { CategorySettings } from './CategorySettings'
 import { formatMoney } from '../lib/utils'
 import { CURRENCIES, getCurrency } from '../lib/currency'
 import { FONT_SIZES } from '../lib/fontSize'
 import { PALETTES } from '../lib/themes'
+import type { CategoryDraft } from '../lib/categories'
 import type { UpdaterController } from '../hooks/useUpdater'
-import type { Currency, FontSize, Palette, Theme } from '../types'
+import type {
+  Category,
+  Currency,
+  FontSize,
+  Palette,
+  Theme,
+} from '../types'
 
 interface SettingsModalProps {
   open: boolean
+  focusSection: 'opening-balance' | null
   budget: number
+  openingBalance: number
   theme: Theme
   palette: Palette
   fontSize: FontSize
   currency: Currency
+  categories: Category[]
+  categoryTransactionUsage: Record<string, number>
+  categoryProjectUsage: Record<string, number>
   updater: UpdaterController
   onClose: () => void
   onBudgetSave: (budget: number) => void
+  onOpeningBalanceSave: (balance: number) => void
+  onCreateCategory: (draft: CategoryDraft) => void
+  onUpdateCategory: (id: string, draft: CategoryDraft) => void
+  onDeleteCategory: (id: string) => void
   onThemeChange: (theme: Theme) => void
   onPaletteChange: (palette: Palette) => void
   onFontSizeChange: (fontSize: FontSize) => void
@@ -42,14 +59,23 @@ interface SettingsModalProps {
 
 export function SettingsModal({
   open,
+  focusSection,
   budget,
+  openingBalance,
   theme,
   palette,
   fontSize,
   currency,
+  categories,
+  categoryTransactionUsage,
+  categoryProjectUsage,
   updater,
   onClose,
   onBudgetSave,
+  onOpeningBalanceSave,
+  onCreateCategory,
+  onUpdateCategory,
+  onDeleteCategory,
   onThemeChange,
   onPaletteChange,
   onFontSizeChange,
@@ -61,7 +87,15 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const [budgetInput, setBudgetInput] = useState(String(budget))
   const [budgetError, setBudgetError] = useState('')
+  const [openingMode, setOpeningMode] = useState<'zero' | 'existing'>(
+    openingBalance > 0 ? 'existing' : 'zero',
+  )
+  const [openingInput, setOpeningInput] = useState(
+    openingBalance > 0 ? String(openingBalance) : '',
+  )
+  const [openingError, setOpeningError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const openingSectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (open) {
@@ -69,6 +103,24 @@ export function SettingsModal({
       setBudgetError('')
     }
   }, [open, budget])
+
+  useEffect(() => {
+    if (!open || focusSection !== 'opening-balance') return
+    const timer = window.setTimeout(() => {
+      openingSectionRef.current?.scrollIntoView({
+        block: 'center',
+        behavior: 'smooth',
+      })
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [open, focusSection])
+
+  useEffect(() => {
+    if (!open) return
+    setOpeningMode(openingBalance > 0 ? 'existing' : 'zero')
+    setOpeningInput(openingBalance > 0 ? String(openingBalance) : '')
+    setOpeningError('')
+  }, [open, openingBalance])
 
   const handleBudgetSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -79,6 +131,26 @@ export function SettingsModal({
     }
     setBudgetError('')
     onBudgetSave(Math.round(value))
+  }
+
+  const handleOpeningBalanceSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    if (openingMode === 'zero') {
+      setOpeningError('')
+      onOpeningBalanceSave(0)
+      return
+    }
+    const value = Number(openingInput)
+    if (
+      !openingInput.trim() ||
+      !Number.isFinite(value) ||
+      value < 0
+    ) {
+      setOpeningError('请输入大于等于 0 的起始资金')
+      return
+    }
+    setOpeningError('')
+    onOpeningBalanceSave(Math.round(value * 100) / 100)
   }
 
   const updateInDialog =
@@ -285,6 +357,100 @@ export function SettingsModal({
 
         <section className="settings-section">
           <div className="settings-heading">
+            <h3>分类</h3>
+            <p>
+              收入和支出各自管理。分类可以改名、换颜色和图标，自定义分类与内置分类地位相同。
+            </p>
+          </div>
+          <CategorySettings
+            categories={categories}
+            transactionUsage={categoryTransactionUsage}
+            projectUsage={categoryProjectUsage}
+            onCreate={onCreateCategory}
+            onUpdate={onUpdateCategory}
+            onDelete={onDeleteCategory}
+          />
+        </section>
+
+        <section
+          className="settings-section"
+          ref={openingSectionRef}
+          aria-labelledby="opening-balance-heading"
+        >
+          <div className="settings-heading">
+            <h3 id="opening-balance-heading">总结余起始资金</h3>
+            <p>
+              总结余 = 起始资金 + 区间收入 − 区间支出。使用账页之前已有的钱可以记在这里；
+              不填就当作从零开始，只统计账本里的收支。
+            </p>
+          </div>
+          <form
+            className="opening-balance-form"
+            onSubmit={handleOpeningBalanceSubmit}
+          >
+            <div
+              className="opening-mode-switch"
+              role="group"
+              aria-label="起始资金方式"
+            >
+              <button
+                type="button"
+                className={openingMode === 'zero' ? 'is-active' : ''}
+                onClick={() => {
+                  setOpeningMode('zero')
+                  setOpeningError('')
+                }}
+                aria-pressed={openingMode === 'zero'}
+              >
+                从零开始
+              </button>
+              <button
+                type="button"
+                className={openingMode === 'existing' ? 'is-active' : ''}
+                onClick={() => {
+                  setOpeningMode('existing')
+                  setOpeningError('')
+                }}
+                aria-pressed={openingMode === 'existing'}
+              >
+                已有资金
+              </button>
+            </div>
+            {openingMode === 'existing' ? (
+              <label className="budget-input">
+                <span>{getCurrency(currency).symbol}</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={openingInput}
+                  onChange={(event) => {
+                    setOpeningInput(event.target.value)
+                    setOpeningError('')
+                  }}
+                  placeholder="0.00"
+                  aria-label="起始资金金额"
+                />
+              </label>
+            ) : (
+              <p className="opening-balance-note">
+                起始资金记为 0，总结余只反映选定区间内的收支。
+              </p>
+            )}
+            <button type="submit" className="button secondary">
+              保存起始资金
+            </button>
+          </form>
+          {openingError ? (
+            <p className="form-error" role="alert">
+              {openingError}
+            </p>
+          ) : null}
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-heading">
             <h3>月度预算</h3>
             <p>
               给日常生活留一条温柔的边界，当前预算 {formatMoney(budget)}
@@ -330,7 +496,7 @@ export function SettingsModal({
               </span>
               <span className="data-row-text">
                 <strong>导出完整备份</strong>
-                <small>包含全部流水与预算的 JSON 文件</small>
+                <small>包含流水、分类、项目、预算与起始资金的 JSON 文件</small>
               </span>
             </button>
             <button

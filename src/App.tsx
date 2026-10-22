@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check, X } from 'lucide-react'
 import { Sidebar } from './components/Sidebar'
 import {
@@ -23,6 +23,7 @@ import {
   sortTransactions,
 } from './lib/data'
 import {
+  detachProjectAllocations,
   getMonthSpendCents,
   makeDailyAllocation,
   scaleAllocations,
@@ -32,21 +33,31 @@ import {
   DEFAULT_BUDGET,
   ImportError,
   loadBudget,
+  loadCategories,
   loadCurrency,
   loadFontSize,
+  loadOpeningBalance,
   loadPalette,
   loadProjects,
   loadTheme,
   loadTransactions,
   parseBackup,
   saveBudget,
+  saveCategories,
   saveCurrency,
   saveFontSize,
+  saveOpeningBalance,
   savePalette,
   saveProjects,
   saveTheme,
   saveTransactions,
 } from './lib/storage'
+import {
+  DEFAULT_CATEGORIES,
+  newCategoryId,
+  setActiveCategories,
+} from './lib/categories'
+import type { CategoryDraft } from './lib/categories'
 import { getCurrency, setActiveCurrency } from './lib/currency'
 import { paletteThemeColor } from './lib/themes'
 import {
@@ -61,6 +72,7 @@ import {
 } from './lib/utils'
 import type {
   AllocationLine,
+  Category,
   Currency,
   FontSize,
   LedgerTransaction,
@@ -96,10 +108,13 @@ function resolveDraftAllocations(
 export default function App() {
   const [view, setView] = useState<View>('overview')
   const [monthKey, setMonthKey] = useState(() => currentMonthKey())
+  // Categories initialize first: transaction loading validates ids against them.
+  const [categories, setCategories] = useState<Category[]>(loadCategories)
   const [transactions, setTransactions] =
     useState<LedgerTransaction[]>(loadTransactions)
   const [projects, setProjects] = useState<Project[]>(loadProjects)
   const [budget, setBudget] = useState(loadBudget)
+  const [openingBalance, setOpeningBalance] = useState(loadOpeningBalance)
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [palette, setPalette] = useState<Palette>(loadPalette)
   const [fontSize, setFontSize] = useState<FontSize>(loadFontSize)
@@ -114,11 +129,38 @@ export default function App() {
     string | null
   >(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsFocus, setSettingsFocus] = useState<
+    'opening-balance' | null
+  >(null)
   const [toast, setToast] = useState<ToastState | null>(null)
   const updater = useUpdater()
 
   const latestMonth = currentMonthKey()
   const monthSpend = getMonthSpendCents(transactions, monthKey)
+
+  const categoryTransactionUsage = useMemo(() => {
+    const usage: Record<string, number> = {}
+    for (const item of transactions) {
+      usage[item.categoryId] = (usage[item.categoryId] ?? 0) + 1
+    }
+    return usage
+  }, [transactions])
+
+  const categoryProjectUsage = useMemo(() => {
+    const usage: Record<string, number> = {}
+    for (const project of projects) {
+      for (const categoryId of Object.keys(
+        project.categoryBudgetsCents ?? {},
+      )) {
+        usage[categoryId] = (usage[categoryId] ?? 0) + 1
+      }
+    }
+    return usage
+  }, [projects])
+
+  useEffect(() => {
+    saveCategories(categories)
+  }, [categories])
 
   useEffect(() => {
     saveTransactions(transactions)
@@ -131,6 +173,10 @@ export default function App() {
   useEffect(() => {
     saveBudget(budget)
   }, [budget])
+
+  useEffect(() => {
+    saveOpeningBalance(openingBalance)
+  }, [openingBalance])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -191,6 +237,53 @@ export default function App() {
 
   const showToast = (message: string, kind: 'success' | 'error' = 'success') => {
     setToast({ id: Date.now(), message, kind })
+  }
+
+  // Category lookups read module state, so update it before React re-renders.
+  const commitCategories = (next: Category[]) => {
+    setActiveCategories(next)
+    setCategories(next)
+  }
+
+  const handleCreateCategory = (draft: CategoryDraft) => {
+    const category: Category = {
+      id: newCategoryId(),
+      type: draft.type,
+      name: draft.name.trim(),
+      color: draft.color,
+      icon: draft.icon,
+    }
+    commitCategories([...categories, category])
+    showToast(`分类「${category.name}」已创建`)
+  }
+
+  const handleUpdateCategory = (id: string, draft: CategoryDraft) => {
+    const next = categories.map((category) =>
+      category.id === id
+        ? {
+            ...category,
+            type: draft.type,
+            name: draft.name.trim(),
+            color: draft.color,
+            icon: draft.icon,
+          }
+        : category,
+    )
+    commitCategories(next)
+    const name = draft.name.trim()
+    showToast(`分类「${name}」已更新`)
+  }
+
+  const handleDeleteCategory = async (id: string) => {
+    const category = categories.find((item) => item.id === id)
+    if (!category) return
+    const confirmed = await confirmDesktopAction(
+      `确定删除分类「${category.name}」吗？`,
+      '删除分类',
+    )
+    if (!confirmed) return
+    commitCategories(categories.filter((item) => item.id !== id))
+    showToast(`分类「${category.name}」已删除`)
   }
 
   const openAdd = () => {
@@ -290,6 +383,15 @@ export default function App() {
     showToast('月度预算已更新')
   }
 
+  const handleOpeningBalanceSave = (nextBalance: number) => {
+    setOpeningBalance(nextBalance)
+    showToast(
+      nextBalance > 0
+        ? `起始资金已设为 ${formatMoney(nextBalance)}`
+        : '总结余已改为从零开始',
+    )
+  }
+
   const handleCreateProject = (draft: ProjectDraft): string => {
     const now = new Date().toISOString()
     const project: Project = {
@@ -386,6 +488,39 @@ export default function App() {
     )
   }
 
+  const handleDeleteProject = async (id: string) => {
+    const project = projects.find((item) => item.id === id)
+    if (!project) return
+    const linkedCount = transactions.filter((transaction) =>
+      transaction.allocations.some(
+        (line) =>
+          line.targetType === 'project' && line.projectId === id,
+      ),
+    ).length
+    const confirmed = await confirmDesktopAction(
+      linkedCount > 0
+        ? `确定删除项目「${project.name}」吗？归入该项目的 ${linkedCount} 笔流水会转回日常支出，此操作无法撤销。`
+        : `确定删除项目「${project.name}」吗？此操作无法撤销。`,
+      '删除项目',
+    )
+    if (!confirmed) return
+
+    const now = new Date().toISOString()
+    setTransactions((current) =>
+      current.map((transaction) => {
+        const allocations = detachProjectAllocations(
+          transaction.allocations,
+          id,
+        )
+        return allocations === transaction.allocations
+          ? transaction
+          : { ...transaction, allocations, updatedAt: now }
+      }),
+    )
+    setProjects((current) => current.filter((item) => item.id !== id))
+    showToast(`项目「${project.name}」已删除`)
+  }
+
   const handleCurrencyChange = (nextCurrency: Currency) => {
     setActiveCurrency(nextCurrency)
     setCurrency(nextCurrency)
@@ -399,6 +534,9 @@ export default function App() {
       exportedAt: new Date().toISOString(),
       budget,
       budgetCents: Math.round(budget * 100),
+      openingBalance,
+      openingBalanceCents: Math.round(openingBalance * 100),
+      categories,
       projects,
       transactions,
     }
@@ -438,9 +576,13 @@ export default function App() {
     try {
       const text = await file.text()
       const imported = parseBackup(text)
+      if (imported.categories) commitCategories(imported.categories)
       setTransactions(sortTransactions(imported.transactions))
       setProjects(imported.projects)
       if (imported.budget !== null) setBudget(imported.budget)
+      if (imported.openingBalance !== null) {
+        setOpeningBalance(imported.openingBalance)
+      }
       setSettingsOpen(false)
       setMonthKey(currentMonthKey())
       setView('overview')
@@ -454,6 +596,7 @@ export default function App() {
   }
 
   const handleLoadSample = () => {
+    commitCategories(DEFAULT_CATEGORIES)
     setTransactions(createSeedTransactions())
     setProjects([])
     setMonthKey(currentMonthKey())
@@ -468,9 +611,11 @@ export default function App() {
     )
     if (!confirmed) return
     const seed = createSeedTransactions()
+    commitCategories(DEFAULT_CATEGORIES)
     setTransactions(seed)
     setProjects([])
     setBudget(DEFAULT_BUDGET)
+    setOpeningBalance(0)
     setMonthKey(currentMonthKey())
     setSettingsOpen(false)
     setView('overview')
@@ -490,7 +635,10 @@ export default function App() {
         onToggleTheme={() =>
           setTheme((current) => (current === 'light' ? 'dark' : 'light'))
         }
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => {
+          setSettingsFocus(null)
+          setSettingsOpen(true)
+        }}
       />
 
       <main className="main-content">
@@ -500,7 +648,10 @@ export default function App() {
           onMonthShift={handleMonthShift}
           onThisMonth={() => setMonthKey(currentMonthKey())}
           onAdd={openAdd}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => {
+            setSettingsFocus(null)
+            setSettingsOpen(true)
+          }}
         />
 
         {view === 'overview' ? (
@@ -509,11 +660,15 @@ export default function App() {
             projects={projects}
             monthKey={monthKey}
             budget={budget}
+            openingBalance={openingBalance}
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={handleDeleteTransaction}
             onChangeView={handleChangeView}
-            onOpenBudget={() => setSettingsOpen(true)}
+            onOpenBudget={() => {
+              setSettingsFocus('opening-balance')
+              setSettingsOpen(true)
+            }}
             onLoadSample={handleLoadSample}
           />
         ) : null}
@@ -522,6 +677,7 @@ export default function App() {
           <Transactions
             transactions={transactions}
             projects={projects}
+            categories={categories}
             monthKey={monthKey}
             onAdd={openAdd}
             onEdit={openEdit}
@@ -538,6 +694,7 @@ export default function App() {
             onUpdateProject={handleUpdateProject}
             onToggleProjectStatus={handleToggleProjectStatus}
             onToggleProjectArchive={handleToggleProjectArchive}
+            onDeleteProject={handleDeleteProject}
             onAddTransaction={openAddForProject}
             onEditTransaction={openEdit}
             onDeleteTransaction={handleDeleteTransaction}
@@ -581,6 +738,7 @@ export default function App() {
         open={transactionModalOpen}
         editing={editing}
         projects={projects}
+        categories={categories}
         defaultDate={defaultDateForMonth(monthKey)}
         defaultProjectId={transactionProjectId ?? undefined}
         onClose={closeTransactionModal}
@@ -590,14 +748,26 @@ export default function App() {
 
       <SettingsModal
         open={settingsOpen}
+        focusSection={settingsFocus}
         budget={budget}
+        openingBalance={openingBalance}
         theme={theme}
         palette={palette}
         fontSize={fontSize}
         currency={currency}
+        categories={categories}
+        categoryTransactionUsage={categoryTransactionUsage}
+        categoryProjectUsage={categoryProjectUsage}
         updater={updater}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => {
+          setSettingsOpen(false)
+          setSettingsFocus(null)
+        }}
         onBudgetSave={handleBudgetSave}
+        onOpeningBalanceSave={handleOpeningBalanceSave}
+        onCreateCategory={handleCreateCategory}
+        onUpdateCategory={handleUpdateCategory}
+        onDeleteCategory={handleDeleteCategory}
         onThemeChange={setTheme}
         onPaletteChange={setPalette}
         onFontSizeChange={setFontSize}

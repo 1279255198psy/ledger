@@ -1,4 +1,5 @@
-import { CATEGORIES, getAccount, getCategory } from './data'
+import { getAccount } from './data'
+import { getCategoriesForType, getCategory } from './categories'
 import { toPostings } from './allocations'
 import { activeCurrencySymbol } from './currency'
 import type {
@@ -141,7 +142,7 @@ export function getCategoryTotals(
 
   return [...grouped.entries()]
     .map(([id, valueCents]) => ({
-      category: getCategory(id),
+      category: getCategory(id, type),
       value: valueCents / 100,
       share: totalCents > 0 ? valueCents / totalCents : 0,
     }))
@@ -295,14 +296,15 @@ export function topWeekdaySpending(
   return { label: WEEKDAYS[values.indexOf(max)], value: max }
 }
 
-export function categoryNameById(id: string): string {
-  return getCategory(id).name
+export function categoryNameById(
+  id: string,
+  type: TransactionType = 'expense',
+): string {
+  return getCategory(id, type).name
 }
 
 export function allCategoryIds(type: TransactionType): string[] {
-  return CATEGORIES.filter((category) => category.type === type).map(
-    (category) => category.id,
-  )
+  return getCategoriesForType(type).map((category) => category.id)
 }
 
 export function escapeCsv(value: string | number): string {
@@ -318,7 +320,7 @@ export function transactionsToCsv(
   const rows = transactions.map((item) => [
     item.date,
     item.type === 'expense' ? '支出' : '收入',
-    categoryNameById(item.categoryId),
+    categoryNameById(item.categoryId, item.type),
     getAccount(item.accountId).name,
     (item.amountCents / 100).toFixed(2),
     item.note,

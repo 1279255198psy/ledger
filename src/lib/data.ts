@@ -8,28 +8,7 @@ import type {
 } from '../types'
 import { isCurrency } from './currency'
 import { makeDailyAllocation, sumAllocationCents } from './allocations'
-
-export const EXPENSE_CATEGORIES: Category[] = [
-  { id: 'food', name: '餐饮', type: 'expense' },
-  { id: 'transport', name: '交通', type: 'expense' },
-  { id: 'shopping', name: '购物', type: 'expense' },
-  { id: 'housing', name: '居住', type: 'expense' },
-  { id: 'entertainment', name: '娱乐', type: 'expense' },
-  { id: 'medical', name: '医疗', type: 'expense' },
-  { id: 'education', name: '教育', type: 'expense' },
-  { id: 'other_expense', name: '其他', type: 'expense' },
-]
-
-export const INCOME_CATEGORIES: Category[] = [
-  { id: 'salary', name: '工资', type: 'income' },
-  { id: 'bonus', name: '奖金', type: 'income' },
-  { id: 'investment', name: '理财', type: 'income' },
-  { id: 'freelance', name: '兼职', type: 'income' },
-  { id: 'gift', name: '红包', type: 'income' },
-  { id: 'other_income', name: '其他', type: 'income' },
-]
-
-export const CATEGORIES = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
+import { getActiveCategories } from './categories'
 
 export const ACCOUNTS: Account[] = [
   { id: 'wechat', name: '微信' },
@@ -38,33 +17,7 @@ export const ACCOUNTS: Account[] = [
   { id: 'cash', name: '现金' },
 ]
 
-export const CATEGORY_TONES: Record<string, string> = {
-  food: 'clay',
-  transport: 'sky',
-  shopping: 'plum',
-  housing: 'olive',
-  entertainment: 'amber',
-  medical: 'rose',
-  education: 'indigo',
-  other_expense: 'stone',
-  salary: 'forest',
-  bonus: 'gold',
-  investment: 'teal',
-  freelance: 'sky',
-  gift: 'rose',
-  other_income: 'stone',
-}
-
-export function getCategoriesForType(type: TransactionType): Category[] {
-  return type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES
-}
-
-export function getCategory(id: string): Category {
-  return (
-    CATEGORIES.find((category) => category.id === id) ??
-    CATEGORIES.find((category) => category.id === 'other_expense')!
-  )
-}
+export { getCategoriesForType, getCategory } from './categories'
 
 export function getAccount(id: string): Account {
   return ACCOUNTS.find((account) => account.id === id) ?? ACCOUNTS[2]
@@ -318,7 +271,10 @@ export function isValidAllocation(value: unknown): value is AllocationLine {
   )
 }
 
-export function isValidTransaction(value: unknown): value is LedgerTransaction {
+export function isValidTransaction(
+  value: unknown,
+  categories: Category[] = getActiveCategories(),
+): value is LedgerTransaction {
   if (!value || typeof value !== 'object') return false
   const item = value as Partial<LedgerTransaction>
   if (
@@ -339,8 +295,9 @@ export function isValidTransaction(value: unknown): value is LedgerTransaction {
 
   return (
     typeof item.categoryId === 'string' &&
-    getCategoriesForType(item.type).some(
-      (category) => category.id === item.categoryId,
+    categories.some(
+      (category) =>
+        category.id === item.categoryId && category.type === item.type,
     ) &&
     typeof item.accountId === 'string' &&
     ACCOUNTS.some((account) => account.id === item.accountId) &&
@@ -354,6 +311,7 @@ export function isValidTransaction(value: unknown): value is LedgerTransaction {
 
 export function migrateV1Transaction(
   value: unknown,
+  categories: Category[] = getActiveCategories(),
 ): LedgerTransaction | null {
   if (!value || typeof value !== 'object') return null
   const item = value as Record<string, unknown>
@@ -377,7 +335,11 @@ export function migrateV1Transaction(
 
   const categoryId =
     typeof item.categoryId === 'string' ? item.categoryId : ''
-  if (!getCategoriesForType(type).some((category) => category.id === categoryId)) {
+  if (
+    !categories.some(
+      (category) => category.id === categoryId && category.type === type,
+    )
+  ) {
     return null
   }
 
@@ -416,8 +378,9 @@ export function migrateV1Transaction(
  */
 export function normalizeTransaction(
   value: unknown,
+  categories: Category[] = getActiveCategories(),
 ): LedgerTransaction | null {
-  if (isValidTransaction(value)) return value
+  if (isValidTransaction(value, categories)) return value
   if (value && typeof value === 'object') {
     const item = value as Record<string, unknown>
     if (
@@ -428,10 +391,13 @@ export function normalizeTransaction(
       return null
     }
   }
-  return migrateV1Transaction(value)
+  return migrateV1Transaction(value, categories)
 }
 
-export function isValidProject(value: unknown): value is Project {
+export function isValidProject(
+  value: unknown,
+  categories: Category[] = getActiveCategories(),
+): value is Project {
   if (!value || typeof value !== 'object') return false
   const item = value as Partial<Project>
   const datePattern = /^\d{4}-\d{2}-\d{2}$/
@@ -443,7 +409,10 @@ export function isValidProject(value: unknown): value is Project {
       !Array.isArray(categoryBudgets) &&
       Object.entries(categoryBudgets).every(
         ([categoryId, cents]) =>
-          EXPENSE_CATEGORIES.some((category) => category.id === categoryId) &&
+          categories.some(
+            (category) =>
+              category.id === categoryId && category.type === 'expense',
+          ) &&
           typeof cents === 'number' &&
           Number.isInteger(cents) &&
           cents >= 0,

@@ -12,10 +12,7 @@ import {
 } from 'lucide-react'
 import { Modal } from './Modal'
 import { CategoryIcon } from './CategoryIcon'
-import {
-  ACCOUNTS,
-  getCategoriesForType,
-} from '../lib/data'
+import { ACCOUNTS } from '../lib/data'
 import {
   getProjectIds,
   getScope,
@@ -29,6 +26,7 @@ import { formatMoney, localDateKey } from '../lib/utils'
 import type {
   AllocationLine,
   AllocationTarget,
+  Category,
   LedgerTransaction,
   Project,
   TransactionDraft,
@@ -40,6 +38,7 @@ interface TransactionModalProps {
   open: boolean
   editing: LedgerTransaction | null
   projects: Project[]
+  categories: Category[]
   defaultDate: string
   defaultProjectId?: string
   onClose: () => void
@@ -241,6 +240,7 @@ export function TransactionModal({
   open,
   editing,
   projects,
+  categories: allCategories,
   defaultDate,
   defaultProjectId,
   onClose,
@@ -259,7 +259,10 @@ export function TransactionModal({
   const [splitRows, setSplitRows] = useState<SplitRow[]>([])
   const [error, setError] = useState('')
 
-  const categories = useMemo(() => getCategoriesForType(type), [type])
+  const categories = useMemo(
+    () => allCategories.filter((category) => category.type === type),
+    [allCategories, type],
+  )
 
   const editingProjectIds = useMemo(
     () => new Set(editing ? getProjectIds(editing) : []),
@@ -294,6 +297,9 @@ export function TransactionModal({
     [splitRows, splitMode, totalCents, selectableProjects],
   )
 
+  const firstExpenseCategoryId =
+    allCategories.find((category) => category.type === 'expense')?.id ?? ''
+
   useEffect(() => {
     if (!open) return
     if (editing) {
@@ -321,7 +327,7 @@ export function TransactionModal({
         : undefined
       setType('expense')
       setAmount('')
-      setCategoryId('food')
+      setCategoryId(firstExpenseCategoryId)
       setAccountId('wechat')
       setDate(defaultDate)
       setNote('')
@@ -333,14 +339,23 @@ export function TransactionModal({
       setSplitRows([])
     }
     setError('')
-  }, [open, editing, defaultDate, defaultProjectId, selectableProjects])
+  }, [
+    open,
+    editing,
+    defaultDate,
+    defaultProjectId,
+    selectableProjects,
+    firstExpenseCategoryId,
+  ])
 
   const handleTypeChange = (nextType: TransactionType) => {
     setType(nextType)
     setError('')
-    const nextCategories = getCategoriesForType(nextType)
+    const nextCategories = allCategories.filter(
+      (category) => category.type === nextType,
+    )
     if (!nextCategories.some((category) => category.id === categoryId)) {
-      setCategoryId(nextCategories[0].id)
+      setCategoryId(nextCategories[0]?.id ?? '')
     }
   }
 
@@ -451,6 +466,14 @@ export function TransactionModal({
     }
     if (!date) {
       setError('请选择日期')
+      return
+    }
+    if (
+      !allCategories.some(
+        (category) => category.id === categoryId && category.type === type,
+      )
+    ) {
+      setError('请选择一个分类')
       return
     }
 
@@ -745,7 +768,7 @@ export function TransactionModal({
                   onClick={() => setCategoryId(category.id)}
                   aria-pressed={categoryId === category.id}
                 >
-                  <CategoryIcon id={category.id} size={19} />
+                  <CategoryIcon category={category} size={19} />
                   <span>{category.name}</span>
                   {categoryId === category.id ? (
                     <Check className="category-check" size={13} aria-hidden />

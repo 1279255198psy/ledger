@@ -73,6 +73,10 @@ export interface Category {
   id: string
   name: string
   type: TransactionType
+  /** Optional fixed hex color. Built-ins without one follow the active theme. */
+  color?: string
+  /** Key into the shared category icon set. */
+  icon?: string
 }
 
 export interface Account {

@@ -28,7 +28,7 @@ export function TransactionRow({
   showDate = false,
   compact = false,
 }: TransactionRowProps) {
-  const category = getCategory(transaction.categoryId)
+  const category = getCategory(transaction.categoryId, transaction.type)
   const account = getAccount(transaction.accountId)
   const isIncome = transaction.type === 'income'
   const amountCents =
@@ -46,7 +46,10 @@ export function TransactionRow({
 
   return (
     <div className={`transaction-row${compact ? ' is-compact' : ''}`}>
-      <CategoryIcon id={transaction.categoryId} size={compact ? 17 : 19} />
+      <CategoryIcon
+        category={category}
+        size={compact ? 17 : 19}
+      />
 
       <div className="transaction-main">
         <div className="transaction-title">

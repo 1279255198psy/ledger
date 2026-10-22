@@ -7,12 +7,8 @@ import {
 } from 'lucide-react'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { TransactionRow } from '../components/TransactionRow'
-import {
-  ACCOUNTS,
-  CATEGORIES,
-  getCategoriesForType,
-  getCategory,
-} from '../lib/data'
+import { ACCOUNTS } from '../lib/data'
+import { getCategory } from '../lib/categories'
 import {
   formatDayHeading,
   formatMoney,
@@ -22,6 +18,7 @@ import {
   monthLabel,
 } from '../lib/utils'
 import type {
+  Category,
   LedgerTransaction,
   Project,
   TransactionType,
@@ -30,6 +27,7 @@ import type {
 interface TransactionsProps {
   transactions: LedgerTransaction[]
   projects: Project[]
+  categories: Category[]
   monthKey: string
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
@@ -42,6 +40,7 @@ type TypeFilter = 'all' | TransactionType
 export function Transactions({
   transactions,
   projects,
+  categories,
   monthKey,
   onAdd,
   onEdit,
@@ -63,8 +62,31 @@ export function Transactions({
   const monthTransactions = getMonthTransactions(transactions, monthKey)
   const totals = getTotals(monthTransactions)
 
+  const expenseCategories = categories.filter(
+    (category) => category.type === 'expense',
+  )
+  const incomeCategories = categories.filter(
+    (category) => category.type === 'income',
+  )
   const categoryOptions =
-    typeFilter === 'all' ? CATEGORIES : getCategoriesForType(typeFilter)
+    typeFilter === 'expense'
+      ? expenseCategories
+      : typeFilter === 'income'
+        ? incomeCategories
+        : categories
+
+  useEffect(() => {
+    if (!categoryFilter) return
+    const selected = categories.find(
+      (category) => category.id === categoryFilter,
+    )
+    if (
+      !selected ||
+      (typeFilter !== 'all' && selected.type !== typeFilter)
+    ) {
+      setCategoryFilter('')
+    }
+  }, [categories, categoryFilter, typeFilter])
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -73,7 +95,7 @@ export function Transactions({
       if (categoryFilter && item.categoryId !== categoryFilter) return false
       if (accountFilter && item.accountId !== accountFilter) return false
       if (normalizedQuery) {
-        const haystack = `${getCategory(item.categoryId).name} ${item.note}`.toLowerCase()
+        const haystack = `${getCategory(item.categoryId, item.type).name} ${item.note}`.toLowerCase()
         if (!haystack.includes(normalizedQuery)) return false
       }
       return true
@@ -106,8 +128,9 @@ export function Transactions({
   const handleTypeFilter = (next: TypeFilter) => {
     setTypeFilter(next)
     if (next !== 'all' && categoryFilter) {
-      const valid = getCategoriesForType(next).some(
-        (category) => category.id === categoryFilter,
+      const valid = categories.some(
+        (category) =>
+          category.id === categoryFilter && category.type === next,
       )
       if (!valid) setCategoryFilter('')
     }
@@ -185,11 +208,34 @@ export function Transactions({
               onChange={(event) => setCategoryFilter(event.target.value)}
             >
               <option value="">全部分类</option>
-              {categoryOptions.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
+              {typeFilter === 'all' ? (
+                <>
+                  {expenseCategories.length > 0 ? (
+                    <optgroup label="支出">
+                      {expenseCategories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {incomeCategories.length > 0 ? (
+                    <optgroup label="收入">
+                      {incomeCategories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </>
+              ) : (
+                categoryOptions.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))
+              )}
             </select>
           </label>
 
