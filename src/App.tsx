@@ -14,6 +14,7 @@ import { UpdateDialog } from './components/UpdateDialog'
 import { useUpdater } from './hooks/useUpdater'
 import { Overview } from './pages/Overview'
 import { Transactions } from './pages/Transactions'
+import { Projects } from './pages/Projects'
 import { Analytics } from './pages/Analytics'
 import {
   createSeedTransactions,
@@ -109,6 +110,9 @@ export default function App() {
   })
   const [transactionModalOpen, setTransactionModalOpen] = useState(false)
   const [editing, setEditing] = useState<LedgerTransaction | null>(null)
+  const [transactionProjectId, setTransactionProjectId] = useState<
+    string | null
+  >(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [toast, setToast] = useState<ToastState | null>(null)
   const updater = useUpdater()
@@ -191,17 +195,26 @@ export default function App() {
 
   const openAdd = () => {
     setEditing(null)
+    setTransactionProjectId(null)
+    setTransactionModalOpen(true)
+  }
+
+  const openAddForProject = (projectId: string) => {
+    setEditing(null)
+    setTransactionProjectId(projectId)
     setTransactionModalOpen(true)
   }
 
   const openEdit = (transaction: LedgerTransaction) => {
     setEditing(transaction)
+    setTransactionProjectId(null)
     setTransactionModalOpen(true)
   }
 
   const closeTransactionModal = () => {
     setTransactionModalOpen(false)
     setEditing(null)
+    setTransactionProjectId(null)
   }
 
   const handleSaveTransaction = (draft: TransactionDraft) => {
@@ -277,20 +290,50 @@ export default function App() {
     showToast('月度预算已更新')
   }
 
-  const handleCreateProject = (draft: ProjectDraft) => {
+  const handleCreateProject = (draft: ProjectDraft): string => {
     const now = new Date().toISOString()
     const project: Project = {
       id: newProjectId(),
       name: draft.name.trim(),
       status: 'active',
       startDate: draft.startDate,
-      budgetCents: draft.budgetCents,
+      ...(draft.endDate ? { endDate: draft.endDate } : {}),
+      ...(draft.budgetCents !== undefined
+        ? { budgetCents: draft.budgetCents }
+        : {}),
+      ...(draft.categoryBudgetsCents &&
+      Object.keys(draft.categoryBudgetsCents).length > 0
+        ? { categoryBudgetsCents: draft.categoryBudgetsCents }
+        : {}),
+      ...(draft.note ? { note: draft.note } : {}),
       currency,
       createdAt: now,
       updatedAt: now,
     }
     setProjects((current) => [project, ...current])
     showToast(`项目「${project.name}」已创建`)
+    return project.id
+  }
+
+  const handleUpdateProject = (id: string, draft: ProjectDraft) => {
+    const now = new Date().toISOString()
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === id
+          ? {
+              ...project,
+              name: draft.name.trim(),
+              startDate: draft.startDate,
+              endDate: draft.endDate,
+              budgetCents: draft.budgetCents,
+              categoryBudgetsCents: draft.categoryBudgetsCents,
+              note: draft.note,
+              updatedAt: now,
+            }
+          : project,
+      ),
+    )
+    showToast(`项目「${draft.name.trim()}」已更新`)
   }
 
   const handleToggleProjectStatus = (id: string) => {
@@ -323,7 +366,6 @@ export default function App() {
     if (!project) return
     const archived = Boolean(project.archivedAt)
     const now = new Date().toISOString()
-    const today = localDateKey()
     setProjects((current) =>
       current.map((item) => {
         if (item.id !== id) return item
@@ -332,8 +374,6 @@ export default function App() {
         }
         return {
           ...item,
-          status: 'closed',
-          endDate: item.endDate ?? today,
           archivedAt: now,
           updatedAt: now,
         }
@@ -490,6 +530,20 @@ export default function App() {
           />
         ) : null}
 
+        {view === 'projects' ? (
+          <Projects
+            transactions={transactions}
+            projects={projects}
+            onCreateProject={handleCreateProject}
+            onUpdateProject={handleUpdateProject}
+            onToggleProjectStatus={handleToggleProjectStatus}
+            onToggleProjectArchive={handleToggleProjectArchive}
+            onAddTransaction={openAddForProject}
+            onEditTransaction={openEdit}
+            onDeleteTransaction={handleDeleteTransaction}
+          />
+        ) : null}
+
         {view === 'analytics' ? (
           <Analytics
             transactions={transactions}
@@ -528,6 +582,7 @@ export default function App() {
         editing={editing}
         projects={projects}
         defaultDate={defaultDateForMonth(monthKey)}
+        defaultProjectId={transactionProjectId ?? undefined}
         onClose={closeTransactionModal}
         onSave={handleSaveTransaction}
         onDelete={handleDeleteTransaction}
@@ -540,7 +595,6 @@ export default function App() {
         palette={palette}
         fontSize={fontSize}
         currency={currency}
-        projects={projects}
         updater={updater}
         onClose={() => setSettingsOpen(false)}
         onBudgetSave={handleBudgetSave}
@@ -548,9 +602,6 @@ export default function App() {
         onPaletteChange={setPalette}
         onFontSizeChange={setFontSize}
         onCurrencyChange={handleCurrencyChange}
-        onCreateProject={handleCreateProject}
-        onToggleProjectStatus={handleToggleProjectStatus}
-        onToggleProjectArchive={handleToggleProjectArchive}
         onExportJson={handleExportJson}
         onExportCsv={handleExportCsv}
         onImportFile={handleImportFile}

@@ -167,6 +167,19 @@ export function getProjectIds(transaction: LedgerTransaction): string[] {
   ]
 }
 
+export function getProjectAmountCents(
+  transaction: LedgerTransaction,
+  projectId: string,
+): number {
+  return transaction.allocations.reduce(
+    (sum, line) =>
+      line.targetType === 'project' && line.projectId === projectId
+        ? sum + line.amountCents
+        : sum,
+    0,
+  )
+}
+
 export function toPostings(
   transactions: LedgerTransaction[],
 ): Posting[] {
@@ -297,6 +310,28 @@ export function getDailyCategoryCents(
     ) {
       continue
     }
+    totals.set(
+      posting.categoryId,
+      (totals.get(posting.categoryId) ?? 0) + posting.signedCents,
+    )
+  }
+
+  return totals
+}
+
+/**
+ * Category totals for one project. A project itself has no category: every
+ * expense keeps the category chosen on its transaction, and the project view
+ * simply rolls those categories up.
+ */
+export function getProjectCategoryCents(
+  transactions: LedgerTransaction[],
+  projectId: string,
+): Map<string, number> {
+  const totals = new Map<string, number>()
+
+  for (const posting of toPostings(transactions)) {
+    if (posting.projectId !== projectId || posting.kind !== 'expense') continue
     totals.set(
       posting.categoryId,
       (totals.get(posting.categoryId) ?? 0) + posting.signedCents,

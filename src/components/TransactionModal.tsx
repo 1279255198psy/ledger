@@ -41,6 +41,7 @@ interface TransactionModalProps {
   editing: LedgerTransaction | null
   projects: Project[]
   defaultDate: string
+  defaultProjectId?: string
   onClose: () => void
   onSave: (draft: TransactionDraft) => void
   onDelete: (id: string) => void
@@ -241,6 +242,7 @@ export function TransactionModal({
   editing,
   projects,
   defaultDate,
+  defaultProjectId,
   onClose,
   onSave,
   onDelete,
@@ -312,19 +314,26 @@ export function TransactionModal({
         })),
       )
     } else {
+      const preferredProject = defaultProjectId
+        ? selectableProjects.find(
+            (project) => project.id === defaultProjectId,
+          )
+        : undefined
       setType('expense')
       setAmount('')
       setCategoryId('food')
       setAccountId('wechat')
       setDate(defaultDate)
       setNote('')
-      setScope('daily')
-      setProjectId(selectableProjects[0]?.id ?? '')
+      setScope(preferredProject ? 'project' : 'daily')
+      setProjectId(
+        preferredProject?.id ?? selectableProjects[0]?.id ?? '',
+      )
       setSplitMode('ratio')
       setSplitRows([])
     }
     setError('')
-  }, [open, editing, defaultDate, selectableProjects])
+  }, [open, editing, defaultDate, defaultProjectId, selectableProjects])
 
   const handleTypeChange = (nextType: TransactionType) => {
     setType(nextType)

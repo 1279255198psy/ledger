@@ -1,4 +1,5 @@
 import {
+  CalendarRange,
   ChartNoAxesColumnIncreasing,
   LayoutDashboard,
   Moon,
@@ -31,6 +32,7 @@ const NAV_ITEMS: Array<{
 }> = [
   { id: 'overview', label: '概览', icon: LayoutDashboard },
   { id: 'transactions', label: '流水', icon: ReceiptText },
+  { id: 'projects', label: '项目', icon: CalendarRange },
   { id: 'analytics', label: '统计', icon: ChartNoAxesColumnIncreasing },
 ]
 

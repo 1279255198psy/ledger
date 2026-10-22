@@ -435,6 +435,19 @@ export function isValidProject(value: unknown): value is Project {
   if (!value || typeof value !== 'object') return false
   const item = value as Partial<Project>
   const datePattern = /^\d{4}-\d{2}-\d{2}$/
+  const categoryBudgets = item.categoryBudgetsCents
+  const categoryBudgetsValid =
+    categoryBudgets === undefined ||
+    (categoryBudgets !== null &&
+      typeof categoryBudgets === 'object' &&
+      !Array.isArray(categoryBudgets) &&
+      Object.entries(categoryBudgets).every(
+        ([categoryId, cents]) =>
+          EXPENSE_CATEGORIES.some((category) => category.id === categoryId) &&
+          typeof cents === 'number' &&
+          Number.isInteger(cents) &&
+          cents >= 0,
+      ))
 
   return (
     typeof item.id === 'string' &&
@@ -451,6 +464,7 @@ export function isValidProject(value: unknown): value is Project {
       (typeof item.budgetCents === 'number' &&
         Number.isInteger(item.budgetCents) &&
         item.budgetCents >= 0)) &&
+    categoryBudgetsValid &&
     isCurrency(item.currency) &&
     (item.owner === undefined || typeof item.owner === 'string') &&
     (item.note === undefined || typeof item.note === 'string') &&

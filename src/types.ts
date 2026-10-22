@@ -1,6 +1,6 @@
 export type TransactionType = 'expense' | 'income'
 
-export type View = 'overview' | 'transactions' | 'analytics'
+export type View = 'overview' | 'transactions' | 'projects' | 'analytics'
 
 export type Theme = 'light' | 'dark'
 
@@ -46,7 +46,10 @@ export interface LedgerTransaction {
 export interface ProjectDraft {
   name: string
   startDate: string
+  endDate?: string
   budgetCents?: number
+  categoryBudgetsCents?: Record<string, number>
+  note?: string
 }
 
 export interface Project {
@@ -57,6 +60,7 @@ export interface Project {
   startDate: string
   endDate?: string
   budgetCents?: number
+  categoryBudgetsCents?: Record<string, number>
   currency: Currency
   owner?: string
   note?: string

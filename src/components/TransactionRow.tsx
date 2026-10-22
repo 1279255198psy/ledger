@@ -1,13 +1,18 @@
 import { Pencil, Trash2 } from 'lucide-react'
 import { CategoryIcon } from './CategoryIcon'
 import { getAccount, getCategory } from '../lib/data'
-import { getProjectIds, getScope } from '../lib/allocations'
+import {
+  getProjectAmountCents,
+  getProjectIds,
+  getScope,
+} from '../lib/allocations'
 import { formatMoney, formatShortDate } from '../lib/utils'
 import type { LedgerTransaction, Project } from '../types'
 
 interface TransactionRowProps {
   transaction: LedgerTransaction
   projects?: Project[]
+  projectId?: string
   onEdit: (transaction: LedgerTransaction) => void
   onDelete: (id: string) => void
   showDate?: boolean
@@ -17,6 +22,7 @@ interface TransactionRowProps {
 export function TransactionRow({
   transaction,
   projects = [],
+  projectId,
   onEdit,
   onDelete,
   showDate = false,
@@ -25,7 +31,11 @@ export function TransactionRow({
   const category = getCategory(transaction.categoryId)
   const account = getAccount(transaction.accountId)
   const isIncome = transaction.type === 'income'
-  const amount = formatMoney(transaction.amountCents / 100)
+  const amountCents =
+    projectId !== undefined
+      ? getProjectAmountCents(transaction, projectId)
+      : transaction.amountCents
+  const amount = formatMoney(amountCents / 100)
   const projectIds = getProjectIds(transaction)
   const projectNames = projectIds
     .map((id) => projects.find((project) => project.id === id)?.name)
