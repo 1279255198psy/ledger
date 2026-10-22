@@ -17,9 +17,16 @@ import { Transactions } from './pages/Transactions'
 import { Analytics } from './pages/Analytics'
 import {
   createSeedTransactions,
+  newProjectId,
   newTransactionId,
   sortTransactions,
 } from './lib/data'
+import {
+  getMonthSpendCents,
+  makeDailyAllocation,
+  scaleAllocations,
+  sumAllocationCents,
+} from './lib/allocations'
 import {
   DEFAULT_BUDGET,
   ImportError,
@@ -27,6 +34,7 @@ import {
   loadCurrency,
   loadFontSize,
   loadPalette,
+  loadProjects,
   loadTheme,
   loadTransactions,
   parseBackup,
@@ -34,6 +42,7 @@ import {
   saveCurrency,
   saveFontSize,
   savePalette,
+  saveProjects,
   saveTheme,
   saveTransactions,
 } from './lib/storage'
@@ -43,8 +52,6 @@ import {
   currentMonthKey,
   defaultDateForMonth,
   formatMoney,
-  getMonthTransactions,
-  getTotals,
   localDateKey,
   monthLabel,
   monthOfDateKey,
@@ -52,10 +59,13 @@ import {
   transactionsToCsv,
 } from './lib/utils'
 import type {
+  AllocationLine,
   Currency,
   FontSize,
   LedgerTransaction,
   Palette,
+  Project,
+  ProjectDraft,
   Theme,
   TransactionDraft,
   View,
@@ -67,11 +77,27 @@ interface ToastState {
   kind: 'success' | 'error'
 }
 
+function resolveDraftAllocations(
+  draft: TransactionDraft,
+  editing: LedgerTransaction | null,
+): AllocationLine[] {
+  if (draft.allocations && draft.allocations.length > 0) {
+    return sumAllocationCents(draft.allocations) === draft.amountCents
+      ? draft.allocations
+      : scaleAllocations(draft.allocations, draft.amountCents)
+  }
+  if (editing) {
+    return scaleAllocations(editing.allocations, draft.amountCents)
+  }
+  return [makeDailyAllocation(draft.amountCents)]
+}
+
 export default function App() {
   const [view, setView] = useState<View>('overview')
   const [monthKey, setMonthKey] = useState(() => currentMonthKey())
   const [transactions, setTransactions] =
     useState<LedgerTransaction[]>(loadTransactions)
+  const [projects, setProjects] = useState<Project[]>(loadProjects)
   const [budget, setBudget] = useState(loadBudget)
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [palette, setPalette] = useState<Palette>(loadPalette)
@@ -88,12 +114,15 @@ export default function App() {
   const updater = useUpdater()
 
   const latestMonth = currentMonthKey()
-  const monthTransactions = getMonthTransactions(transactions, monthKey)
-  const monthTotals = getTotals(monthTransactions)
+  const monthSpend = getMonthSpendCents(transactions, monthKey)
 
   useEffect(() => {
     saveTransactions(transactions)
   }, [transactions])
+
+  useEffect(() => {
+    saveProjects(projects)
+  }, [projects])
 
   useEffect(() => {
     saveBudget(budget)
@@ -177,12 +206,25 @@ export default function App() {
 
   const handleSaveTransaction = (draft: TransactionDraft) => {
     const targetMonth = monthOfDateKey(draft.date)
+    const allocations = resolveDraftAllocations(draft, editing)
+    const base = {
+      schemaVersion: 2 as const,
+      type: draft.type,
+      amountCents: draft.amountCents,
+      categoryId: draft.categoryId,
+      accountId: draft.accountId,
+      date: draft.date,
+      note: draft.note,
+      allocations,
+    }
+
     if (editing) {
+      const updatedAt = new Date().toISOString()
       setTransactions((current) =>
         sortTransactions(
           current.map((item) =>
             item.id === editing.id
-              ? { ...item, ...draft, id: item.id, createdAt: item.createdAt }
+              ? { ...item, ...base, updatedAt }
               : item,
           ),
         ),
@@ -190,15 +232,15 @@ export default function App() {
       showToast('这笔记录已更新')
     } else {
       const created: LedgerTransaction = {
-        ...draft,
+        ...base,
         id: newTransactionId(),
         createdAt: new Date().toISOString(),
       }
       setTransactions((current) => sortTransactions([created, ...current]))
       showToast(
         draft.type === 'expense'
-          ? `已记下支出 ${formatMoney(draft.amount)}`
-          : `已记下收入 ${formatMoney(draft.amount)}`,
+          ? `已记下支出 ${formatMoney(draft.amountCents / 100)}`
+          : `已记下收入 ${formatMoney(draft.amountCents / 100)}`,
       )
     }
     if (targetMonth !== monthKey && targetMonth <= latestMonth) {
@@ -235,6 +277,75 @@ export default function App() {
     showToast('月度预算已更新')
   }
 
+  const handleCreateProject = (draft: ProjectDraft) => {
+    const now = new Date().toISOString()
+    const project: Project = {
+      id: newProjectId(),
+      name: draft.name.trim(),
+      status: 'active',
+      startDate: draft.startDate,
+      budgetCents: draft.budgetCents,
+      currency,
+      createdAt: now,
+      updatedAt: now,
+    }
+    setProjects((current) => [project, ...current])
+    showToast(`项目「${project.name}」已创建`)
+  }
+
+  const handleToggleProjectStatus = (id: string) => {
+    const project = projects.find((item) => item.id === id)
+    if (!project) return
+    const active = project.status === 'active'
+    const now = new Date().toISOString()
+    const today = localDateKey()
+    setProjects((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: active ? 'closed' : 'active',
+              endDate: active ? today : undefined,
+              updatedAt: now,
+            }
+          : item,
+      ),
+    )
+    showToast(
+      active
+        ? `项目「${project.name}」已结束`
+        : `项目「${project.name}」已重新启用`,
+    )
+  }
+
+  const handleToggleProjectArchive = (id: string) => {
+    const project = projects.find((item) => item.id === id)
+    if (!project) return
+    const archived = Boolean(project.archivedAt)
+    const now = new Date().toISOString()
+    const today = localDateKey()
+    setProjects((current) =>
+      current.map((item) => {
+        if (item.id !== id) return item
+        if (archived) {
+          return { ...item, archivedAt: undefined, updatedAt: now }
+        }
+        return {
+          ...item,
+          status: 'closed',
+          endDate: item.endDate ?? today,
+          archivedAt: now,
+          updatedAt: now,
+        }
+      }),
+    )
+    showToast(
+      archived
+        ? `项目「${project.name}」已恢复`
+        : `项目「${project.name}」已归档`,
+    )
+  }
+
   const handleCurrencyChange = (nextCurrency: Currency) => {
     setActiveCurrency(nextCurrency)
     setCurrency(nextCurrency)
@@ -244,9 +355,11 @@ export default function App() {
   const handleExportJson = async () => {
     const payload = {
       app: '账页',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       budget,
+      budgetCents: Math.round(budget * 100),
+      projects,
       transactions,
     }
     try {
@@ -286,6 +399,7 @@ export default function App() {
       const text = await file.text()
       const imported = parseBackup(text)
       setTransactions(sortTransactions(imported.transactions))
+      setProjects(imported.projects)
       if (imported.budget !== null) setBudget(imported.budget)
       setSettingsOpen(false)
       setMonthKey(currentMonthKey())
@@ -301,6 +415,7 @@ export default function App() {
 
   const handleLoadSample = () => {
     setTransactions(createSeedTransactions())
+    setProjects([])
     setMonthKey(currentMonthKey())
     setView('overview')
     showToast('示例账本已载入')
@@ -314,6 +429,7 @@ export default function App() {
     if (!confirmed) return
     const seed = createSeedTransactions()
     setTransactions(seed)
+    setProjects([])
     setBudget(DEFAULT_BUDGET)
     setMonthKey(currentMonthKey())
     setSettingsOpen(false)
@@ -326,7 +442,7 @@ export default function App() {
       <Sidebar
         view={view}
         monthLabelText={monthLabel(monthKey)}
-        expense={monthTotals.expense}
+        expense={monthSpend.dailyCents / 100}
         budget={budget}
         theme={theme}
         onChangeView={handleChangeView}
@@ -350,6 +466,7 @@ export default function App() {
         {view === 'overview' ? (
           <Overview
             transactions={transactions}
+            projects={projects}
             monthKey={monthKey}
             budget={budget}
             onAdd={openAdd}
@@ -364,6 +481,7 @@ export default function App() {
         {view === 'transactions' ? (
           <Transactions
             transactions={transactions}
+            projects={projects}
             monthKey={monthKey}
             onAdd={openAdd}
             onEdit={openEdit}
@@ -375,6 +493,7 @@ export default function App() {
         {view === 'analytics' ? (
           <Analytics
             transactions={transactions}
+            projects={projects}
             monthKey={monthKey}
             budget={budget}
             onAdd={openAdd}
@@ -407,6 +526,7 @@ export default function App() {
       <TransactionModal
         open={transactionModalOpen}
         editing={editing}
+        projects={projects}
         defaultDate={defaultDateForMonth(monthKey)}
         onClose={closeTransactionModal}
         onSave={handleSaveTransaction}
@@ -420,6 +540,7 @@ export default function App() {
         palette={palette}
         fontSize={fontSize}
         currency={currency}
+        projects={projects}
         updater={updater}
         onClose={() => setSettingsOpen(false)}
         onBudgetSave={handleBudgetSave}
@@ -427,6 +548,9 @@ export default function App() {
         onPaletteChange={setPalette}
         onFontSizeChange={setFontSize}
         onCurrencyChange={handleCurrencyChange}
+        onCreateProject={handleCreateProject}
+        onToggleProjectStatus={handleToggleProjectStatus}
+        onToggleProjectArchive={handleToggleProjectArchive}
         onExportJson={handleExportJson}
         onExportCsv={handleExportCsv}
         onImportFile={handleImportFile}

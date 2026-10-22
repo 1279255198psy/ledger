@@ -23,11 +23,13 @@ import {
 } from '../lib/utils'
 import type {
   LedgerTransaction,
+  Project,
   TransactionType,
 } from '../types'
 
 interface TransactionsProps {
   transactions: LedgerTransaction[]
+  projects: Project[]
   monthKey: string
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
@@ -39,6 +41,7 @@ type TypeFilter = 'all' | TransactionType
 
 export function Transactions({
   transactions,
+  projects,
   monthKey,
   onAdd,
   onEdit,
@@ -254,10 +257,10 @@ export function Transactions({
           {grouped.map(([date, items]) => {
             const dayExpense = items
               .filter((item) => item.type === 'expense')
-              .reduce((sum, item) => sum + item.amount, 0)
+              .reduce((sum, item) => sum + item.amountCents, 0) / 100
             const dayIncome = items
               .filter((item) => item.type === 'income')
-              .reduce((sum, item) => sum + item.amount, 0)
+              .reduce((sum, item) => sum + item.amountCents, 0) / 100
             return (
               <section className="day-group" key={date}>
                 <header className="day-heading">
@@ -281,6 +284,7 @@ export function Transactions({
                     <TransactionRow
                       key={transaction.id}
                       transaction={transaction}
+                      projects={projects}
                       onEdit={onEdit}
                       onDelete={onDelete}
                     />

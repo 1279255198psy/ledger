@@ -1,9 +1,13 @@
 import type {
   Account,
+  AllocationLine,
   Category,
   LedgerTransaction,
+  Project,
   TransactionType,
 } from '../types'
+import { isCurrency } from './currency'
+import { makeDailyAllocation, sumAllocationCents } from './allocations'
 
 export const EXPENSE_CATEGORIES: Category[] = [
   { id: 'food', name: '餐饮', type: 'expense' },
@@ -143,6 +147,31 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate()
 }
 
+function makeSeedTransaction(
+  id: string,
+  type: TransactionType,
+  amount: number,
+  categoryId: string,
+  accountId: string,
+  date: string,
+  note: string,
+  createdAt: string,
+): LedgerTransaction {
+  const amountCents = Math.round(amount * 100)
+  return {
+    id,
+    schemaVersion: 2,
+    type,
+    amountCents,
+    categoryId,
+    accountId,
+    date,
+    note,
+    allocations: [makeDailyAllocation(amountCents, `${id}-al-1`)],
+    createdAt,
+  }
+}
+
 /**
  * Seeds six months of quietly realistic data, relative to the day the ledger
  * is first opened. Amounts vary a little month to month so the charts feel lived in.
@@ -165,37 +194,47 @@ export function createSeedTransactions(now = new Date()): LedgerTransaction[] {
       const adjusted = isFixed
         ? amount
         : Math.round(amount * (1 + variant) + ((index * 7) % 9) - 4)
-      transactions.push({
-        id: `seed-${monthKey}-e-${index}`,
-        type: 'expense',
-        amount: adjusted,
-        categoryId,
-        accountId,
-        date: dateKey(year, month, day),
-        note,
-        createdAt: new Date(year, month, day, 9 + (index % 10), index % 60).toISOString(),
-      })
+      transactions.push(
+        makeSeedTransaction(
+          `seed-${monthKey}-e-${index}`,
+          'expense',
+          adjusted,
+          categoryId,
+          accountId,
+          dateKey(year, month, day),
+          note,
+          new Date(
+            year,
+            month,
+            day,
+            9 + (index % 10),
+            index % 60,
+          ).toISOString(),
+        ),
+      )
     })
 
     ;(EXTRA_SEED[offset] ?? []).forEach(
       ([day, categoryId, accountId, amount, note], index) => {
         if (day > lastDay) return
-        transactions.push({
-          id: `seed-${monthKey}-x-${index}`,
-          type: 'expense',
-          amount,
-          categoryId,
-          accountId,
-          date: dateKey(year, month, day),
-          note,
-          createdAt: new Date(
-            year,
-            month,
-            day,
-            15 + (index % 5),
-            20 + index,
-          ).toISOString(),
-        })
+        transactions.push(
+          makeSeedTransaction(
+            `seed-${monthKey}-x-${index}`,
+            'expense',
+            amount,
+            categoryId,
+            accountId,
+            dateKey(year, month, day),
+            note,
+            new Date(
+              year,
+              month,
+              day,
+              15 + (index % 5),
+              20 + index,
+            ).toISOString(),
+          ),
+        )
       },
     )
 
@@ -207,16 +246,24 @@ export function createSeedTransactions(now = new Date()): LedgerTransaction[] {
         categoryId === 'salary'
           ? baseAmount + (offset % 3 === 0 ? 400 : offset % 3 === 1 ? 0 : 800)
           : baseAmount
-      transactions.push({
-        id: `seed-${monthKey}-i-${index}`,
-        type: 'income',
-        amount,
-        categoryId,
-        accountId,
-        date: dateKey(year, month, day),
-        note,
-        createdAt: new Date(year, month, day, 8 + index, 10 + index).toISOString(),
-      })
+      transactions.push(
+        makeSeedTransaction(
+          `seed-${monthKey}-i-${index}`,
+          'income',
+          amount,
+          categoryId,
+          accountId,
+          dateKey(year, month, day),
+          note,
+          new Date(
+            year,
+            month,
+            day,
+            8 + index,
+            10 + index,
+          ).toISOString(),
+        ),
+      )
     })
   }
 
@@ -225,6 +272,10 @@ export function createSeedTransactions(now = new Date()): LedgerTransaction[] {
 
 export function newTransactionId(): string {
   return makeId()
+}
+
+export function newProjectId(): string {
+  return `project-${makeId()}`
 }
 
 export function sortTransactions(
@@ -236,15 +287,57 @@ export function sortTransactions(
   })
 }
 
+export function isValidAllocation(value: unknown): value is AllocationLine {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Partial<AllocationLine>
+  const isProject = item.targetType === 'project'
+
+  return (
+    typeof item.id === 'string' &&
+    item.id.length > 0 &&
+    (item.targetType === 'daily' || item.targetType === 'project') &&
+    (isProject
+      ? typeof item.projectId === 'string' && item.projectId.length > 0
+      : item.projectId === undefined) &&
+    typeof item.amountCents === 'number' &&
+    Number.isInteger(item.amountCents) &&
+    item.amountCents > 0 &&
+    (item.weight === undefined ||
+      (typeof item.weight === 'number' &&
+        Number.isFinite(item.weight) &&
+        item.weight > 0)) &&
+    (item.ratioBp === undefined ||
+      (typeof item.ratioBp === 'number' &&
+        Number.isInteger(item.ratioBp) &&
+        item.ratioBp >= 0)) &&
+    (item.basis === 'ratio' ||
+      item.basis === 'headcount' ||
+      item.basis === 'fixed' ||
+      item.basis === 'migrated') &&
+    (item.note === undefined || typeof item.note === 'string')
+  )
+}
+
 export function isValidTransaction(value: unknown): value is LedgerTransaction {
   if (!value || typeof value !== 'object') return false
   const item = value as Partial<LedgerTransaction>
+  if (
+    typeof item.id !== 'string' ||
+    item.id.length === 0 ||
+    item.schemaVersion !== 2 ||
+    (item.type !== 'expense' && item.type !== 'income') ||
+    typeof item.amountCents !== 'number' ||
+    !Number.isInteger(item.amountCents) ||
+    item.amountCents <= 0 ||
+    !Array.isArray(item.allocations) ||
+    item.allocations.length === 0 ||
+    !item.allocations.every(isValidAllocation)
+  ) {
+    return false
+  }
+  if (sumAllocationCents(item.allocations) !== item.amountCents) return false
+
   return (
-    typeof item.id === 'string' &&
-    (item.type === 'expense' || item.type === 'income') &&
-    typeof item.amount === 'number' &&
-    Number.isFinite(item.amount) &&
-    item.amount > 0 &&
     typeof item.categoryId === 'string' &&
     getCategoriesForType(item.type).some(
       (category) => category.id === item.categoryId,
@@ -254,6 +347,116 @@ export function isValidTransaction(value: unknown): value is LedgerTransaction {
     typeof item.date === 'string' &&
     /^\d{4}-\d{2}-\d{2}$/.test(item.date) &&
     typeof item.note === 'string' &&
-    typeof item.createdAt === 'string'
+    typeof item.createdAt === 'string' &&
+    (item.updatedAt === undefined || typeof item.updatedAt === 'string')
+  )
+}
+
+export function migrateV1Transaction(
+  value: unknown,
+): LedgerTransaction | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Record<string, unknown>
+  const type =
+    item.type === 'income'
+      ? 'income'
+      : item.type === 'expense'
+        ? 'expense'
+        : null
+  if (!type) return null
+
+  const amount =
+    typeof item.amount === 'number'
+      ? item.amount
+      : typeof item.amount === 'string'
+        ? Number(item.amount)
+        : NaN
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  const amountCents = Math.round(amount * 100)
+  if (!Number.isInteger(amountCents) || amountCents <= 0) return null
+
+  const categoryId =
+    typeof item.categoryId === 'string' ? item.categoryId : ''
+  if (!getCategoriesForType(type).some((category) => category.id === categoryId)) {
+    return null
+  }
+
+  const accountId = typeof item.accountId === 'string' ? item.accountId : ''
+  if (!ACCOUNTS.some((account) => account.id === accountId)) return null
+
+  const date = typeof item.date === 'string' ? item.date : ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+
+  const id =
+    typeof item.id === 'string' && item.id.length > 0 ? item.id : makeId()
+
+  return {
+    id,
+    schemaVersion: 2,
+    type,
+    amountCents,
+    categoryId,
+    accountId,
+    date,
+    note: typeof item.note === 'string' ? item.note : '',
+    allocations: [makeDailyAllocation(amountCents, `${id}-al-1`, 'migrated')],
+    createdAt:
+      typeof item.createdAt === 'string'
+        ? item.createdAt
+        : new Date().toISOString(),
+    ...(typeof item.updatedAt === 'string'
+      ? { updatedAt: item.updatedAt }
+      : {}),
+  }
+}
+
+/**
+ * Accepts a valid v2 transaction or migrates one from the v1 shape. Anything
+ * that already claims to be v2 is never silently downgraded to a daily split.
+ */
+export function normalizeTransaction(
+  value: unknown,
+): LedgerTransaction | null {
+  if (isValidTransaction(value)) return value
+  if (value && typeof value === 'object') {
+    const item = value as Record<string, unknown>
+    if (
+      item.schemaVersion !== undefined ||
+      item.amountCents !== undefined ||
+      item.allocations !== undefined
+    ) {
+      return null
+    }
+  }
+  return migrateV1Transaction(value)
+}
+
+export function isValidProject(value: unknown): value is Project {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Partial<Project>
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/
+
+  return (
+    typeof item.id === 'string' &&
+    item.id.length > 0 &&
+    typeof item.name === 'string' &&
+    item.name.trim().length > 0 &&
+    (item.code === undefined || typeof item.code === 'string') &&
+    (item.status === 'active' || item.status === 'closed') &&
+    typeof item.startDate === 'string' &&
+    datePattern.test(item.startDate) &&
+    (item.endDate === undefined ||
+      (typeof item.endDate === 'string' && datePattern.test(item.endDate))) &&
+    (item.budgetCents === undefined ||
+      (typeof item.budgetCents === 'number' &&
+        Number.isInteger(item.budgetCents) &&
+        item.budgetCents >= 0)) &&
+    isCurrency(item.currency) &&
+    (item.owner === undefined || typeof item.owner === 'string') &&
+    (item.note === undefined || typeof item.note === 'string') &&
+    (item.archivedAt === undefined ||
+      typeof item.archivedAt === 'string') &&
+    typeof item.createdAt === 'string' &&
+    typeof item.updatedAt === 'string'
   )
 }

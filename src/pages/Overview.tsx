@@ -14,27 +14,26 @@ import { activeCurrencySymbol } from '../lib/currency'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { ExpenseTrendChart } from '../components/charts/ExpenseTrendChart'
 import { TransactionRow } from '../components/TransactionRow'
+import { getMonthSpendCents } from '../lib/allocations'
 import {
   buildMonthSeries,
   daysElapsedInMonth,
   formatMoney,
   formatPercent,
-  formatShortDate,
   getCategoryTotals,
   getDaysLeft,
   getMonthTransactions,
   getTotals,
   isCurrentMonth,
-  largestExpense,
   monthLabel,
   percentChange,
   shiftMonth,
 } from '../lib/utils'
-import { getCategory } from '../lib/data'
-import type { LedgerTransaction, View } from '../types'
+import type { LedgerTransaction, Project, View } from '../types'
 
 interface OverviewProps {
   transactions: LedgerTransaction[]
+  projects: Project[]
   monthKey: string
   budget: number
   onAdd: () => void
@@ -63,6 +62,7 @@ function HeroBalance({ value }: { value: number }) {
 
 export function Overview({
   transactions,
+  projects,
   monthKey,
   budget,
   onAdd,
@@ -82,6 +82,9 @@ export function Overview({
 
   const monthTransactions = getMonthTransactions(transactions, monthKey)
   const totals = getTotals(monthTransactions)
+  const spend = getMonthSpendCents(transactions, monthKey)
+  const dailyExpense = spend.dailyCents / 100
+  const projectExpense = spend.projectCents / 100
   const categories = getCategoryTotals(monthTransactions, 'expense')
   const previousKey = shiftMonth(monthKey, -1)
   const todayDay = new Date().getDate()
@@ -94,15 +97,14 @@ export function Overview({
       (item) =>
         item.type === 'expense' && Number(item.date.slice(8, 10)) <= cutoff,
     )
-    .reduce((sum, item) => sum + item.amount, 0)
+    .reduce((sum, item) => sum + item.amountCents / 100, 0)
   const expenseChange = percentChange(totals.expense, previousComparableExpense)
   const comparisonLabel = isCurrentMonth(monthKey) ? '较上月同期' : '较上月'
   const elapsed = Math.max(daysElapsedInMonth(monthKey), 1)
-  const dailyAverage = totals.expense / elapsed
-  const biggest = largestExpense(monthTransactions)
+  const dailyAverage = dailyExpense / elapsed
   const topCategory = categories[0]
-  const remaining = budget - totals.expense
-  const ratio = budget > 0 ? totals.expense / budget : 0
+  const remaining = budget - dailyExpense
+  const ratio = budget > 0 ? dailyExpense / budget : 0
   const daysLeft = getDaysLeft(monthKey)
   const dailyAllowance = daysLeft > 0 ? Math.max(remaining, 0) / daysLeft : 0
   const recent = [...monthTransactions].slice(0, 6)
@@ -150,7 +152,7 @@ export function Overview({
                 <ArrowUpRight size={16} />
               </span>
               <div>
-                <span>支出</span>
+                <span>支出总额</span>
                 <strong>{formatMoney(totals.expense)}</strong>
               </div>
             </div>
@@ -182,7 +184,7 @@ export function Overview({
             <div>
               <p className="card-kicker">MONTHLY BUDGET</p>
               <h2 id="budget-heading">
-                {isCurrentMonth(monthKey) ? '本月预算' : '当月预算'}
+                {isCurrentMonth(monthKey) ? '本月生活预算' : '当月生活预算'}
               </h2>
             </div>
             <button
@@ -198,16 +200,16 @@ export function Overview({
 
           <div className="budget-figure">
             <strong>{formatPercent(ratio * 100)}</strong>
-            <span>已使用</span>
+            <span>生活支出占比</span>
           </div>
 
           <div
             className="budget-meter"
             role="meter"
-            aria-label="预算使用进度"
+            aria-label="生活预算使用进度"
             aria-valuemin={0}
             aria-valuemax={budget}
-            aria-valuenow={Math.min(totals.expense, budget)}
+            aria-valuenow={Math.min(dailyExpense, budget)}
           >
             <span
               className={remaining < 0 ? 'is-over' : ''}
@@ -217,8 +219,8 @@ export function Overview({
 
           <div className="budget-amounts">
             <div>
-              <span>已用</span>
-              <strong>{formatMoney(totals.expense)}</strong>
+              <span>已用生活</span>
+              <strong>{formatMoney(dailyExpense)}</strong>
             </div>
             <div>
               <span>{remaining < 0 ? '超出' : '剩余'}</span>
@@ -231,7 +233,7 @@ export function Overview({
           <div className="budget-foot">
             {remaining < 0 ? (
               <span className="budget-status is-over">
-                已超出预算，接下来慢一点
+                生活支出已超出预算，接下来慢一点
               </span>
             ) : daysLeft > 0 ? (
               <span>
@@ -241,6 +243,11 @@ export function Overview({
             ) : (
               <span>当月预算共 {formatMoney(budget)}</span>
             )}
+            {projectExpense > 0 ? (
+              <span className="budget-project-note">
+                项目支出 {formatMoney(projectExpense)} 单独归集，不占生活预算。
+              </span>
+            ) : null}
           </div>
         </section>
       </div>
@@ -251,12 +258,27 @@ export function Overview({
             <CalendarRange size={18} />
           </span>
           <div>
-            <span className="metric-label">日均支出</span>
-            <strong>{formatMoney(dailyAverage)}</strong>
+            <span className="metric-label">生活支出</span>
+            <strong>{formatMoney(dailyExpense)}</strong>
             <small>
+              日均 {formatMoney(dailyAverage)} ·{' '}
               {isCurrentMonth(monthKey)
                 ? `按已过 ${elapsed} 天计算`
                 : `按 ${elapsed} 天计算`}
+            </small>
+          </div>
+        </div>
+        <div className="metric-item">
+          <span className="metric-icon">
+            <CircleDollarSign size={18} />
+          </span>
+          <div>
+            <span className="metric-label">项目支出</span>
+            <strong>{formatMoney(projectExpense)}</strong>
+            <small>
+              {projectExpense > 0
+                ? '本月按发生月份归集，不占生活预算'
+                : '本月还没有项目支出'}
             </small>
           </div>
         </div>
@@ -269,22 +291,6 @@ export function Overview({
             <strong>{monthTransactions.length} 笔</strong>
             <small>
               支出 {expenseCount} 笔 · 收入 {incomeCount} 笔
-            </small>
-          </div>
-        </div>
-        <div className="metric-item">
-          <span className="metric-icon">
-            <CircleDollarSign size={18} />
-          </span>
-          <div>
-            <span className="metric-label">最大单笔</span>
-            <strong>{biggest ? formatMoney(biggest.amount) : '—'}</strong>
-            <small>
-              {biggest
-                ? `${getCategory(biggest.categoryId).name} · ${
-                    biggest.note || formatShortDate(biggest.date)
-                  }`
-                : '还没有支出记录'}
             </small>
           </div>
         </div>
@@ -320,7 +326,7 @@ export function Overview({
               <h2>支出构成</h2>
               <p className="card-sub">
                 {topCategory
-                  ? `${topCategory.category.name}占了最大一块。`
+                  ? `含项目在内，${topCategory.category.name}占了最大一块。`
                   : '这个月的支出还很轻盈。'}
               </p>
             </div>
@@ -364,6 +370,7 @@ export function Overview({
               <TransactionRow
                 key={transaction.id}
                 transaction={transaction}
+                projects={projects}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 showDate

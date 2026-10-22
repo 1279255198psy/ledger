@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
 import {
+  Archive,
   Check,
   Download,
   FileSpreadsheet,
+  FolderPlus,
   Moon,
+  Pause,
+  Play,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -13,12 +17,19 @@ import {
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
-import { formatMoney } from '../lib/utils'
+import { formatMoney, localDateKey } from '../lib/utils'
 import { CURRENCIES, getCurrency } from '../lib/currency'
 import { FONT_SIZES } from '../lib/fontSize'
 import { PALETTES } from '../lib/themes'
 import type { UpdaterController } from '../hooks/useUpdater'
-import type { Currency, FontSize, Palette, Theme } from '../types'
+import type {
+  Currency,
+  FontSize,
+  Palette,
+  Project,
+  ProjectDraft,
+  Theme,
+} from '../types'
 
 interface SettingsModalProps {
   open: boolean
@@ -27,6 +38,7 @@ interface SettingsModalProps {
   palette: Palette
   fontSize: FontSize
   currency: Currency
+  projects: Project[]
   updater: UpdaterController
   onClose: () => void
   onBudgetSave: (budget: number) => void
@@ -34,6 +46,9 @@ interface SettingsModalProps {
   onPaletteChange: (palette: Palette) => void
   onFontSizeChange: (fontSize: FontSize) => void
   onCurrencyChange: (currency: Currency) => void
+  onCreateProject: (draft: ProjectDraft) => void
+  onToggleProjectStatus: (id: string) => void
+  onToggleProjectArchive: (id: string) => void
   onExportJson: () => void
   onExportCsv: () => void
   onImportFile: (file: File) => void
@@ -47,6 +62,7 @@ export function SettingsModal({
   palette,
   fontSize,
   currency,
+  projects,
   updater,
   onClose,
   onBudgetSave,
@@ -54,6 +70,9 @@ export function SettingsModal({
   onPaletteChange,
   onFontSizeChange,
   onCurrencyChange,
+  onCreateProject,
+  onToggleProjectStatus,
+  onToggleProjectArchive,
   onExportJson,
   onExportCsv,
   onImportFile,
@@ -61,6 +80,10 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const [budgetInput, setBudgetInput] = useState(String(budget))
   const [budgetError, setBudgetError] = useState('')
+  const [projectName, setProjectName] = useState('')
+  const [projectStartDate, setProjectStartDate] = useState(localDateKey())
+  const [projectBudget, setProjectBudget] = useState('')
+  const [projectError, setProjectError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -69,6 +92,56 @@ export function SettingsModal({
       setBudgetError('')
     }
   }, [open, budget])
+
+  useEffect(() => {
+    if (open) {
+      setProjectName('')
+      setProjectStartDate(localDateKey())
+      setProjectBudget('')
+      setProjectError('')
+    }
+  }, [open])
+
+  const handleProjectSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    const name = projectName.trim()
+    if (!name) {
+      setProjectError('请给项目起一个名字')
+      return
+    }
+    if (!projectStartDate) {
+      setProjectError('请选择项目开始日期')
+      return
+    }
+    const budgetValue =
+      projectBudget.trim() === '' ? undefined : Number(projectBudget)
+    if (
+      budgetValue !== undefined &&
+      (!Number.isFinite(budgetValue) || budgetValue < 0)
+    ) {
+      setProjectError('项目预算需要是大于等于 0 的金额')
+      return
+    }
+
+    setProjectError('')
+    onCreateProject({
+      name,
+      startDate: projectStartDate,
+      ...(budgetValue !== undefined && budgetValue > 0
+        ? { budgetCents: Math.round(budgetValue * 100) }
+        : {}),
+    })
+    setProjectName('')
+    setProjectBudget('')
+  }
+
+  const sortedProjects = [...projects].sort((left, right) => {
+    const archived = Number(Boolean(left.archivedAt)) - Number(Boolean(right.archivedAt))
+    if (archived !== 0) return archived
+    const status = Number(left.status === 'closed') - Number(right.status === 'closed')
+    if (status !== 0) return status
+    return right.updatedAt.localeCompare(left.updatedAt)
+  })
 
   const handleBudgetSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -286,7 +359,10 @@ export function SettingsModal({
         <section className="settings-section">
           <div className="settings-heading">
             <h3>月度预算</h3>
-            <p>给每个月留一条温柔的边界，当前预算 {formatMoney(budget)}。</p>
+            <p>
+              给日常生活留一条温柔的边界，当前预算 {formatMoney(budget)}
+              。项目支出单独归集，不占生活预算。
+            </p>
           </div>
           <form className="budget-form" onSubmit={handleBudgetSubmit}>
             <label className="budget-input">
@@ -313,6 +389,140 @@ export function SettingsModal({
               {budgetError}
             </p>
           ) : null}
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-heading">
+            <h3>项目</h3>
+            <p>
+              项目是支出的一种归属，不另立一本账。结束或归档项目不会删除已归集的历史流水。
+            </p>
+          </div>
+
+          <form className="project-form" onSubmit={handleProjectSubmit}>
+            <label className="field project-name-field">
+              <span className="field-label">项目名称</span>
+              <input
+                type="text"
+                value={projectName}
+                onChange={(event) => {
+                  setProjectName(event.target.value)
+                  setProjectError('')
+                }}
+                placeholder="例如：杭州客户网站"
+                maxLength={40}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">开始日期</span>
+              <input
+                type="date"
+                value={projectStartDate}
+                max={localDateKey()}
+                onChange={(event) => setProjectStartDate(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">
+                预算 <span className="optional">选填</span>
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="1"
+                value={projectBudget}
+                onChange={(event) => {
+                  setProjectBudget(event.target.value)
+                  setProjectError('')
+                }}
+                placeholder="0"
+              />
+            </label>
+            <button type="submit" className="button secondary project-create">
+              <FolderPlus size={15} />
+              新建
+            </button>
+          </form>
+
+          {projectError ? (
+            <p className="form-error" role="alert">
+              {projectError}
+            </p>
+          ) : null}
+
+          {sortedProjects.length === 0 ? (
+            <p className="project-empty">
+              还没有项目。新建之后，记账时就能把一笔支出归到项目上。
+            </p>
+          ) : (
+            <div className="project-list">
+              {sortedProjects.map((project) => {
+                const archived = Boolean(project.archivedAt)
+                return (
+                  <div className="project-row" key={project.id}>
+                    <div className="project-row-main">
+                      <strong>
+                        <span className="project-row-name">{project.name}</span>
+                        <span
+                          className={`project-status is-${archived ? 'archived' : project.status}`}
+                        >
+                          {archived
+                            ? '已归档'
+                            : project.status === 'active'
+                              ? '进行中'
+                              : '已结束'}
+                        </span>
+                      </strong>
+                      <small>
+                        {project.startDate}
+                        {project.endDate ? ` → ${project.endDate}` : ''}
+                        {project.budgetCents
+                          ? ` · 预算 ${formatMoney(project.budgetCents / 100)}`
+                          : ''}
+                      </small>
+                    </div>
+                    <div className="project-row-actions">
+                      {archived ? (
+                        <button
+                          type="button"
+                          onClick={() => onToggleProjectArchive(project.id)}
+                        >
+                          恢复
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onToggleProjectStatus(project.id)}
+                          >
+                            {project.status === 'active' ? (
+                              <>
+                                <Pause size={12} />
+                                结束
+                              </>
+                            ) : (
+                              <>
+                                <Play size={12} />
+                                重启
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onToggleProjectArchive(project.id)}
+                          >
+                            <Archive size={12} />
+                            归档
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </section>
 
         <section className="settings-section">

@@ -1,4 +1,5 @@
 import { CATEGORIES, getAccount, getCategory } from './data'
+import { toPostings } from './allocations'
 import { activeCurrencySymbol } from './currency'
 import type {
   CategoryTotal,
@@ -102,17 +103,23 @@ export function getMonthTransactions(
 }
 
 export function sumAmounts(transactions: LedgerTransaction[]): number {
-  return transactions.reduce((sum, item) => sum + item.amount, 0)
+  return (
+    transactions.reduce((sum, item) => sum + item.amountCents, 0) / 100
+  )
 }
 
 export function getTotals(transactions: LedgerTransaction[]): MonthTotals {
-  let income = 0
-  let expense = 0
+  let incomeCents = 0
+  let expenseCents = 0
   for (const item of transactions) {
-    if (item.type === 'income') income += item.amount
-    else expense += item.amount
+    if (item.type === 'income') incomeCents += item.amountCents
+    else expenseCents += item.amountCents
   }
-  return { income, expense, balance: income - expense }
+  return {
+    income: incomeCents / 100,
+    expense: expenseCents / 100,
+    balance: (incomeCents - expenseCents) / 100,
+  }
 }
 
 export function getCategoryTotals(
@@ -120,17 +127,23 @@ export function getCategoryTotals(
   type: TransactionType = 'expense',
 ): CategoryTotal[] {
   const filtered = transactions.filter((item) => item.type === type)
-  const total = sumAmounts(filtered)
+  const totalCents = filtered.reduce(
+    (sum, item) => sum + item.amountCents,
+    0,
+  )
   const grouped = new Map<string, number>()
   for (const item of filtered) {
-    grouped.set(item.categoryId, (grouped.get(item.categoryId) ?? 0) + item.amount)
+    grouped.set(
+      item.categoryId,
+      (grouped.get(item.categoryId) ?? 0) + item.amountCents,
+    )
   }
 
   return [...grouped.entries()]
-    .map(([id, value]) => ({
+    .map(([id, valueCents]) => ({
       category: getCategory(id),
-      value,
-      share: total > 0 ? value / total : 0,
+      value: valueCents / 100,
+      share: totalCents > 0 ? valueCents / totalCents : 0,
     }))
     .sort((a, b) => b.value - a.value)
 }
@@ -144,9 +157,10 @@ export function buildMonthSeries(
   const months: MonthDatum[] = []
   for (let i = count - 1; i >= 0; i -= 1) {
     const key = shiftMonth(endMonth, -i)
-    const value = getMonthTransactions(transactions, key)
-      .filter((item) => item.type === type)
-      .reduce((sum, item) => sum + item.amount, 0)
+    const value =
+      getMonthTransactions(transactions, key)
+        .filter((item) => item.type === type)
+        .reduce((sum, item) => sum + item.amountCents, 0) / 100
     months.push({ key, label: monthShortLabel(key), value })
   }
   return months
@@ -174,13 +188,15 @@ export function buildMonthPairSeries(
 export function buildDailyExpenses(
   transactions: LedgerTransaction[],
   monthKey: string,
+  target: 'all' | 'daily' = 'all',
 ): DailyDatum[] {
   const dayCount = daysInMonthOfKey(monthKey)
   const values = new Array<number>(dayCount + 1).fill(0)
-  for (const item of getMonthTransactions(transactions, monthKey)) {
-    if (item.type !== 'expense') continue
-    const day = Number(item.date.slice(8, 10))
-    values[day] += item.amount
+  for (const posting of toPostings(transactions)) {
+    if (posting.month !== monthKey || posting.kind !== 'expense') continue
+    if (target === 'daily' && posting.targetType !== 'daily') continue
+    const day = Number(posting.date.slice(8, 10))
+    values[day] += posting.signedCents / 100
   }
   return Array.from({ length: dayCount }, (_, index) => ({
     day: index + 1,
@@ -261,7 +277,9 @@ export function largestExpense(
 ): LedgerTransaction | null {
   const expenses = transactions.filter((item) => item.type === 'expense')
   if (expenses.length === 0) return null
-  return expenses.reduce((max, item) => (item.amount > max.amount ? item : max))
+  return expenses.reduce((max, item) =>
+    item.amountCents > max.amountCents ? item : max,
+  )
 }
 
 export function topWeekdaySpending(
@@ -270,7 +288,7 @@ export function topWeekdaySpending(
   const values = new Array<number>(7).fill(0)
   for (const item of transactions) {
     if (item.type !== 'expense') continue
-    values[dateFromKey(item.date).getDay()] += item.amount
+    values[dateFromKey(item.date).getDay()] += item.amountCents / 100
   }
   const max = Math.max(...values)
   if (max <= 0) return null
@@ -302,7 +320,7 @@ export function transactionsToCsv(
     item.type === 'expense' ? '支出' : '收入',
     categoryNameById(item.categoryId),
     getAccount(item.accountId).name,
-    item.amount.toFixed(2),
+    (item.amountCents / 100).toFixed(2),
     item.note,
   ])
   return [

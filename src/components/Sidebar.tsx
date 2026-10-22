@@ -92,9 +92,9 @@ export function Sidebar({
 
       <div className="sidebar-spacer" />
 
-      <section className="sidebar-budget" aria-label="本月预算概况">
+      <section className="sidebar-budget" aria-label="本月生活预算概况">
         <div className="sidebar-budget-head">
-          <span>{monthLabelText}预算</span>
+          <span>{monthLabelText}生活预算</span>
           <strong>{formatPercent(Math.min(ratio * 100, 999))}</strong>
         </div>
         <div className="mini-meter" aria-hidden="true">
