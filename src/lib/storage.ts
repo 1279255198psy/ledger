@@ -2,6 +2,9 @@ import type {
   Category,
   Currency,
   FontSize,
+  IndexGranularity,
+  IndexMetricKey,
+  IndexPreferences,
   LedgerTransaction,
   Liability,
   Palette,
@@ -49,6 +52,7 @@ const KEYS = {
   palette: 'zhangye.palette.v1',
   fontSize: 'zhangye.fontSize.v1',
   currency: 'zhangye.currency.v1',
+  indexPrefs: 'zhangye.indexPrefs.v1',
   seeded: 'zhangye.seeded.v1',
   updatedAt: 'zhangye.updatedAt.v1',
 } as const
@@ -85,6 +89,7 @@ interface DesktopLedgerSnapshot {
   palette: Palette
   fontSize: FontSize
   currency: Currency
+  indexPrefs: IndexPreferences
   seeded: boolean
 }
 
@@ -323,6 +328,10 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   if (isCurrency(snapshot.currency)) {
     safeSet(KEYS.currency, snapshot.currency)
   }
+  const indexPrefs = normalizeIndexPreferences(snapshot.indexPrefs)
+  if (indexPrefs) {
+    safeSet(KEYS.indexPrefs, JSON.stringify(indexPrefs))
+  }
   if (typeof snapshot.seeded === 'boolean') {
     safeSet(KEYS.seeded, String(snapshot.seeded))
   }
@@ -351,6 +360,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     palette: normalizePalette(storedPalette),
     fontSize: normalizeFontSize(safeGet(KEYS.fontSize)),
     currency: normalizeCurrency(safeGet(KEYS.currency)),
+    indexPrefs: loadIndexPreferences(),
     seeded: safeGet(KEYS.seeded) === 'true',
   }
 }
@@ -533,6 +543,61 @@ export function loadCurrency(): Currency {
 
 export function saveCurrency(currency: Currency): void {
   safeSet(KEYS.currency, currency)
+  scheduleDesktopPersist()
+}
+
+const INDEX_METRIC_KEYS: IndexMetricKey[] = [
+  'engel',
+  'savings',
+  'essential',
+  'flexible',
+  'emergency',
+  'debt',
+  'netWorth',
+]
+
+function isIndexMetricKey(value: unknown): value is IndexMetricKey {
+  return (
+    typeof value === 'string' &&
+    INDEX_METRIC_KEYS.includes(value as IndexMetricKey)
+  )
+}
+
+function isGranularity(value: unknown): value is IndexGranularity {
+  return value === 'month' || value === 'quarter'
+}
+
+const DEFAULT_INDEX_PREFERENCES: IndexPreferences = {
+  granularity: 'month',
+  hidden: ['debt'],
+}
+
+function normalizeIndexPreferences(
+  value: unknown,
+): IndexPreferences | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  if (!isGranularity(record.granularity)) return null
+  if (!Array.isArray(record.hidden)) return null
+  const hidden = record.hidden.filter(isIndexMetricKey)
+  return { granularity: record.granularity, hidden }
+}
+
+export function loadIndexPreferences(): IndexPreferences {
+  const raw = safeGet(KEYS.indexPrefs)
+  if (!raw) return DEFAULT_INDEX_PREFERENCES
+  try {
+    return (
+      normalizeIndexPreferences(JSON.parse(raw)) ??
+      DEFAULT_INDEX_PREFERENCES
+    )
+  } catch {
+    return DEFAULT_INDEX_PREFERENCES
+  }
+}
+
+export function saveIndexPreferences(preferences: IndexPreferences): void {
+  safeSet(KEYS.indexPrefs, JSON.stringify(preferences))
   scheduleDesktopPersist()
 }
 

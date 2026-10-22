@@ -2,6 +2,7 @@ import {
   CalendarRange,
   ChartNoAxesColumnIncreasing,
   CreditCard,
+  Gauge,
   LayoutDashboard,
   Moon,
   Plus,
@@ -36,6 +37,7 @@ const NAV_ITEMS: Array<{
   { id: 'projects', label: '项目', icon: CalendarRange },
   { id: 'liabilities', label: '负债', icon: CreditCard },
   { id: 'analytics', label: '统计', icon: ChartNoAxesColumnIncreasing },
+  { id: 'indices', label: '指数', icon: Gauge },
 ]
 
 export function Sidebar({

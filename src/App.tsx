@@ -17,6 +17,7 @@ import { Transactions } from './pages/Transactions'
 import { Projects } from './pages/Projects'
 import { Analytics } from './pages/Analytics'
 import { Liabilities } from './pages/Liabilities'
+import { Indices } from './pages/Indices'
 import {
   createSeedTransactions,
   newProjectId,
@@ -450,6 +451,8 @@ export default function App() {
       accountId: draft.accountId,
       date: draft.date,
       note: draft.note,
+      spendingNature:
+        draft.type === 'expense' ? draft.spendingNature : undefined,
       allocations,
     }
 
@@ -856,6 +859,18 @@ export default function App() {
             onDelete={handleDeleteLiability}
             onAddRepayment={handleAddRepayment}
             onDeleteRepayment={handleDeleteRepayment}
+          />
+        ) : null}
+
+        {view === 'indices' ? (
+          <Indices
+            transactions={transactions}
+            liabilities={liabilities}
+            openingBalance={openingBalance}
+            monthKey={monthKey}
+            onAdd={openAdd}
+            onLoadSample={handleLoadSample}
+            onChangeView={handleChangeView}
           />
         ) : null}
 

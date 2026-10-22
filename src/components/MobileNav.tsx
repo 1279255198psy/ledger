@@ -2,6 +2,7 @@ import {
   CalendarRange,
   ChartNoAxesColumnIncreasing,
   CreditCard,
+  Gauge,
   LayoutDashboard,
   ReceiptText,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ const ITEMS: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = 
   { id: 'projects', label: '项目', icon: CalendarRange },
   { id: 'liabilities', label: '负债', icon: CreditCard },
   { id: 'analytics', label: '统计', icon: ChartNoAxesColumnIncreasing },
+  { id: 'indices', label: '指数', icon: Gauge },
 ]
 
 export function MobileNav({ view, onChangeView }: MobileNavProps) {

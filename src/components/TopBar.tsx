@@ -22,6 +22,10 @@ const PAGE_META: Record<View, { title: string; subtitle: string }> = {
   projects: { title: '项目', subtitle: '在日历上铺开一段时间，把花销归到一处。' },
   liabilities: { title: '负债', subtitle: '欠下的与还上的，都一笔一笔记清楚。' },
   analytics: { title: '统计', subtitle: '从数字里，读懂生活的方向。' },
+  indices: {
+    title: '指数',
+    subtitle: '把流水换算成身体的信号，看看财务是否健康。',
+  },
 }
 
 export function TopBar({

@@ -66,6 +66,18 @@ export function TransactionRow({
           <span>
             {showDate ? formatShortDate(transaction.date) : category.type === 'expense' ? '支出' : '收入'}
           </span>
+          {!isIncome && transaction.spendingNature ? (
+            <>
+              <span className="meta-dot" aria-hidden>
+                ·
+              </span>
+              <span
+                className={`transaction-nature is-${transaction.spendingNature}`}
+              >
+                {transaction.spendingNature === 'essential' ? '刚需' : '弹性'}
+              </span>
+            </>
+          ) : null}
           {projectIds.length > 0 ? (
             <>
               <span className="meta-dot" aria-hidden>

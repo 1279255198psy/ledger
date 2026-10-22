@@ -6,6 +6,27 @@ export type View =
   | 'projects'
   | 'analytics'
   | 'liabilities'
+  | 'indices'
+
+/** 刚需 / 弹性：支出在财务健康指标里的性质。 */
+export type SpendingNature = 'essential' | 'flexible'
+
+export type IndexGranularity = 'month' | 'quarter'
+
+export type IndexMetricKey =
+  | 'engel'
+  | 'savings'
+  | 'essential'
+  | 'flexible'
+  | 'emergency'
+  | 'debt'
+  | 'netWorth'
+
+export interface IndexPreferences {
+  granularity: IndexGranularity
+  /** 被隐藏的指标；综合得分固定显示，不在此列。 */
+  hidden: IndexMetricKey[]
+}
 
 export type Theme = 'light' | 'dark'
 
@@ -43,6 +64,8 @@ export interface LedgerTransaction {
   accountId: string
   date: string
   note: string
+  /** 支出专用；旧数据可能没有标记。 */
+  spendingNature?: SpendingNature
   allocations: AllocationLine[]
   createdAt: string
   updatedAt?: string
@@ -207,5 +230,6 @@ export interface TransactionDraft {
   accountId: string
   date: string
   note: string
+  spendingNature?: SpendingNature
   allocations?: AllocationLine[]
 }

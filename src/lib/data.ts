@@ -4,6 +4,7 @@ import type {
   Category,
   LedgerTransaction,
   Project,
+  SpendingNature,
   TransactionType,
 } from '../types'
 import { isCurrency } from './currency'
@@ -109,6 +110,7 @@ function makeSeedTransaction(
   date: string,
   note: string,
   createdAt: string,
+  spendingNature?: SpendingNature,
 ): LedgerTransaction {
   const amountCents = Math.round(amount * 100)
   return {
@@ -120,10 +122,20 @@ function makeSeedTransaction(
     accountId,
     date,
     note,
+    ...(spendingNature ? { spendingNature } : {}),
     allocations: [makeDailyAllocation(amountCents, `${id}-al-1`)],
     createdAt,
   }
 }
+
+/** Demo data mirrors how a real ledger would be marked. */
+const ESSENTIAL_SEED_CATEGORIES = new Set([
+  'food',
+  'housing',
+  'transport',
+  'medical',
+  'education',
+])
 
 /**
  * Seeds six months of quietly realistic data, relative to the day the ledger
@@ -163,6 +175,9 @@ export function createSeedTransactions(now = new Date()): LedgerTransaction[] {
             9 + (index % 10),
             index % 60,
           ).toISOString(),
+          ESSENTIAL_SEED_CATEGORIES.has(categoryId)
+            ? 'essential'
+            : 'flexible',
         ),
       )
     })
@@ -186,6 +201,9 @@ export function createSeedTransactions(now = new Date()): LedgerTransaction[] {
               15 + (index % 5),
               20 + index,
             ).toISOString(),
+            ESSENTIAL_SEED_CATEGORIES.has(categoryId)
+              ? 'essential'
+              : 'flexible',
           ),
         )
       },
@@ -304,6 +322,9 @@ export function isValidTransaction(
     typeof item.date === 'string' &&
     /^\d{4}-\d{2}-\d{2}$/.test(item.date) &&
     typeof item.note === 'string' &&
+    (item.spendingNature === undefined ||
+      item.spendingNature === 'essential' ||
+      item.spendingNature === 'flexible') &&
     typeof item.createdAt === 'string' &&
     (item.updatedAt === undefined || typeof item.updatedAt === 'string')
   )

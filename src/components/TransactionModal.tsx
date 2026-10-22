@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  Anchor,
   ArrowDownLeft,
   ArrowUpRight,
   CalendarDays,
   Check,
+  Feather,
   Plus,
   Trash2,
   WalletCards,
@@ -38,6 +40,7 @@ import type {
   Category,
   LedgerTransaction,
   Project,
+  SpendingNature,
   TransactionDraft,
   TransactionScope,
   TransactionType,
@@ -264,6 +267,9 @@ export function TransactionModal({
   const [accountId, setAccountId] = useState('wechat')
   const [date, setDate] = useState(defaultDate)
   const [note, setNote] = useState('')
+  const [spendingNature, setSpendingNature] = useState<SpendingNature | ''>(
+    '',
+  )
   const [scope, setScope] = useState<TransactionScope>('daily')
   const [projectId, setProjectId] = useState('')
   const [splitMode, setSplitMode] = useState<SplitMode>('ratio')
@@ -410,6 +416,7 @@ export function TransactionModal({
       setAccountId(editing.accountId)
       setDate(editing.date)
       setNote(editing.note)
+      setSpendingNature(editing.spendingNature ?? '')
       setScope(getScope(editing))
       setProjectId(getProjectIds(editing)[0] ?? '')
       setSplitMode('amount')
@@ -432,6 +439,7 @@ export function TransactionModal({
       setAccountId('wechat')
       setDate(defaultDate)
       setNote('')
+      setSpendingNature('')
       setScope(preferredProject ? 'project' : 'daily')
       setProjectId(
         preferredProject?.id ?? selectableProjects[0]?.id ?? '',
@@ -456,6 +464,7 @@ export function TransactionModal({
   const handleTypeChange = (nextType: TransactionType) => {
     setType(nextType)
     setError('')
+    if (nextType === 'income') setSpendingNature('')
     setCreatorOpen(false)
     const nextCategories = allCategories.filter(
       (category) => category.type === nextType,
@@ -586,6 +595,10 @@ export function TransactionModal({
       setError('请选择一个分类')
       return
     }
+    if (type === 'expense' && !spendingNature) {
+      setError('请标记这笔支出属于「刚需」还是「弹性」')
+      return
+    }
 
     const amountCents = Math.round(numericAmount * 100)
     let allocations: AllocationLine[]
@@ -622,6 +635,9 @@ export function TransactionModal({
       accountId,
       date,
       note: note.trim().slice(0, 80),
+      ...(type === 'expense' && spendingNature
+        ? { spendingNature }
+        : {}),
       allocations,
     })
   }
@@ -1051,6 +1067,57 @@ export function TransactionModal({
               </div>
             ) : null}
           </fieldset>
+
+          {type === 'expense' ? (
+            <fieldset className="form-section nature-section">
+              <legend className="field-label">
+                支出性质 <span className="required-hint">必选</span>
+              </legend>
+              <div
+                className="nature-switch"
+                role="group"
+                aria-label="支出性质"
+              >
+                <button
+                  type="button"
+                  className={`nature-option is-essential${
+                    spendingNature === 'essential' ? ' is-active' : ''
+                  }`}
+                  onClick={() => {
+                    setSpendingNature('essential')
+                    setError('')
+                  }}
+                  aria-pressed={spendingNature === 'essential'}
+                >
+                  <Anchor size={16} />
+                  <span>
+                    <strong>刚需</strong>
+                    <small>难以削减的必需开支</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`nature-option is-flexible${
+                    spendingNature === 'flexible' ? ' is-active' : ''
+                  }`}
+                  onClick={() => {
+                    setSpendingNature('flexible')
+                    setError('')
+                  }}
+                  aria-pressed={spendingNature === 'flexible'}
+                >
+                  <Feather size={16} />
+                  <span>
+                    <strong>弹性</strong>
+                    <small>可以调整或推迟的消费</small>
+                  </span>
+                </button>
+              </div>
+              <p className="nature-hint">
+                刚需如房租、通勤、药品；弹性如娱乐、礼物、升级消费。它会用于计算必要支出占比和财务健康得分。
+              </p>
+            </fieldset>
+          ) : null}
 
           <div className="form-row">
             <label className="field">
