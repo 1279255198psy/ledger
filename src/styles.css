@@ -5442,6 +5442,12 @@ a {
   color: var(--negative);
 }
 
+.data-row-external {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--ink-faint);
+}
+
 .privacy-note {
   display: flex;
   align-items: center;

@@ -3,18 +3,26 @@ import type { CSSProperties, FormEvent } from 'react'
 import {
   Check,
   Download,
+  ExternalLink,
   FileSpreadsheet,
+  Github,
   Moon,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
   Sun,
+  Tag,
   Trash2,
   Upload,
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
 import { CategorySettings } from './CategorySettings'
+import {
+  GITHUB_RELEASES_URL,
+  GITHUB_REPO_URL,
+} from '../lib/github'
+import { openExternalUrl } from '../lib/links'
 import { formatMoney } from '../lib/utils'
 import { CURRENCIES, getCurrency } from '../lib/currency'
 import { FONT_SIZES } from '../lib/fontSize'
@@ -162,16 +170,25 @@ export function SettingsModal({
     updater.phase === 'downloading' ||
     updater.phase === 'ready' ||
     updater.phase === 'installing' ||
+    updater.phase === 'external' ||
     updater.phase === 'error'
 
+  const mobileUpdate = updater.platform === 'mobile'
   let updateActionTitle = '检查更新'
-  let updateActionDetail = '打开更新窗口，检查 GitHub 上的新版本'
+  let updateActionDetail = mobileUpdate
+    ? '从 GitHub Releases 检查手机版新版本'
+    : '打开更新窗口，检查 GitHub 上的新版本'
   if (updater.phase === 'checking') {
     updateActionTitle = '正在检查更新'
     updateActionDetail = '打开更新窗口查看检查进度'
   } else if (updater.phase === 'available') {
     updateActionTitle = `查看新版本 v${updater.version ?? ''}`
-    updateActionDetail = '打开更新窗口，选择立刻更新或下次再说'
+    updateActionDetail = mobileUpdate
+      ? '打开更新窗口，前往浏览器下载安装包'
+      : '打开更新窗口，选择立刻更新或下次再说'
+  } else if (updater.phase === 'external') {
+    updateActionTitle = '更新包已交给浏览器'
+    updateActionDetail = '打开更新窗口查看安装说明'
   } else if (updater.phase === 'downloading') {
     updateActionTitle = '查看下载进度'
     updateActionDetail = '更新正在后台下载，可以继续记账'
@@ -573,9 +590,11 @@ export function SettingsModal({
           <div className="settings-heading">
             <h3>关于账页</h3>
             <p>
-              {updater.supported
-                ? `当前版本 v${updater.currentVersion || '…'}。启动后会自动检查更新，失败时自动重试并在后台定期复查；所有下载与安装操作都在更新弹窗中完成。`
-                : '自动更新只在使用安装版时可用。'}
+              {mobileUpdate
+                ? `当前版本 v${updater.currentVersion || '…'}。启动后会从 GitHub 自动检查新版本，发现更新时提示你下载安装包；下载与安装由系统浏览器完成。`
+                : updater.supported
+                  ? `当前版本 v${updater.currentVersion || '…'}。启动后会自动检查更新，失败时自动重试并在后台定期复查；所有下载与安装操作都在更新弹窗中完成。`
+                  : '自动更新只在使用安装版时可用。'}
             </p>
           </div>
 
@@ -601,6 +620,45 @@ export function SettingsModal({
               </button>
             </div>
           ) : null}
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-heading">
+            <h3>在 GitHub 上关注账页</h3>
+            <p>
+              账页是一个本地优先的小项目，源码、版本发布记录和安装包都公开在 GitHub。遇到问题、想看看更新细节，或者想提交建议，都可以从下面进入。
+            </p>
+          </div>
+          <div className="data-actions">
+            <button
+              type="button"
+              className="data-row"
+              onClick={() => void openExternalUrl(GITHUB_REPO_URL)}
+            >
+              <span className="data-row-icon">
+                <Github size={18} />
+              </span>
+              <span className="data-row-text">
+                <strong>账页的 GitHub 仓库</strong>
+                <small>github.com/1279255198psy/ledger</small>
+              </span>
+              <ExternalLink size={15} className="data-row-external" />
+            </button>
+            <button
+              type="button"
+              className="data-row"
+              onClick={() => void openExternalUrl(GITHUB_RELEASES_URL)}
+            >
+              <span className="data-row-icon">
+                <Tag size={18} />
+              </span>
+              <span className="data-row-text">
+                <strong>版本发布记录</strong>
+                <small>查看历史版本与安装包</small>
+              </span>
+              <ExternalLink size={15} className="data-row-external" />
+            </button>
+          </div>
         </section>
       </div>
     </Modal>

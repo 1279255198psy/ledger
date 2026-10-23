@@ -4,11 +4,13 @@ import {
   CircleAlert,
   CircleCheck,
   Download,
+  ExternalLink,
   LoaderCircle,
   ShieldCheck,
   Sparkles,
   X,
 } from 'lucide-react'
+import { openExternalUrl } from '../lib/links'
 import { Modal } from './Modal'
 import type { UpdaterController } from '../hooks/useUpdater'
 
@@ -24,6 +26,7 @@ function formatBytes(bytes: number): string {
 
 export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
   const { phase } = updater
+  const mobile = updater.platform === 'mobile'
   const open =
     updater.dialogOpen && !suspended && phase !== 'idle'
   const percent =
@@ -51,6 +54,7 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
     title = `正在下载 v${updater.version ?? ''}`
   } else if (phase === 'ready') title = '新版本已经准备好'
   else if (phase === 'installing') title = '正在安装更新'
+  else if (phase === 'external') title = '更新包已交给浏览器'
   else if (phase === 'error') title = '这次更新没有完成'
 
   let emblem: ReactNode = null
@@ -58,7 +62,11 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
     emblem = <LoaderCircle size={24} className="is-spinning" />
   } else if (phase === 'available') {
     emblem = <Sparkles size={24} />
-  } else if (phase === 'ready' || phase === 'up-to-date') {
+  } else if (
+    phase === 'ready' ||
+    phase === 'up-to-date' ||
+    phase === 'external'
+  ) {
     emblem = <CircleCheck size={24} />
   } else if (phase === 'error') {
     emblem = <CircleAlert size={24} />
@@ -95,9 +103,20 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
           data-autofocus
         >
           <Download size={15} />
-          立刻更新
+          {mobile ? '前往下载' : '立刻更新'}
         </button>
       </>
+    )
+  } else if (phase === 'external') {
+    footer = (
+      <button
+        type="button"
+        className="button primary"
+        onClick={updater.dismissDialog}
+        data-autofocus
+      >
+        知道了
+      </button>
     )
   } else if (phase === 'downloading') {
     footer = (
@@ -164,7 +183,7 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
         </button>
         <button
           type="button"
-          className="button primary"
+          className="button secondary"
           onClick={() => {
             if (updater.errorStage === 'check') {
               void updater.checkForUpdates()
@@ -172,9 +191,21 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
               void updater.startDownload()
             }
           }}
-          data-autofocus
         >
           {updater.errorStage === 'check' ? '重新检查' : '重新下载'}
+        </button>
+        <button
+          type="button"
+          className="button primary"
+          onClick={() =>
+            void openExternalUrl(
+              updater.releaseUrl ?? updater.manualDownloadUrl,
+            )
+          }
+          data-autofocus
+        >
+          <ExternalLink size={15} />
+          手动下载
         </button>
       </>
     )
@@ -221,7 +252,9 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
           <p className="update-lead">
             {updater.checkAttempt > 1
               ? `网络响应不稳定，正在自动重试（第 ${updater.checkAttempt} 次，共 3 次）。`
-              : '正在读取 GitHub Releases 上的更新清单，通常只需要几秒钟。'}
+              : mobile
+                ? '正在从 GitHub Releases 读取最新版本，通常只需要几秒钟。'
+                : '正在读取 GitHub Releases 上的更新清单，通常只需要几秒钟。'}
           </p>
         ) : null}
 
@@ -247,7 +280,9 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
               </span>
             </div>
             <p className="update-lead">
-              这次更新会保留全部账本、预算和外观设置。下载完成后，账页会再问你一次是否现在安装。
+              {mobile
+                ? '下载会交给系统浏览器完成，打开下载好的安装包即可覆盖安装。账本、预算和外观设置都会保留。'
+                : '这次更新会保留全部账本、预算和外观设置。下载完成后，账页会再问你一次是否现在安装。'}
             </p>
             {updater.notes ? (
               <div className="update-release-notes">
@@ -257,7 +292,9 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
             ) : null}
             <p className="update-security-note">
               <ShieldCheck size={13} />
-              只从 GitHub Releases 获取更新，安装前校验签名；账目不会上传。
+              {mobile
+                ? '只从 GitHub Releases 获取手机安装包，请确认下载来源是账页仓库；账目不会上传。'
+                : '只从 GitHub Releases 获取更新，安装前校验签名；账目不会上传。'}
             </p>
           </>
         ) : null}
@@ -335,6 +372,26 @@ export function UpdateDialog({ updater, suspended }: UpdateDialogProps) {
             <p className="update-security-note">
               <ShieldCheck size={13} />
               账本已经写入本机，安装过程不会影响已有数据。
+            </p>
+          </>
+        ) : null}
+
+        {phase === 'external' ? (
+          <>
+            <p className="update-lead">
+              浏览器已经开始下载 v{updater.version ?? ''} 的安装包。下载完成后，
+              打开通知栏或文件管理器点击安装；如果系统询问，请允许浏览器安装应用。
+            </p>
+            <div className="update-ready-card">
+              <CircleCheck size={18} />
+              <div>
+                <strong>安装包不会自动覆盖账本</strong>
+                <span>覆盖安装后，流水、预算与外观设置都会保留</span>
+              </div>
+            </div>
+            <p className="update-security-note">
+              <ShieldCheck size={13} />
+              请确认安装包来自账页的 GitHub Releases；账目不会上传。
             </p>
           </>
         ) : null}

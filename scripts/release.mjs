@@ -561,6 +561,26 @@ async function waitForWorkflow(sha, target) {
   log('  ✓ Actions 构建成功');
 }
 
+// ---------- 手机安装包 ----------
+
+function uploadAndroidApk(target) {
+  const candidates = [
+    process.env.ZHANGYE_ANDROID_APK,
+    join(ROOT, '..', 'ledger-android', 'release', `账页-v${target}-android.apk`),
+    join(ROOT, '..', `账页-v${target}-android.apk`),
+  ].filter(Boolean);
+  const apk = candidates.find((path) => existsSync(path));
+
+  if (!apk) {
+    log('  ! 未找到手机安装包，Release 将不包含 .apk（手机端会提示手动下载）');
+    return;
+  }
+
+  log(`→ 上传手机安装包 ${apk} …`);
+  run('gh', ['release', 'upload', `v${target}`, apk, '--repo', REPO, '--clobber']);
+  log('  ✓ 手机安装包已上传');
+}
+
 // ---------- 发布草稿与校验 ----------
 
 async function findRelease(target) {
@@ -590,6 +610,7 @@ async function publishDraft(target) {
   const installer = names.find((name) => /\.exe$/i.test(name));
   const signature = names.find((name) => /\.exe\.sig$/i.test(name));
   const hasLatestJson = names.includes('latest.json');
+  const androidApk = names.find((name) => /\.apk$/i.test(name));
 
   if (!installer) throw new Error(`Release ${tag} 中没有找到 .exe 安装包。`);
   if (!signature) throw new Error(`Release ${tag} 中没有找到 .exe.sig 更新签名。`);
@@ -597,6 +618,8 @@ async function publishDraft(target) {
   log(`  ✓ 安装包：${installer}`);
   log(`  ✓ 更新签名：${signature}`);
   log('  ✓ 更新清单：latest.json');
+  if (androidApk) log(`  ✓ 手机安装包：${androidApk}`);
+  else log('  ! 本次 Release 不包含 .apk，手机端会提示前往 GitHub 手动下载');
 
   if (release.isDraft) {
     run('gh', ['release', 'edit', tag, '--repo', REPO, '--draft=false', '--latest']);
@@ -658,8 +681,9 @@ function printPlan(target) {
   log(`  3. git commit "release: v${target}" 并创建 tag v${target}`);
   log(`  4. 推送 ${BRANCH} 与 tag 到 ${REPO}`);
   log('  5. 等待 GitHub Actions 构建、签名并上传草稿 Release');
-  log('  6. 校验安装包、.sig、latest.json 后发布草稿并标记 Latest');
-  log('  7. 校验应用内更新地址返回新版本');
+  log('  6. 上传手机安装包 .apk（若本地存在）');
+  log('  7. 校验安装包、.sig、latest.json 后发布草稿并标记 Latest');
+  log('  8. 校验应用内更新地址返回新版本');
   log('');
   log('本次为试运行，未修改任何文件、未推送、未发布。');
 }
@@ -689,6 +713,7 @@ async function main() {
   log('');
   await waitForWorkflow(head, target);
   log('');
+  uploadAndroidApk(target);
   const releaseUrl = await publishDraft(target);
   log('');
   await verifyLatestJson(target);
