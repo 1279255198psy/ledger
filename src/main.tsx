@@ -8,6 +8,7 @@ import {
   loadFontSize,
 } from './lib/storage'
 import './styles.css'
+import './budget.css'
 
 async function bootstrap() {
   await hydrateDesktopStorage()

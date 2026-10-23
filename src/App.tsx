@@ -26,15 +26,14 @@ import {
 } from './lib/data'
 import {
   detachProjectAllocations,
-  getMonthSpendCents,
   makeDailyAllocation,
   scaleAllocations,
   sumAllocationCents,
 } from './lib/allocations'
 import {
-  DEFAULT_BUDGET,
   ImportError,
-  loadBudget,
+  loadBudgetRanges,
+  loadBudgets,
   loadCategories,
   loadCurrency,
   loadFontSize,
@@ -45,7 +44,8 @@ import {
   loadTheme,
   loadTransactions,
   parseBackup,
-  saveBudget,
+  saveBudgetRanges,
+  saveBudgets,
   saveCategories,
   saveCurrency,
   saveFontSize,
@@ -56,6 +56,11 @@ import {
   saveTheme,
   saveTransactions,
 } from './lib/storage'
+import {
+  getMonthBudgetMetrics,
+  getRangeBudgetMetrics,
+  rangeOverlapsMonth,
+} from './lib/budget'
 import {
   DEFAULT_CATEGORIES,
   newCategoryId,
@@ -81,15 +86,18 @@ import {
 } from './lib/utils'
 import type {
   AllocationLine,
+  BudgetBook,
   Category,
   Currency,
   FontSize,
   LedgerTransaction,
   Liability,
   LiabilityDraft,
+  MonthBudget,
   Palette,
   Project,
   ProjectDraft,
+  RangeBudget,
   RepaymentDraft,
   Theme,
   TransactionDraft,
@@ -126,7 +134,9 @@ export default function App() {
     useState<LedgerTransaction[]>(loadTransactions)
   const [projects, setProjects] = useState<Project[]>(loadProjects)
   const [liabilities, setLiabilities] = useState<Liability[]>(loadLiabilities)
-  const [budget, setBudget] = useState(loadBudget)
+  const [budgets, setBudgets] = useState<BudgetBook>(loadBudgets)
+  const [budgetRanges, setBudgetRanges] =
+    useState<RangeBudget[]>(loadBudgetRanges)
   const [openingBalance, setOpeningBalance] = useState(loadOpeningBalance)
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [palette, setPalette] = useState<Palette>(loadPalette)
@@ -143,13 +153,31 @@ export default function App() {
   >(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsFocus, setSettingsFocus] = useState<
-    'opening-balance' | null
+    'opening-balance' | 'budget' | 'budget-ranges' | null
   >(null)
   const [toast, setToast] = useState<ToastState | null>(null)
   const updater = useUpdater()
 
   const latestMonth = currentMonthKey()
-  const monthSpend = getMonthSpendCents(transactions, monthKey)
+  const budgetMetrics = useMemo(
+    () => getMonthBudgetMetrics(transactions, monthKey, budgets),
+    [transactions, monthKey, budgets],
+  )
+  // Each range is scored on its own dates; crossing a month boundary never
+  // splits the amount or reconciles it against that month's budget.
+  const budgetRangeMetrics = useMemo(
+    () =>
+      budgetRanges.map((range) => getRangeBudgetMetrics(transactions, range)),
+    [budgetRanges, transactions],
+  )
+  // The month views only surface ranges that actually touch the shown month.
+  const monthRangeMetrics = useMemo(
+    () =>
+      budgetRangeMetrics.filter((entry) =>
+        rangeOverlapsMonth(entry.range, monthKey),
+      ),
+    [budgetRangeMetrics, monthKey],
+  )
 
   const categoryTransactionUsage = useMemo(() => {
     const usage: Record<string, number> = {}
@@ -188,8 +216,12 @@ export default function App() {
   }, [liabilities])
 
   useEffect(() => {
-    saveBudget(budget)
-  }, [budget])
+    saveBudgets(budgets)
+  }, [budgets])
+
+  useEffect(() => {
+    saveBudgetRanges(budgetRanges)
+  }, [budgetRanges])
 
   useEffect(() => {
     saveOpeningBalance(openingBalance)
@@ -510,9 +542,43 @@ export default function App() {
     })
   }
 
-  const handleBudgetSave = (nextBudget: number) => {
-    setBudget(nextBudget)
-    showToast('月度预算已更新')
+  const handleBudgetSave = (nextBudget: MonthBudget) => {
+    setBudgets((current) => ({ ...current, [nextBudget.month]: nextBudget }))
+    showToast(`${monthLabel(nextBudget.month)}预算已更新`)
+  }
+
+  const handleRangeSave = (nextRange: RangeBudget) => {
+    setBudgetRanges((current) => {
+      const exists = current.some((item) => item.id === nextRange.id)
+      const next = exists
+        ? current.map((item) =>
+            item.id === nextRange.id ? nextRange : item,
+          )
+        : [...current, nextRange]
+      return next.sort(
+        (left, right) =>
+          left.startDate.localeCompare(right.startDate) ||
+          left.endDate.localeCompare(right.endDate),
+      )
+    })
+    showToast(
+      nextRange.name
+        ? `区间预算「${nextRange.name}」已更新`
+        : '区间预算已更新',
+    )
+  }
+
+  const handleRangeDelete = async (id: string): Promise<boolean> => {
+    const range = budgetRanges.find((item) => item.id === id)
+    if (!range) return false
+    const confirmed = await confirmDesktopAction(
+      `确定删除区间预算「${range.name || `${range.startDate} 至 ${range.endDate}`}」吗？此操作无法撤销。`,
+      '删除区间预算',
+    )
+    if (!confirmed) return false
+    setBudgetRanges((current) => current.filter((item) => item.id !== id))
+    showToast('区间预算已删除')
+    return true
   }
 
   const handleOpeningBalanceSave = (nextBalance: number) => {
@@ -664,8 +730,10 @@ export default function App() {
       app: '账页',
       version: 2,
       exportedAt: new Date().toISOString(),
-      budget,
-      budgetCents: Math.round(budget * 100),
+      budget: budgetMetrics.amountCents / 100,
+      budgetCents: budgetMetrics.amountCents,
+      budgets,
+      budgetRanges,
       openingBalance,
       openingBalanceCents: Math.round(openingBalance * 100),
       categories,
@@ -715,7 +783,10 @@ export default function App() {
       if (imported.liabilities !== null) {
         setLiabilities(imported.liabilities)
       }
-      if (imported.budget !== null) setBudget(imported.budget)
+      if (imported.budgets !== null) setBudgets(imported.budgets)
+      if (imported.budgetRanges !== null) {
+        setBudgetRanges(imported.budgetRanges)
+      }
       if (imported.openingBalance !== null) {
         setOpeningBalance(imported.openingBalance)
       }
@@ -752,7 +823,8 @@ export default function App() {
     setTransactions(seed)
     setProjects([])
     setLiabilities([])
-    setBudget(DEFAULT_BUDGET)
+    setBudgets({})
+    setBudgetRanges([])
     setOpeningBalance(0)
     setMonthKey(currentMonthKey())
     setSettingsOpen(false)
@@ -769,7 +841,8 @@ export default function App() {
     setTransactions([])
     setProjects([])
     setLiabilities([])
-    setBudget(DEFAULT_BUDGET)
+    setBudgets({})
+    setBudgetRanges([])
     setOpeningBalance(0)
     setMonthKey(currentMonthKey())
     setSettingsOpen(false)
@@ -782,8 +855,8 @@ export default function App() {
       <Sidebar
         view={view}
         monthLabelText={monthLabel(monthKey)}
-        expense={monthSpend.dailyCents / 100}
-        budget={budget}
+        budgetMetrics={budgetMetrics}
+        rangeMetrics={budgetRangeMetrics}
         theme={theme}
         onChangeView={handleChangeView}
         onAdd={openAdd}
@@ -814,13 +887,22 @@ export default function App() {
             transactions={transactions}
             projects={projects}
             monthKey={monthKey}
-            budget={budget}
+            budgetMetrics={budgetMetrics}
+            rangeMetrics={monthRangeMetrics}
             openingBalance={openingBalance}
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={handleDeleteTransaction}
             onChangeView={handleChangeView}
             onOpenBudget={() => {
+              setSettingsFocus('budget')
+              setSettingsOpen(true)
+            }}
+            onOpenRangeBudget={() => {
+              setSettingsFocus('budget-ranges')
+              setSettingsOpen(true)
+            }}
+            onOpenOpeningBalance={() => {
               setSettingsFocus('opening-balance')
               setSettingsOpen(true)
             }}
@@ -861,9 +943,18 @@ export default function App() {
             transactions={transactions}
             projects={projects}
             monthKey={monthKey}
-            budget={budget}
+            budgetMetrics={budgetMetrics}
+            rangeMetrics={monthRangeMetrics}
             onAdd={openAdd}
             onChangeView={handleChangeView}
+            onOpenBudget={() => {
+              setSettingsFocus('budget')
+              setSettingsOpen(true)
+            }}
+            onOpenRangeBudget={() => {
+              setSettingsFocus('budget-ranges')
+              setSettingsOpen(true)
+            }}
             onLoadSample={handleLoadSample}
           />
         ) : null}
@@ -928,7 +1019,10 @@ export default function App() {
       <SettingsModal
         open={settingsOpen}
         focusSection={settingsFocus}
-        budget={budget}
+        monthKey={monthKey}
+        budgets={budgets}
+        ranges={budgetRanges}
+        transactions={transactions}
         openingBalance={openingBalance}
         theme={theme}
         palette={palette}
@@ -943,6 +1037,8 @@ export default function App() {
           setSettingsFocus(null)
         }}
         onBudgetSave={handleBudgetSave}
+        onRangeSave={handleRangeSave}
+        onRangeDelete={handleRangeDelete}
         onOpeningBalanceSave={handleOpeningBalanceSave}
         onCreateCategory={handleCreateCategory}
         onUpdateCategory={handleUpdateCategory}

@@ -36,6 +36,144 @@ export type Currency = 'CNY' | 'USD' | 'GBP' | 'EUR' | 'JPY' | 'KRW'
 
 export type FontSize = 'small' | 'standard' | 'large' | 'xlarge'
 
+/** How the daily budget is derived for one month. */
+export type DailyBudgetMode = 'off' | 'auto' | 'manual'
+
+/** A budget plan belongs to one concrete month; months never share values. */
+export interface MonthBudget {
+  /** YYYY-MM */
+  month: string
+  amountCents: number
+  dailyMode: DailyBudgetMode
+  /** Manual daily amounts, keyed by calendar day ("1" … "31"). */
+  dailyAmountsCents?: Record<string, number>
+  /** Monthly caps for top-level expense categories, keyed by category id. */
+  categoryBudgetsCents?: Record<string, number>
+}
+
+/** Every month the user has explicitly configured. */
+export type BudgetBook = Record<string, MonthBudget>
+
+/**
+ * A budget for an arbitrary inclusive date range. It uses the same amount,
+ * daily and category rules as a month budget; when the range crosses months the
+ * days stay one continuous plan and no monthly totals are reconciled.
+ */
+export interface RangeBudget {
+  id: string
+  /** Optional label such as 旅行 or 装修. */
+  name?: string
+  /** YYYY-MM-DD */
+  startDate: string
+  /** YYYY-MM-DD */
+  endDate: string
+  amountCents: number
+  dailyMode: DailyBudgetMode
+  /** Manual daily amounts, keyed by date (YYYY-MM-DD). */
+  dailyAmountsCents?: Record<string, number>
+  /** Caps for top-level expense categories, keyed by category id. */
+  categoryBudgetsCents?: Record<string, number>
+}
+
+export type BudgetSource = 'set' | 'inherited' | 'default'
+
+export interface ResolvedMonthBudget {
+  budget: MonthBudget
+  source: BudgetSource
+  /** The month this plan was inherited from, when source is 'inherited'. */
+  sourceMonth?: string
+}
+
+export interface CategoryBudgetStatus {
+  categoryId: string
+  category: Category
+  budgetCents: number
+  spentCents: number
+  remainingCents: number
+  ratio: number
+}
+
+export interface DailyBudgetDay {
+  /** 1-based position inside the month or custom range. */
+  day: number
+  /** YYYY-MM-DD */
+  date: string
+  budgetCents: number
+  spentCents: number
+  remainingCents: number
+  /** True when auto mode moved this day away from the even split. */
+  autoAdjusted: boolean
+}
+
+export interface DailyBudgetStatus {
+  mode: Exclude<DailyBudgetMode, 'off'>
+  days: DailyBudgetDay[]
+  /** Even split across the whole month or range. */
+  baseDailyCents: number
+  /** Day index treated as "today" (clamped into the scope). */
+  today: number
+  /** Date treated as "today" (clamped into the scope). */
+  todayDate: string
+  /** True when today really falls inside this month or range. */
+  isLive: boolean
+  todayBudgetCents: number
+  todaySpentCents: number
+  todayRemainingCents: number
+  /** Tomorrow's allowance after today's actual spending (live scopes only). */
+  tomorrowBudgetCents: number | null
+  overToday: boolean
+  overSeverity: 'none' | 'warn' | 'serious'
+  overByCents: number
+  /** Manual mode: sum of every day's amount. */
+  manualTotalCents: number
+  /** Manual mode: daily total minus the scope amount. */
+  manualMismatchCents: number
+  /** Manual mode: later day allowances exceed the remaining scope amount. */
+  manualShortfallCents: number
+  allowanceTooLow: boolean
+  allowanceTooHigh: boolean
+  remainingCents: number
+  daysLeft: number
+}
+
+export interface MonthBudgetMetrics {
+  monthKey: string
+  amountCents: number
+  spentCents: number
+  remainingCents: number
+  ratio: number
+  source: BudgetSource
+  sourceMonth?: string
+  daily: DailyBudgetStatus | null
+  categories: CategoryBudgetStatus[]
+  categoryBudgetTotalCents: number
+  unallocatedCents: number
+  overBudget: boolean
+}
+
+export interface RangeBudgetMetrics {
+  range: RangeBudget
+  /** YYYY-MM-DD, inclusive. */
+  startDate: string
+  /** YYYY-MM-DD, inclusive. */
+  endDate: string
+  dayCount: number
+  amountCents: number
+  spentCents: number
+  remainingCents: number
+  ratio: number
+  /** True while today falls inside the range. */
+  active: boolean
+  /** Days from the start up to today (0 before the range starts). */
+  elapsedDays: number
+  daysLeft: number
+  daily: DailyBudgetStatus | null
+  categories: CategoryBudgetStatus[]
+  categoryBudgetTotalCents: number
+  unallocatedCents: number
+  overBudget: boolean
+}
+
 export type ProjectStatus = 'active' | 'closed'
 
 export type AllocationTarget = 'daily' | 'project'

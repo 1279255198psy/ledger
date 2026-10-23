@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowDownLeft,
   ArrowRight,
   ArrowUpRight,
@@ -10,12 +11,15 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { BalanceSummary } from '../components/BalanceSummary'
+import { CategoryIcon } from '../components/CategoryIcon'
 import { CategoryBars } from '../components/charts/CategoryBars'
+import { RangeBudgetPanel } from '../components/RangeBudgetPanel'
 import { activeCurrencySymbol } from '../lib/currency'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { ExpenseTrendChart } from '../components/charts/ExpenseTrendChart'
 import { TransactionRow } from '../components/TransactionRow'
 import { getMonthSpendCents } from '../lib/allocations'
+import { getBudgetWarnings } from '../lib/budget'
 import {
   buildMonthSeries,
   daysElapsedInMonth,
@@ -27,22 +31,32 @@ import {
   getTotals,
   isCurrentMonth,
   monthLabel,
+  monthShortLabel,
   percentChange,
   shiftMonth,
 } from '../lib/utils'
-import type { LedgerTransaction, Project, View } from '../types'
+import type {
+  LedgerTransaction,
+  MonthBudgetMetrics,
+  Project,
+  RangeBudgetMetrics,
+  View,
+} from '../types'
 
 interface OverviewProps {
   transactions: LedgerTransaction[]
   projects: Project[]
   monthKey: string
-  budget: number
+  budgetMetrics: MonthBudgetMetrics
+  rangeMetrics: RangeBudgetMetrics[]
   openingBalance: number
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
   onDelete: (id: string) => void
   onChangeView: (view: View) => void
   onOpenBudget: () => void
+  onOpenRangeBudget: () => void
+  onOpenOpeningBalance: () => void
   onLoadSample: () => void
 }
 
@@ -66,13 +80,16 @@ export function Overview({
   transactions,
   projects,
   monthKey,
-  budget,
+  budgetMetrics,
+  rangeMetrics,
   openingBalance,
   onAdd,
   onEdit,
   onDelete,
   onChangeView,
   onOpenBudget,
+  onOpenRangeBudget,
+  onOpenOpeningBalance,
   onLoadSample,
 }: OverviewProps) {
   if (transactions.length === 0) {
@@ -82,7 +99,7 @@ export function Overview({
           transactions={transactions}
           monthKey={monthKey}
           openingBalance={openingBalance}
-          onAdjustOpeningBalance={onOpenBudget}
+          onAdjustOpeningBalance={onOpenOpeningBalance}
         />
         <EmptyLedger onAdd={onAdd} onLoadSample={onLoadSample} />
       </div>
@@ -92,8 +109,9 @@ export function Overview({
   const monthTransactions = getMonthTransactions(transactions, monthKey)
   const totals = getTotals(monthTransactions)
   const spend = getMonthSpendCents(transactions, monthKey)
-  const dailyExpense = spend.dailyCents / 100
+  const dailyExpense = budgetMetrics.spentCents / 100
   const projectExpense = spend.projectCents / 100
+  const budget = budgetMetrics.amountCents / 100
   const categories = getCategoryTotals(monthTransactions, 'expense')
   const previousKey = shiftMonth(monthKey, -1)
   const todayDay = new Date().getDate()
@@ -112,10 +130,27 @@ export function Overview({
   const elapsed = Math.max(daysElapsedInMonth(monthKey), 1)
   const dailyAverage = dailyExpense / elapsed
   const topCategory = categories[0]
-  const remaining = budget - dailyExpense
-  const ratio = budget > 0 ? dailyExpense / budget : 0
+  const remaining = budgetMetrics.remainingCents / 100
+  const ratio = budgetMetrics.ratio
   const daysLeft = getDaysLeft(monthKey)
   const dailyAllowance = daysLeft > 0 ? Math.max(remaining, 0) / daysLeft : 0
+  const daily = budgetMetrics.daily
+  const isCurrent = isCurrentMonth(monthKey)
+  const budgetWarnings = getBudgetWarnings(budgetMetrics)
+  const overDailyDays = daily
+    ? daily.days.filter(
+        (entry) => entry.budgetCents > 0 && entry.spentCents > entry.budgetCents,
+      ).length
+    : 0
+  const sortedCategoryBudgets = [...budgetMetrics.categories].sort(
+    (left, right) => right.ratio - left.ratio,
+  )
+  const budgetSourceNote =
+    budgetMetrics.source === 'inherited' && budgetMetrics.sourceMonth
+      ? `沿用 ${monthShortLabel(budgetMetrics.sourceMonth)} 的预算`
+      : budgetMetrics.source === 'default'
+        ? '默认预算 · 可在设置中调整'
+        : null
   const recent = [...monthTransactions].slice(0, 6)
   const expenseCount = monthTransactions.filter(
     (item) => item.type === 'expense',
@@ -191,10 +226,13 @@ export function Overview({
         <section className="card budget-card" aria-labelledby="budget-heading">
           <div className="card-head">
             <div>
-              <p className="card-kicker">MONTHLY BUDGET</p>
+              <p className="card-kicker">BUDGET</p>
               <h2 id="budget-heading">
-                {isCurrentMonth(monthKey) ? '本月生活预算' : '当月生活预算'}
+                {isCurrent ? '本月生活预算' : '当月生活预算'}
               </h2>
+              {budgetSourceNote ? (
+                <p className="budget-source-note">{budgetSourceNote}</p>
+              ) : null}
             </div>
             <button
               type="button"
@@ -209,7 +247,7 @@ export function Overview({
 
           <div className="budget-figure">
             <strong>{formatPercent(ratio * 100)}</strong>
-            <span>生活支出占比</span>
+            <span>生活支出占比 · 月预算 {formatMoney(budget)}</span>
           </div>
 
           <div
@@ -239,6 +277,209 @@ export function Overview({
             </div>
           </div>
 
+          {daily ? (
+            <div
+              className={`daily-budget${
+                isCurrent && daily.overToday ? ' is-over' : ''
+              }`}
+            >
+              <div className="daily-budget-head">
+                <span>
+                  每日预算 ·{' '}
+                  {daily.mode === 'auto' ? '自动均分' : '自定义'}
+                </span>
+                <span
+                  className={`daily-budget-chip${
+                    isCurrent && daily.overToday ? ' is-over' : ''
+                  }`}
+                >
+                  {isCurrent
+                    ? daily.overToday
+                      ? '今日超出'
+                      : '今日在额度内'
+                    : `本月 ${overDailyDays} 天超出`}
+                </span>
+              </div>
+
+              {isCurrent ? (
+                <>
+                  <div className="daily-budget-figures">
+                    <div>
+                      <span>今日额度</span>
+                      <strong>
+                        {formatMoney(daily.todayBudgetCents / 100)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>今日已用</span>
+                      <strong
+                        className={
+                          daily.todayRemainingCents < 0 ? 'is-negative' : ''
+                        }
+                      >
+                        {formatMoney(daily.todaySpentCents / 100)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>
+                        {daily.todayRemainingCents < 0 ? '超出' : '剩余'}
+                      </span>
+                      <strong
+                        className={
+                          daily.todayRemainingCents < 0 ? 'is-negative' : ''
+                        }
+                      >
+                        {formatMoney(
+                          Math.abs(daily.todayRemainingCents) / 100,
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                  <div className="daily-budget-meter" aria-hidden="true">
+                    <span
+                      className={
+                        daily.todayRemainingCents < 0 ? 'is-over' : ''
+                      }
+                      style={{
+                        width: `${Math.min(
+                          daily.todayBudgetCents > 0
+                            ? (daily.todaySpentCents /
+                                daily.todayBudgetCents) *
+                                100
+                            : 100,
+                          100,
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="daily-budget-note">
+                    {daily.mode === 'auto' ? (
+                      daily.tomorrowBudgetCents !== null ? (
+                        <>
+                          月均分 {formatMoney(daily.baseDailyCents / 100)}，
+                          明天将自动调整为{' '}
+                          <strong>
+                            {formatMoney(daily.tomorrowBudgetCents / 100)}
+                          </strong>
+                          。
+                        </>
+                      ) : (
+                        <>月底最后一天，额度会随剩余余额自动收拢。</>
+                      )
+                    ) : (
+                      <>
+                        手动额度固定；若今日超出，可在预算设置中重排剩余天数。
+                      </>
+                    )}
+                  </p>
+                </>
+              ) : (
+                <div className="daily-budget-figures">
+                  <div>
+                    <span>每日均分</span>
+                    <strong>{formatMoney(daily.baseDailyCents / 100)}</strong>
+                  </div>
+                  <div>
+                    <span>
+                      {daily.mode === 'manual' ? '每日合计' : '日均支出'}
+                    </span>
+                    <strong>
+                      {daily.mode === 'manual'
+                        ? formatMoney(daily.manualTotalCents / 100)
+                        : formatMoney(
+                            dailyExpense / Math.max(daily.days.length, 1),
+                          )}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>超出天数</span>
+                    <strong>{overDailyDays} 天</strong>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="budget-daily-hint">
+              打开每日预算后，这里会显示今天的额度、超支预警和自动调整结果。
+            </p>
+          )}
+
+          {budgetWarnings.length > 0 ? (
+            <div className="budget-alerts">
+              {budgetWarnings.slice(0, 3).map((warning) => {
+                const actionable =
+                  warning.kind !== 'daily-over' ||
+                  (daily?.mode === 'manual' && daily.overToday)
+                return (
+                  <div
+                    key={`${warning.kind}-${warning.title}`}
+                    className={`budget-alert is-${warning.tone}`}
+                  >
+                    <AlertTriangle size={15} />
+                    <div className="budget-alert-copy">
+                      <strong>{warning.title}</strong>
+                      <span>{warning.detail}</span>
+                    </div>
+                    {actionable ? (
+                      <button
+                        type="button"
+                        className="budget-alert-action"
+                        onClick={onOpenBudget}
+                      >
+                        调整预算
+                      </button>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          ) : null}
+
+          {sortedCategoryBudgets.length > 0 ? (
+            <details className="budget-categories">
+              <summary>
+                <span>分类预算 · {sortedCategoryBudgets.length} 项</span>
+                <span
+                  className={
+                    budgetMetrics.unallocatedCents < 0 ? 'is-negative' : ''
+                  }
+                >
+                  {budgetMetrics.unallocatedCents >= 0
+                    ? `未分配 ${formatMoney(
+                        budgetMetrics.unallocatedCents / 100,
+                      )}`
+                    : `超出月预算 ${formatMoney(
+                        Math.abs(budgetMetrics.unallocatedCents) / 100,
+                      )}`}
+                </span>
+              </summary>
+              <ul className="budget-category-list">
+                {sortedCategoryBudgets.map((entry) => (
+                  <li
+                    key={entry.categoryId}
+                    className={entry.remainingCents < 0 ? 'is-over' : ''}
+                  >
+                    <CategoryIcon category={entry.category} size={14} compact />
+                    <span className="budget-category-name">
+                      {entry.category.name}
+                    </span>
+                    <span className="budget-category-value">
+                      {formatMoney(entry.spentCents / 100, false)} /{' '}
+                      {formatMoney(entry.budgetCents / 100, false)}
+                    </span>
+                    <span className="budget-category-meter" aria-hidden="true">
+                      <span
+                        style={{
+                          width: `${Math.min(entry.ratio * 100, 100)}%`,
+                        }}
+                      />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+
           <div className="budget-foot">
             {remaining < 0 ? (
               <span className="budget-status is-over">
@@ -246,7 +487,7 @@ export function Overview({
               </span>
             ) : daysLeft > 0 ? (
               <span>
-                还剩 <strong>{daysLeft}</strong> 天，日均可用{' '}
+                还剩 <strong>{daysLeft}</strong> 天，月预算日均可用{' '}
                 <strong>{formatMoney(dailyAllowance)}</strong>
               </span>
             ) : (
@@ -261,11 +502,13 @@ export function Overview({
         </section>
       </div>
 
+      <RangeBudgetPanel metrics={rangeMetrics} onEdit={onOpenRangeBudget} />
+
       <BalanceSummary
         transactions={transactions}
         monthKey={monthKey}
         openingBalance={openingBalance}
-        onAdjustOpeningBalance={onOpenBudget}
+        onAdjustOpeningBalance={onOpenOpeningBalance}
       />
 
       <section className="card metric-strip" aria-label="本月摘要">

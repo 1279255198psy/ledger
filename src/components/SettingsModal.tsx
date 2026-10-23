@@ -27,29 +27,36 @@ import {
 } from 'lucide-react'
 import { Modal } from './Modal'
 import { CategorySettings } from './CategorySettings'
+import { BudgetSettings } from './BudgetSettings'
 import {
   GITHUB_RELEASES_URL,
   GITHUB_REPO_URL,
 } from '../lib/github'
 import { openExternalUrl } from '../lib/links'
-import { formatMoney } from '../lib/utils'
 import { CURRENCIES, getCurrency } from '../lib/currency'
 import { FONT_SIZES } from '../lib/fontSize'
 import { PALETTES } from '../lib/themes'
 import type { CategoryDraft } from '../lib/categories'
 import type { UpdaterController } from '../hooks/useUpdater'
 import type {
+  BudgetBook,
   Category,
   Currency,
   FontSize,
+  MonthBudget,
   Palette,
+  RangeBudget,
   Theme,
 } from '../types'
+import type { LedgerTransaction } from '../types'
 
 interface SettingsModalProps {
   open: boolean
-  focusSection: 'opening-balance' | null
-  budget: number
+  focusSection: 'opening-balance' | 'budget' | 'budget-ranges' | null
+  monthKey: string
+  budgets: BudgetBook
+  ranges: RangeBudget[]
+  transactions: LedgerTransaction[]
   openingBalance: number
   theme: Theme
   palette: Palette
@@ -60,7 +67,9 @@ interface SettingsModalProps {
   categoryProjectUsage: Record<string, number>
   updater: UpdaterController
   onClose: () => void
-  onBudgetSave: (budget: number) => void
+  onBudgetSave: (budget: MonthBudget) => void
+  onRangeSave: (range: RangeBudget) => void
+  onRangeDelete: (id: string) => Promise<boolean>
   onOpeningBalanceSave: (balance: number) => void
   onCreateCategory: (draft: CategoryDraft) => void
   onUpdateCategory: (id: string, draft: CategoryDraft) => void
@@ -119,8 +128,8 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
   },
   {
     id: 'budget',
-    label: '月度预算',
-    detail: '给日常支出留一条边界',
+    label: '预算',
+    detail: '按月、按日、按分类安排',
     icon: PiggyBank,
   },
   {
@@ -140,7 +149,10 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
 export function SettingsModal({
   open,
   focusSection,
-  budget,
+  monthKey,
+  budgets,
+  ranges,
+  transactions,
   openingBalance,
   theme,
   palette,
@@ -152,6 +164,8 @@ export function SettingsModal({
   updater,
   onClose,
   onBudgetSave,
+  onRangeSave,
+  onRangeDelete,
   onOpeningBalanceSave,
   onCreateCategory,
   onUpdateCategory,
@@ -167,8 +181,6 @@ export function SettingsModal({
   onClear,
 }: SettingsModalProps) {
   const [page, setPage] = useState<SettingsPageId | null>(null)
-  const [budgetInput, setBudgetInput] = useState(String(budget))
-  const [budgetError, setBudgetError] = useState('')
   const [openingMode, setOpeningMode] = useState<'zero' | 'existing'>(
     openingBalance > 0 ? 'existing' : 'zero',
   )
@@ -186,15 +198,14 @@ export function SettingsModal({
 
   useEffect(() => {
     if (!open) return
-    setPage(focusSection === 'opening-balance' ? 'opening' : null)
+    setPage(
+      focusSection === 'opening-balance'
+        ? 'opening'
+        : focusSection === 'budget' || focusSection === 'budget-ranges'
+          ? 'budget'
+          : null,
+    )
   }, [open, focusSection])
-
-  useEffect(() => {
-    if (open) {
-      setBudgetInput(String(budget))
-      setBudgetError('')
-    }
-  }, [open, budget])
 
   useEffect(() => {
     if (!open) return
@@ -202,17 +213,6 @@ export function SettingsModal({
     setOpeningInput(openingBalance > 0 ? String(openingBalance) : '')
     setOpeningError('')
   }, [open, openingBalance])
-
-  const handleBudgetSubmit = (event: FormEvent) => {
-    event.preventDefault()
-    const value = Number(budgetInput)
-    if (!Number.isFinite(value) || value <= 0) {
-      setBudgetError('请输入大于 0 的预算金额')
-      return
-    }
-    setBudgetError('')
-    onBudgetSave(Math.round(value))
-  }
 
   const handleOpeningBalanceSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -624,37 +624,26 @@ export function SettingsModal({
             {activePage === 'budget' ? (
               <section className="settings-section">
                 <div className="settings-heading">
-                  <h3>月度预算</h3>
+                  <h3>预算</h3>
                   <p>
-                    给日常生活留一条温柔的边界，当前预算{' '}
-                    {formatMoney(budget)}。项目支出单独归集，不占生活预算。
+                    每个月可以有自己的预算，也可以为任意一段时间单独设一个区间预算。
+                    两者都能打开每日预算并按分类分配；项目支出单独归集，不占生活预算。
                   </p>
                 </div>
-                <form className="budget-form" onSubmit={handleBudgetSubmit}>
-                  <label className="budget-input">
-                    <span>{getCurrency(currency).symbol}</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="1"
-                      step="1"
-                      value={budgetInput}
-                      onChange={(event) => {
-                        setBudgetInput(event.target.value)
-                        setBudgetError('')
-                      }}
-                      aria-label="月度预算金额"
-                    />
-                  </label>
-                  <button type="submit" className="button secondary">
-                    保存预算
-                  </button>
-                </form>
-                {budgetError ? (
-                  <p className="form-error" role="alert">
-                    {budgetError}
-                  </p>
-                ) : null}
+                <BudgetSettings
+                  monthKey={monthKey}
+                  budgets={budgets}
+                  ranges={ranges}
+                  transactions={transactions}
+                  categories={categories}
+                  currency={currency}
+                  focusTab={
+                    focusSection === 'budget-ranges' ? 'range' : undefined
+                  }
+                  onSave={onBudgetSave}
+                  onRangeSave={onRangeSave}
+                  onRangeDelete={onRangeDelete}
+                />
               </section>
             ) : null}
 
@@ -672,7 +661,7 @@ export function SettingsModal({
                     <span className="data-row-text">
                       <strong>导出完整备份</strong>
                       <small>
-                        包含流水、分类、项目、预算与起始资金的 JSON 文件
+                        包含流水、分类、项目、月度与区间预算、起始资金的 JSON 文件
                       </small>
                     </span>
                   </button>

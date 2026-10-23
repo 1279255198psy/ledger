@@ -14,6 +14,7 @@ import { DailyExpenseChart } from '../components/charts/DailyExpenseChart'
 import { IncomeExpenseChart } from '../components/charts/IncomeExpenseChart'
 import { CategoryBars } from '../components/charts/CategoryBars'
 import { EmptyLedger } from '../components/EmptyLedger'
+import { RangeBudgetPanel } from '../components/RangeBudgetPanel'
 import {
   getMonthSpendCents,
   getProjectMonthRows,
@@ -39,15 +40,24 @@ import {
   topWeekdaySpending,
 } from '../lib/utils'
 import { getCategory } from '../lib/data'
-import type { LedgerTransaction, Project, View } from '../types'
+import type {
+  LedgerTransaction,
+  MonthBudgetMetrics,
+  Project,
+  RangeBudgetMetrics,
+  View,
+} from '../types'
 
 interface AnalyticsProps {
   transactions: LedgerTransaction[]
   projects: Project[]
   monthKey: string
-  budget: number
+  budgetMetrics: MonthBudgetMetrics
+  rangeMetrics: RangeBudgetMetrics[]
   onAdd: () => void
   onChangeView: (view: View) => void
+  onOpenBudget: () => void
+  onOpenRangeBudget: () => void
   onLoadSample: () => void
 }
 
@@ -78,9 +88,12 @@ export function Analytics({
   transactions,
   projects,
   monthKey,
-  budget,
+  budgetMetrics,
+  rangeMetrics,
   onAdd,
   onChangeView,
+  onOpenBudget,
+  onOpenRangeBudget,
   onLoadSample,
 }: AnalyticsProps) {
   if (transactions.length === 0) {
@@ -96,6 +109,12 @@ export function Analytics({
   const spend = getMonthSpendCents(transactions, monthKey)
   const dailyExpense = spend.dailyCents / 100
   const projectExpense = spend.projectCents / 100
+  const budget = budgetMetrics.amountCents / 100
+  const daily = budgetMetrics.daily
+  const isCurrent = isCurrentMonth(monthKey)
+  const sortedCategoryBudgets = [...budgetMetrics.categories].sort(
+    (left, right) => right.ratio - left.ratio,
+  )
   const categories = getCategoryTotals(monthTransactions, 'expense')
   const previousKey = shiftMonth(monthKey, -1)
   const elapsed = Math.max(daysElapsedInMonth(monthKey), 1)
@@ -226,6 +245,14 @@ export function Analytics({
             goodWhenUp={false}
             label={comparisonLabel}
           />
+          {daily && isCurrent ? (
+            <span
+              className={`kpi-note${daily.overToday ? ' is-warn' : ''}`}
+            >
+              今日 {formatMoney(daily.todaySpentCents / 100)} / 额度{' '}
+              {formatMoney(daily.todayBudgetCents / 100)}
+            </span>
+          ) : null}
         </article>
       </section>
 
@@ -274,6 +301,15 @@ export function Analytics({
                   : '—'}
               </strong>
             </div>
+            {daily && isCurrent ? (
+              <div>
+                <span>今日额度</span>
+                <strong className={daily.overToday ? 'is-negative' : ''}>
+                  {formatMoney(daily.todaySpentCents / 100)} /{' '}
+                  {formatMoney(daily.todayBudgetCents / 100)}
+                </strong>
+              </div>
+            ) : null}
           </div>
         </article>
 
@@ -290,8 +326,54 @@ export function Analytics({
             <span>本月支出合计</span>
             <strong>{formatMoney(totals.expense)}</strong>
           </div>
+          {sortedCategoryBudgets.length > 0 ? (
+            <div className="analytics-category-budgets">
+              <div className="analytics-category-budget-head">
+                <span>分类预算进度</span>
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={onOpenBudget}
+                >
+                  调整预算
+                </button>
+              </div>
+              <ul>
+                {sortedCategoryBudgets.map((entry) => (
+                  <li
+                    key={entry.categoryId}
+                    className={entry.remainingCents < 0 ? 'is-over' : ''}
+                  >
+                    <span className="analytics-category-budget-name">
+                      {entry.category.name}
+                    </span>
+                    <span className="analytics-category-budget-value">
+                      {formatMoney(entry.spentCents / 100, false)} /{' '}
+                      {formatMoney(entry.budgetCents / 100, false)}
+                    </span>
+                    <span
+                      className="analytics-category-budget-meter"
+                      aria-hidden="true"
+                    >
+                      <span
+                        style={{
+                          width: `${Math.min(entry.ratio * 100, 100)}%`,
+                        }}
+                      />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </article>
       </div>
+
+      <RangeBudgetPanel
+        metrics={rangeMetrics}
+        onEdit={onOpenRangeBudget}
+        compact
+      />
 
       {projectReports.length > 0 ? (
         <section

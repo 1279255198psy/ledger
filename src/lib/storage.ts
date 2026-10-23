@@ -1,4 +1,5 @@
 import type {
+  BudgetBook,
   Category,
   Currency,
   FontSize,
@@ -9,6 +10,7 @@ import type {
   Liability,
   Palette,
   Project,
+  RangeBudget,
   Theme,
 } from '../types'
 import {
@@ -33,6 +35,12 @@ import { isCurrency, normalizeCurrency } from './currency'
 import { normalizeFontSize } from './fontSize'
 import { isPalette, normalizePalette } from './themes'
 import {
+  normalizeBudgetBook,
+  normalizeRangeBudgets,
+  resolveMonthBudget,
+} from './budget'
+import { currentMonthKey } from './utils'
+import {
   isDesktopApp,
   loadDesktopLedger,
   saveDesktopLedger,
@@ -47,6 +55,8 @@ const KEYS = {
   liabilities: 'zhangye.liabilities.v1',
   budget: 'zhangye.budget.v2',
   budgetV1: 'zhangye.budget.v1',
+  budgets: 'zhangye.budgets.v3',
+  budgetRanges: 'zhangye.budgetRanges.v1',
   openingBalance: 'zhangye.openingBalanceCents.v1',
   theme: 'zhangye.theme.v1',
   palette: 'zhangye.palette.v1',
@@ -56,8 +66,6 @@ const KEYS = {
   seeded: 'zhangye.seeded.v1',
   updatedAt: 'zhangye.updatedAt.v1',
 } as const
-
-export const DEFAULT_BUDGET = 8000
 
 function safeGet(key: string): string | null {
   try {
@@ -84,6 +92,8 @@ interface DesktopLedgerSnapshot {
   liabilities: Liability[]
   transactions: LedgerTransaction[]
   budgetCents: number
+  budgets: BudgetBook
+  budgetRanges: RangeBudget[]
   openingBalanceCents: number
   theme: Theme
   palette: Palette
@@ -224,7 +234,8 @@ function readOpeningBalanceCents(): number {
   return Math.round(cents)
 }
 
-function readBudgetCents(): number {
+/** The single budget older versions stored; null when none was ever set. */
+function readLegacyBudgetCents(): number | null {
   const rawV2 = safeGet(KEYS.budget)
   if (rawV2 !== null) {
     const cents = Number(rawV2)
@@ -241,7 +252,44 @@ function readBudgetCents(): number {
     }
   }
 
-  return Math.round(DEFAULT_BUDGET * 100)
+  return null
+}
+
+function readStoredBudgets(): BudgetBook {
+  const raw = safeGet(KEYS.budgets)
+  if (raw !== null) {
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      const normalized = normalizeBudgetBook(parsed)
+      if (normalized) return normalized
+    } catch {
+      // A broken budget book falls back to the legacy single budget below.
+    }
+  }
+
+  const legacyCents = readLegacyBudgetCents()
+  if (legacyCents !== null) {
+    const month = currentMonthKey()
+    const book: BudgetBook = {
+      [month]: { month, amountCents: legacyCents, dailyMode: 'off' },
+    }
+    safeSet(KEYS.budgets, JSON.stringify(book))
+    return book
+  }
+
+  return {}
+}
+
+function readStoredBudgetRanges(): RangeBudget[] {
+  const raw = safeGet(KEYS.budgetRanges)
+  if (raw === null) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return normalizeRangeBudgets(parsed) ?? []
+  } catch {
+    // A broken range list must not block the monthly budgets.
+    return []
+  }
 }
 
 function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
@@ -291,18 +339,37 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
     }
   }
 
-  const budgetCents =
-    typeof snapshot.budgetCents === 'number'
-      ? snapshot.budgetCents
-      : typeof snapshot.budget === 'number'
-        ? Math.round(snapshot.budget * 100)
-        : null
-  if (
-    budgetCents !== null &&
-    Number.isFinite(budgetCents) &&
-    budgetCents > 0
-  ) {
-    safeSet(KEYS.budget, String(Math.round(budgetCents)))
+  if (snapshot.budgets !== undefined) {
+    const budgets = normalizeBudgetBook(snapshot.budgets)
+    if (budgets) {
+      safeSet(KEYS.budgets, JSON.stringify(budgets))
+    }
+  } else {
+    const budgetCents =
+      typeof snapshot.budgetCents === 'number'
+        ? snapshot.budgetCents
+        : typeof snapshot.budget === 'number'
+          ? Math.round(snapshot.budget * 100)
+          : null
+    if (
+      budgetCents !== null &&
+      Number.isFinite(budgetCents) &&
+      budgetCents > 0
+    ) {
+      const month = currentMonthKey()
+      const book: BudgetBook = {
+        [month]: { month, amountCents: Math.round(budgetCents), dailyMode: 'off' },
+      }
+      safeSet(KEYS.budgets, JSON.stringify(book))
+      safeSet(KEYS.budget, String(Math.round(budgetCents)))
+    }
+  }
+
+  if (snapshot.budgetRanges !== undefined) {
+    const ranges = normalizeRangeBudgets(snapshot.budgetRanges)
+    if (ranges) {
+      safeSet(KEYS.budgetRanges, JSON.stringify(ranges))
+    }
   }
 
   if (
@@ -345,6 +412,11 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
   const { transactions } = readStoredTransactions(categories)
   const storedTheme = safeGet(KEYS.theme)
   const storedPalette = safeGet(KEYS.palette)
+  const budgets = readStoredBudgets()
+  const currentBudgetCents = resolveMonthBudget(
+    budgets,
+    currentMonthKey(),
+  ).budget.amountCents
 
   return {
     app: '账页',
@@ -354,7 +426,9 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     projects: readStoredProjects(categories),
     liabilities: readStoredLiabilities(),
     transactions,
-    budgetCents: readBudgetCents(),
+    budgetCents: currentBudgetCents,
+    budgets,
+    budgetRanges: readStoredBudgetRanges(),
     openingBalanceCents: readOpeningBalanceCents(),
     theme: storedTheme === 'dark' ? 'dark' : 'light',
     palette: normalizePalette(storedPalette),
@@ -484,12 +558,25 @@ export function saveLiabilities(liabilities: Liability[]): void {
   scheduleDesktopPersist()
 }
 
-export function loadBudget(): number {
-  return readBudgetCents() / 100
+export function loadBudgets(): BudgetBook {
+  return readStoredBudgets()
 }
 
-export function saveBudget(budget: number): void {
-  safeSet(KEYS.budget, String(Math.round(budget * 100)))
+export function saveBudgets(budgets: BudgetBook): void {
+  safeSet(KEYS.budgets, JSON.stringify(budgets))
+  // Keep the single-budget key in step with the current month so older builds
+  // and older desktop snapshots still see a sensible number.
+  const current = resolveMonthBudget(budgets, currentMonthKey()).budget
+  safeSet(KEYS.budget, String(current.amountCents))
+  scheduleDesktopPersist()
+}
+
+export function loadBudgetRanges(): RangeBudget[] {
+  return readStoredBudgetRanges()
+}
+
+export function saveBudgetRanges(ranges: RangeBudget[]): void {
+  safeSet(KEYS.budgetRanges, JSON.stringify(ranges))
   scheduleDesktopPersist()
 }
 
@@ -604,7 +691,9 @@ export function saveIndexPreferences(preferences: IndexPreferences): void {
 export interface ImportedBackup {
   transactions: LedgerTransaction[]
   projects: Project[]
-  budget: number | null
+  budgets: BudgetBook | null
+  /** null when the backup predates range budgets and the local list should stay. */
+  budgetRanges: RangeBudget[] | null
   openingBalance: number | null
   /** null when the backup predates liability export and the local list should stay. */
   liabilities: Liability[] | null
@@ -677,15 +766,53 @@ export function parseBackup(text: string): ImportedBackup {
     liabilities = sortLiabilities(valid)
   }
 
-  let budget: number | null = null
-  if (
-    typeof record.budgetCents === 'number' &&
-    Number.isFinite(record.budgetCents) &&
-    record.budgetCents > 0
-  ) {
-    budget = record.budgetCents / 100
-  } else if (typeof record.budget === 'number' && record.budget > 0) {
-    budget = record.budget
+  let budgets: BudgetBook | null = null
+  if (record.budgets !== undefined) {
+    const normalizedBudgets = normalizeBudgetBook(record.budgets)
+    const rawBudgets =
+      record.budgets && typeof record.budgets === 'object'
+        ? Object.keys(record.budgets as object).length
+        : 0
+    if (
+      !normalizedBudgets ||
+      Object.keys(normalizedBudgets).length !== rawBudgets
+    ) {
+      throw new ImportError('预算数据格式不兼容，请使用账页导出的备份文件')
+    }
+    budgets = normalizedBudgets
+  } else {
+    let legacyCents: number | null = null
+    if (
+      typeof record.budgetCents === 'number' &&
+      Number.isFinite(record.budgetCents) &&
+      record.budgetCents > 0
+    ) {
+      legacyCents = Math.round(record.budgetCents)
+    } else if (typeof record.budget === 'number' && record.budget > 0) {
+      legacyCents = Math.round(record.budget * 100)
+    }
+    if (legacyCents !== null) {
+      const month = currentMonthKey()
+      budgets = {
+        [month]: { month, amountCents: legacyCents, dailyMode: 'off' },
+      }
+    }
+  }
+
+  let budgetRanges: RangeBudget[] | null = null
+  if (record.budgetRanges !== undefined) {
+    const normalizedRanges = normalizeRangeBudgets(record.budgetRanges)
+    const rawRanges = Array.isArray(record.budgetRanges)
+      ? record.budgetRanges.length
+      : -1
+    if (
+      !normalizedRanges ||
+      rawRanges < 0 ||
+      normalizedRanges.length !== rawRanges
+    ) {
+      throw new ImportError('区间预算数据格式不兼容，请使用账页导出的备份文件')
+    }
+    budgetRanges = normalizedRanges
   }
 
   let openingBalance: number | null = null
@@ -706,7 +833,8 @@ export function parseBackup(text: string): ImportedBackup {
   return {
     transactions: sortTransactions(normalized),
     projects,
-    budget,
+    budgets,
+    budgetRanges,
     openingBalance,
     liabilities,
     categories: hasCategoryData ? categories : null,

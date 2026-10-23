@@ -12,14 +12,25 @@ import {
   Sun,
 } from 'lucide-react'
 import { BrandMark } from './BrandMark'
-import { formatMoney, formatPercent } from '../lib/utils'
-import type { Theme, View } from '../types'
+import { rangeTitle } from '../lib/budgetLabels'
+import {
+  formatMoney,
+  formatPercent,
+  isCurrentMonth,
+  monthShortLabel,
+} from '../lib/utils'
+import type {
+  MonthBudgetMetrics,
+  RangeBudgetMetrics,
+  Theme,
+  View,
+} from '../types'
 
 interface SidebarProps {
   view: View
   monthLabelText: string
-  expense: number
-  budget: number
+  budgetMetrics: MonthBudgetMetrics
+  rangeMetrics: RangeBudgetMetrics[]
   theme: Theme
   onChangeView: (view: View) => void
   onAdd: () => void
@@ -43,17 +54,28 @@ const NAV_ITEMS: Array<{
 export function Sidebar({
   view,
   monthLabelText,
-  expense,
-  budget,
+  budgetMetrics,
+  rangeMetrics,
   theme,
   onChangeView,
   onAdd,
   onToggleTheme,
   onOpenSettings,
 }: SidebarProps) {
-  const ratio = budget > 0 ? expense / budget : 0
+  const expense = budgetMetrics.spentCents / 100
+  const budget = budgetMetrics.amountCents / 100
+  const ratio = budgetMetrics.ratio
   const width = Math.min(ratio * 100, 100)
-  const overBudget = expense > budget
+  const overBudget = budgetMetrics.overBudget
+  const daily = budgetMetrics.daily
+  const showDaily = daily !== null && isCurrentMonth(budgetMetrics.monthKey)
+  const activeRange = rangeMetrics.find((entry) => entry.active) ?? null
+  const sourceTag =
+    budgetMetrics.source === 'inherited' && budgetMetrics.sourceMonth
+      ? `沿用 ${monthShortLabel(budgetMetrics.sourceMonth)}`
+      : budgetMetrics.source === 'default'
+        ? '默认'
+        : null
 
   return (
     <aside className="sidebar">
@@ -111,7 +133,32 @@ export function Sidebar({
         </div>
         <p>
           已用 {formatMoney(expense, false)} / {formatMoney(budget, false)}
+          {sourceTag ? <span className="sidebar-budget-tag">{sourceTag}</span> : null}
         </p>
+        {showDaily ? (
+          <div
+            className={`sidebar-daily${daily.overToday ? ' is-over' : ''}`}
+          >
+            <span>
+              今日 {formatMoney(daily.todaySpentCents / 100, false)} /{' '}
+              {formatMoney(daily.todayBudgetCents / 100, false)}
+            </span>
+            <span>
+              {daily.mode === 'auto' ? '自动均分' : '自定义'}
+            </span>
+          </div>
+        ) : null}
+        {activeRange ? (
+          <div
+            className={`sidebar-range${activeRange.overBudget ? ' is-over' : ''}`}
+          >
+            <span>{rangeTitle(activeRange.range)}</span>
+            <span>
+              {formatPercent(Math.min(activeRange.ratio * 100, 999))} · 剩{' '}
+              {activeRange.daysLeft} 天
+            </span>
+          </div>
+        ) : null}
       </section>
 
       <div className="sidebar-footer">
