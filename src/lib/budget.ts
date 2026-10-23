@@ -349,31 +349,36 @@ export function normalizeRangeBudgets(value: unknown): RangeBudget[] | null {
   )
 }
 
-/** Daily life spending keyed by date; project postings never land here. */
+/**
+ * Daily spending keyed by date. Project postings join only when their project
+ * is set to count in daily; separately accounted projects never land here.
+ */
 function getDailySpendByDate(
   transactions: LedgerTransaction[],
+  countedProjectIds?: ReadonlySet<string>,
 ): Map<string, number> {
   const totals = new Map<string, number>()
-  for (const posting of toPostings(transactions)) {
-    if (posting.kind !== 'expense' || posting.targetType !== 'daily') continue
+  for (const posting of toPostings(transactions, countedProjectIds)) {
+    if (posting.kind !== 'expense' || !posting.countsAsDaily) continue
     totals.set(posting.date, (totals.get(posting.date) ?? 0) + posting.signedCents)
   }
   return totals
 }
 
-/** Life spending per top-level category inside an inclusive date range. */
+/** Daily spending per top-level category inside an inclusive date range. */
 export function getDailyCategorySpendCents(
   transactions: LedgerTransaction[],
   startDate: string,
   endDate: string,
+  countedProjectIds?: ReadonlySet<string>,
 ): Map<string, number> {
   const totals = new Map<string, number>()
-  for (const posting of toPostings(transactions)) {
+  for (const posting of toPostings(transactions, countedProjectIds)) {
     if (
       posting.date < startDate ||
       posting.date > endDate ||
       posting.kind !== 'expense' ||
-      posting.targetType !== 'daily'
+      !posting.countsAsDaily
     ) {
       continue
     }
@@ -592,11 +597,12 @@ export function getMonthBudgetMetrics(
   transactions: LedgerTransaction[],
   monthKey: string,
   book: BudgetBook,
+  countedProjectIds?: ReadonlySet<string>,
 ): MonthBudgetMetrics {
   const resolved = resolveMonthBudget(book, monthKey)
   const budget = resolved.budget
   const { startDate, endDate } = monthDateBounds(monthKey)
-  const spentByDate = getDailySpendByDate(transactions)
+  const spentByDate = getDailySpendByDate(transactions, countedProjectIds)
   let spentCents = 0
   for (const date of eachDateInRange(startDate, endDate)) {
     spentCents += spentByDate.get(date) ?? 0
@@ -604,7 +610,7 @@ export function getMonthBudgetMetrics(
   const remainingCents = budget.amountCents - spentCents
   const categories = buildCategoryStatuses(
     budget.categoryBudgetsCents,
-    getDailyCategorySpendCents(transactions, startDate, endDate),
+    getDailyCategorySpendCents(transactions, startDate, endDate, countedProjectIds),
   )
   const categoryBudgetTotalCents = sumCategoryBudgets(categories)
 
@@ -633,10 +639,11 @@ export function getRangeBudgetMetrics(
   transactions: LedgerTransaction[],
   range: RangeBudget,
   todayDate = localDateKey(),
+  countedProjectIds?: ReadonlySet<string>,
 ): RangeBudgetMetrics {
   const dates = eachDateInRange(range.startDate, range.endDate)
   const dayCount = dates.length
-  const spentByDate = getDailySpendByDate(transactions)
+  const spentByDate = getDailySpendByDate(transactions, countedProjectIds)
   let spentCents = 0
   for (const date of dates) {
     spentCents += spentByDate.get(date) ?? 0
@@ -655,7 +662,12 @@ export function getRangeBudgetMetrics(
   const remainingCents = range.amountCents - spentCents
   const categories = buildCategoryStatuses(
     range.categoryBudgetsCents,
-    getDailyCategorySpendCents(transactions, range.startDate, range.endDate),
+    getDailyCategorySpendCents(
+      transactions,
+      range.startDate,
+      range.endDate,
+      countedProjectIds,
+    ),
   )
   const categoryBudgetTotalCents = sumCategoryBudgets(categories)
 

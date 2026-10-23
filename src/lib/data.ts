@@ -455,6 +455,8 @@ export function isValidProject(
         Number.isInteger(item.budgetCents) &&
         item.budgetCents >= 0)) &&
     categoryBudgetsValid &&
+    (item.countsInDaily === undefined ||
+      typeof item.countsInDaily === 'boolean') &&
     isCurrency(item.currency) &&
     (item.owner === undefined || typeof item.owner === 'string') &&
     (item.note === undefined || typeof item.note === 'string') &&

@@ -4,6 +4,7 @@ import type {
   LedgerTransaction,
   MonthSpendCents,
   Posting,
+  Project,
   ProjectMonthRow,
   ProjectSummary,
   TransactionScope,
@@ -227,8 +228,25 @@ export function detachProjectAllocations(
   }))
 }
 
+/** Ids of projects whose spending also belongs to the daily bucket. */
+export function getCountedProjectIds(
+  projects: readonly Project[],
+): ReadonlySet<string> {
+  const ids = new Set<string>()
+  for (const project of projects) {
+    if (project.countsInDaily) ids.add(project.id)
+  }
+  return ids
+}
+
+/**
+ * Flattens transactions into one posting per allocation. Project postings only
+ * join the daily bucket when their project opts in; everything else is scored
+ * on its own, exactly as before the option existed.
+ */
 export function toPostings(
   transactions: LedgerTransaction[],
+  countedProjectIds?: ReadonlySet<string>,
 ): Posting[] {
   return transactions.flatMap((transaction) =>
     transaction.allocations.map((line) => ({
@@ -241,6 +259,11 @@ export function toPostings(
       projectId: line.projectId,
       categoryId: transaction.categoryId,
       signedCents: line.amountCents,
+      countsAsDaily:
+        line.targetType === 'daily' ||
+        (line.targetType === 'project' &&
+          Boolean(line.projectId) &&
+          Boolean(countedProjectIds?.has(line.projectId as string))),
     })),
   )
 }
@@ -248,13 +271,14 @@ export function toPostings(
 export function getMonthSpendCents(
   transactions: LedgerTransaction[],
   monthKey: string,
+  countedProjectIds?: ReadonlySet<string>,
 ): MonthSpendCents {
   let dailyCents = 0
   let projectCents = 0
 
-  for (const posting of toPostings(transactions)) {
+  for (const posting of toPostings(transactions, countedProjectIds)) {
     if (posting.month !== monthKey || posting.kind !== 'expense') continue
-    if (posting.targetType === 'daily') dailyCents += posting.signedCents
+    if (posting.countsAsDaily) dailyCents += posting.signedCents
     else projectCents += posting.signedCents
   }
 
@@ -346,14 +370,15 @@ export function getProjectMonthRows(
 export function getDailyCategoryCents(
   transactions: LedgerTransaction[],
   monthKey: string,
+  countedProjectIds?: ReadonlySet<string>,
 ): Map<string, number> {
   const totals = new Map<string, number>()
 
-  for (const posting of toPostings(transactions)) {
+  for (const posting of toPostings(transactions, countedProjectIds)) {
     if (
       posting.month !== monthKey ||
       posting.kind !== 'expense' ||
-      posting.targetType !== 'daily'
+      !posting.countsAsDaily
     ) {
       continue
     }

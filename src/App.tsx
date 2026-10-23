@@ -26,6 +26,7 @@ import {
 } from './lib/data'
 import {
   detachProjectAllocations,
+  getCountedProjectIds,
   makeDailyAllocation,
   scaleAllocations,
   sumAllocationCents,
@@ -159,16 +160,30 @@ export default function App() {
   const updater = useUpdater()
 
   const latestMonth = currentMonthKey()
+  // Projects set to 计入日常 share one daily bucket with everyday spending;
+  // the rest stay on their own books.
+  const countedProjectIds = useMemo(
+    () => getCountedProjectIds(projects),
+    [projects],
+  )
   const budgetMetrics = useMemo(
-    () => getMonthBudgetMetrics(transactions, monthKey, budgets),
-    [transactions, monthKey, budgets],
+    () =>
+      getMonthBudgetMetrics(
+        transactions,
+        monthKey,
+        budgets,
+        countedProjectIds,
+      ),
+    [transactions, monthKey, budgets, countedProjectIds],
   )
   // Each range is scored on its own dates; crossing a month boundary never
   // splits the amount or reconciles it against that month's budget.
   const budgetRangeMetrics = useMemo(
     () =>
-      budgetRanges.map((range) => getRangeBudgetMetrics(transactions, range)),
-    [budgetRanges, transactions],
+      budgetRanges.map((range) =>
+        getRangeBudgetMetrics(transactions, range, undefined, countedProjectIds),
+      ),
+    [budgetRanges, transactions, countedProjectIds],
   )
   // The month views only surface ranges that actually touch the shown month.
   const monthRangeMetrics = useMemo(
@@ -605,6 +620,7 @@ export default function App() {
       Object.keys(draft.categoryBudgetsCents).length > 0
         ? { categoryBudgetsCents: draft.categoryBudgetsCents }
         : {}),
+      ...(draft.countsInDaily ? { countsInDaily: true } : {}),
       ...(draft.note ? { note: draft.note } : {}),
       currency,
       createdAt: now,
@@ -627,6 +643,7 @@ export default function App() {
               endDate: draft.endDate,
               budgetCents: draft.budgetCents,
               categoryBudgetsCents: draft.categoryBudgetsCents,
+              countsInDaily: draft.countsInDaily || undefined,
               note: draft.note,
               updatedAt: now,
             }
@@ -1023,6 +1040,7 @@ export default function App() {
         budgets={budgets}
         ranges={budgetRanges}
         transactions={transactions}
+        countedProjectIds={countedProjectIds}
         openingBalance={openingBalance}
         theme={theme}
         palette={palette}

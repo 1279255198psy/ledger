@@ -7074,6 +7074,37 @@ a {
   background: var(--warning-soft);
 }
 
+.project-scope-chip {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  border-radius: 999px;
+  font-size: calc(8px * var(--font-scale));
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.project-scope-chip.is-daily {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.project-scope-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+
+.project-scope-block .budget-mode-switch {
+  background: var(--surface);
+}
+
 .project-detail-card {
   min-width: 0;
   padding: 22px;

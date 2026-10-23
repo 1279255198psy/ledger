@@ -195,12 +195,13 @@ export function buildDailyExpenses(
   transactions: LedgerTransaction[],
   monthKey: string,
   target: 'all' | 'daily' = 'all',
+  countedProjectIds?: ReadonlySet<string>,
 ): DailyDatum[] {
   const dayCount = daysInMonthOfKey(monthKey)
   const values = new Array<number>(dayCount + 1).fill(0)
-  for (const posting of toPostings(transactions)) {
+  for (const posting of toPostings(transactions, countedProjectIds)) {
     if (posting.month !== monthKey || posting.kind !== 'expense') continue
-    if (target === 'daily' && posting.targetType !== 'daily') continue
+    if (target === 'daily' && !posting.countsAsDaily) continue
     const day = Number(posting.date.slice(8, 10))
     values[day] += posting.signedCents / 100
   }

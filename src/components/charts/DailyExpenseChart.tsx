@@ -22,6 +22,8 @@ interface DailyExpenseChartProps {
 
 const HEIGHT = 224
 const MARGIN = { top: 28, right: 20, bottom: 30, left: 46 }
+/** Minimum horizontal distance between two x-axis labels, in px. */
+const MIN_LABEL_GAP = 34
 
 export function DailyExpenseChart({ data, monthKey }: DailyExpenseChartProps) {
   const { ref, width } = useElementWidth<HTMLDivElement>()
@@ -59,9 +61,23 @@ export function DailyExpenseChart({ data, monthKey }: DailyExpenseChartProps) {
       : clamp(activeX, 88, Math.max(width - 88, 88))
   const isQuiet = maxValue === 0
 
-  const labelIndexes = Array.from(
+  // Days 22 and 23 can land on top of each other on a phone, so keep the last
+  // label and drop any earlier candidate sitting too close to it.
+  const labelCandidates = Array.from(
     new Set([0, 7, 14, 21, count - 1].filter((index) => index >= 0 && index < count)),
   )
+  const labelIndexes: number[] = []
+  for (let index = labelCandidates.length - 1; index >= 0; index -= 1) {
+    const candidate = labelCandidates[index]
+    const rightNeighbor = labelIndexes[0]
+    if (
+      rightNeighbor !== undefined &&
+      xFor(rightNeighbor) - xFor(candidate) < MIN_LABEL_GAP
+    ) {
+      continue
+    }
+    labelIndexes.unshift(candidate)
+  }
 
   const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()

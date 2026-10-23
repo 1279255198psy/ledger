@@ -16,6 +16,7 @@ import { CategoryBars } from '../components/charts/CategoryBars'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { RangeBudgetPanel } from '../components/RangeBudgetPanel'
 import {
+  getCountedProjectIds,
   getMonthSpendCents,
   getProjectMonthRows,
   getProjectSummary,
@@ -106,7 +107,8 @@ export function Analytics({
 
   const monthTransactions = getMonthTransactions(transactions, monthKey)
   const totals = getTotals(monthTransactions)
-  const spend = getMonthSpendCents(transactions, monthKey)
+  const countedProjectIds = getCountedProjectIds(projects)
+  const spend = getMonthSpendCents(transactions, monthKey, countedProjectIds)
   const dailyExpense = spend.dailyCents / 100
   const projectExpense = spend.projectCents / 100
   const budget = budgetMetrics.amountCents / 100
@@ -124,7 +126,11 @@ export function Analytics({
     previousKey,
   ).filter((item) => Number(item.date.slice(8, 10)) <= cutoff)
   const previousTotals = getTotals(previousTransactions)
-  const previousSpend = getMonthSpendCents(previousTransactions, previousKey)
+  const previousSpend = getMonthSpendCents(
+    previousTransactions,
+    previousKey,
+    countedProjectIds,
+  )
 
   const incomeChange = percentChange(totals.income, previousTotals.income)
   const expenseChange = percentChange(totals.expense, previousTotals.expense)
@@ -140,7 +146,12 @@ export function Analytics({
   const comparisonLabel = isCurrentMonth(monthKey) ? '较上月同期' : '较上月'
 
   const pairSeries = buildMonthPairSeries(transactions, monthKey, 6)
-  const dailyData = buildDailyExpenses(transactions, monthKey, 'daily').slice(
+  const dailyData = buildDailyExpenses(
+    transactions,
+    monthKey,
+    'daily',
+    countedProjectIds,
+  ).slice(
     0,
     Math.min(elapsed, 31),
   )
@@ -163,6 +174,10 @@ export function Analytics({
       row.projectId,
       row,
     ]),
+  )
+  const monthProjectCents = [...monthProjectRows.values()].reduce(
+    (sum, row) => sum + row.monthExpenseCents,
+    0,
   )
   const projectReports = projects
     .map((project) => ({
@@ -280,7 +295,7 @@ export function Analytics({
               <p className="card-kicker">DAY BY DAY</p>
               <h2>每日生活支出</h2>
               <p className="card-sub">
-                只统计日常归属；项目花费按发生月份另行归集。
+                统计日常归属，以及设为「计入日常」的项目花费；其余项目按发生月份另行归集。
               </p>
             </div>
             <span className="chart-scope">悬停查看 · 方向键浏览</span>
@@ -385,11 +400,12 @@ export function Analytics({
               <p className="card-kicker">PROJECT LEDGER</p>
               <h2 id="project-report-heading">项目账单</h2>
               <p>
-                总额跨月保留，月度数字按交易发生日期归集；项目支出不占生活预算。
+                总额跨月保留，月度数字按交易发生日期归集；独立核算的项目不占生活预算，
+                计入日常的项目同时算在生活支出里。
               </p>
             </div>
             <span className="chart-scope">
-              {monthLabel(monthKey)} · 归集 {formatMoney(projectExpense)}
+              {monthLabel(monthKey)} · 归集 {formatMoney(monthProjectCents / 100)}
             </span>
           </div>
 

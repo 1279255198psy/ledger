@@ -18,7 +18,7 @@ import { activeCurrencySymbol } from '../lib/currency'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { ExpenseTrendChart } from '../components/charts/ExpenseTrendChart'
 import { TransactionRow } from '../components/TransactionRow'
-import { getMonthSpendCents } from '../lib/allocations'
+import { getCountedProjectIds, getMonthSpendCents } from '../lib/allocations'
 import { getBudgetWarnings } from '../lib/budget'
 import {
   buildMonthSeries,
@@ -108,9 +108,16 @@ export function Overview({
 
   const monthTransactions = getMonthTransactions(transactions, monthKey)
   const totals = getTotals(monthTransactions)
-  const spend = getMonthSpendCents(transactions, monthKey)
+  const spend = getMonthSpendCents(
+    transactions,
+    monthKey,
+    getCountedProjectIds(projects),
+  )
   const dailyExpense = budgetMetrics.spentCents / 100
   const projectExpense = spend.projectCents / 100
+  const countedProjectCount = projects.filter(
+    (project) => project.countsInDaily,
+  ).length
   const budget = budgetMetrics.amountCents / 100
   const categories = getCategoryTotals(monthTransactions, 'expense')
   const previousKey = shiftMonth(monthKey, -1)
@@ -493,9 +500,14 @@ export function Overview({
             ) : (
               <span>当月预算共 {formatMoney(budget)}</span>
             )}
-            {projectExpense > 0 ? (
+            {projectExpense > 0 || countedProjectCount > 0 ? (
               <span className="budget-project-note">
-                项目支出 {formatMoney(projectExpense)} 单独归集，不占生活预算。
+                {projectExpense > 0
+                  ? `独立核算的项目支出 ${formatMoney(projectExpense)} 不占生活预算`
+                  : '计入日常的项目支出已并入生活预算'}
+                {countedProjectCount > 0 && projectExpense > 0
+                  ? '；计入日常的项目已并入生活预算。'
+                  : '。'}
               </span>
             ) : null}
           </div>
@@ -536,8 +548,10 @@ export function Overview({
             <strong>{formatMoney(projectExpense)}</strong>
             <small>
               {projectExpense > 0
-                ? '本月按发生月份归集，不占生活预算'
-                : '本月还没有项目支出'}
+                ? '独立核算部分按发生月份归集，不占生活预算'
+                : countedProjectCount > 0
+                  ? '计入日常的项目已并入生活支出'
+                  : '本月还没有项目支出'}
             </small>
           </div>
         </div>

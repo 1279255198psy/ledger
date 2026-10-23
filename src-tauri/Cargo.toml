@@ -1,6 +1,6 @@
 [package]
 name = "zhangye"
-version = "3.1.0"
+version = "3.1.1"
 description = "账页 · 生活账簿"
 authors = ["账页"]
 edition = "2021"

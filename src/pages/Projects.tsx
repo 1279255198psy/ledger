@@ -60,6 +60,8 @@ interface ProjectFormState {
   startDate: string
   endDate: string
   budget: string
+  /** True when project spending also counts toward daily budgets. */
+  countsInDaily: boolean
   note: string
   categoryBudgets: Record<string, string>
 }
@@ -182,6 +184,7 @@ function emptyForm(startDate = localDateKey()): ProjectFormState {
     startDate,
     endDate: '',
     budget: '',
+    countsInDaily: false,
     note: '',
     categoryBudgets,
   }
@@ -198,6 +201,7 @@ function formFromProject(project: Project): ProjectFormState {
     startDate: project.startDate,
     endDate: project.endDate ?? '',
     budget: project.budgetCents ? centsToInput(project.budgetCents) : '',
+    countsInDaily: project.countsInDaily ?? false,
     note: project.note ?? '',
     categoryBudgets,
   }
@@ -448,6 +452,7 @@ export function Projects({
       ...(Object.keys(categoryBudgetsCents).length > 0
         ? { categoryBudgetsCents }
         : {}),
+      countsInDaily: draft.countsInDaily,
       ...(draft.note.trim() ? { note: draft.note.trim() } : {}),
     }
 
@@ -585,6 +590,46 @@ export function Projects({
         />
       </label>
 
+      <div className="project-scope-block">
+        <div className="project-form-section-head">
+          <div>
+            <h3>日常预算</h3>
+            <p>决定这个项目的花费要不要占用每日、月度与区间预算。</p>
+          </div>
+        </div>
+        <div
+          className="budget-mode-switch"
+          role="group"
+          aria-label="项目花费是否计入日常"
+        >
+          <button
+            type="button"
+            className={draft.countsInDaily ? '' : 'is-active'}
+            aria-pressed={!draft.countsInDaily}
+            onClick={() =>
+              setDraft((current) => ({ ...current, countsInDaily: false }))
+            }
+          >
+            独立核算
+          </button>
+          <button
+            type="button"
+            className={draft.countsInDaily ? 'is-active' : ''}
+            aria-pressed={draft.countsInDaily}
+            onClick={() =>
+              setDraft((current) => ({ ...current, countsInDaily: true }))
+            }
+          >
+            计入日常
+          </button>
+        </div>
+        <p className="budget-mode-note">
+          {draft.countsInDaily
+            ? '项目花费同时算作日常支出，会占用每日、月度与区间预算的额度；项目自己的预算与统计照常。'
+            : '项目花费只计入项目自身预算，不占用每日、月度或区间预算；统计里单列在「项目」一栏。'}
+        </p>
+      </div>
+
       <div className="project-category-budget-block">
         <div className="project-form-section-head">
           <div>
@@ -719,6 +764,11 @@ export function Projects({
               <h2>{project.name}</h2>
               <span className={`project-status is-${phase}`}>
                 {phaseLabel(phase)}
+              </span>
+              <span
+                className={`project-scope-chip${project.countsInDaily ? ' is-daily' : ''}`}
+              >
+                {project.countsInDaily ? '计入日常' : '独立核算'}
               </span>
             </div>
             <p className="project-detail-dates">
@@ -1140,6 +1190,7 @@ export function Projects({
                         </span>
                       </span>
                       <small>
+                        {project.countsInDaily ? '计入日常' : '独立核算'} ·{' '}
                         {formatProjectRange(project)} · {stats?.count ?? 0} 笔
                       </small>
                     </span>

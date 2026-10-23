@@ -57,6 +57,8 @@ interface SettingsModalProps {
   budgets: BudgetBook
   ranges: RangeBudget[]
   transactions: LedgerTransaction[]
+  /** Projects whose spending also counts toward daily budgets. */
+  countedProjectIds: ReadonlySet<string>
   openingBalance: number
   theme: Theme
   palette: Palette
@@ -153,6 +155,7 @@ export function SettingsModal({
   budgets,
   ranges,
   transactions,
+  countedProjectIds,
   openingBalance,
   theme,
   palette,
@@ -627,7 +630,8 @@ export function SettingsModal({
                   <h3>预算</h3>
                   <p>
                     每个月可以有自己的预算，也可以为任意一段时间单独设一个区间预算。
-                    两者都能打开每日预算并按分类分配；项目支出单独归集，不占生活预算。
+                    两者都能打开每日预算并按分类分配。项目默认单独记账、不占生活预算；
+                    在项目里设为「计入日常」后，它的花费也会算进这里的每日与分类额度。
                   </p>
                 </div>
                 <BudgetSettings
@@ -635,6 +639,7 @@ export function SettingsModal({
                   budgets={budgets}
                   ranges={ranges}
                   transactions={transactions}
+                  countedProjectIds={countedProjectIds}
                   categories={categories}
                   currency={currency}
                   focusTab={

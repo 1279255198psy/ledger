@@ -215,6 +215,8 @@ export interface ProjectDraft {
   endDate?: string
   budgetCents?: number
   categoryBudgetsCents?: Record<string, number>
+  /** When true, this project's spending also counts as daily spending. */
+  countsInDaily?: boolean
   note?: string
 }
 
@@ -227,6 +229,12 @@ export interface Project {
   endDate?: string
   budgetCents?: number
   categoryBudgetsCents?: Record<string, number>
+  /**
+   * True when the project's spending should also count toward daily spending
+   * and the daily/monthly/range budgets. Unset means it is accounted for on
+   * its own, exactly like before this option existed.
+   */
+  countsInDaily?: boolean
   currency: Currency
   owner?: string
   note?: string
@@ -331,6 +339,11 @@ export interface Posting {
   projectId?: string
   categoryId: string
   signedCents: number
+  /**
+   * Whether this posting belongs to the daily bucket: either a daily
+   * allocation, or a project allocation whose project opts into daily.
+   */
+  countsAsDaily: boolean
 }
 
 export interface MonthSpendCents {

@@ -43,6 +43,8 @@ interface BudgetSettingsProps {
   budgets: BudgetBook
   ranges: RangeBudget[]
   transactions: LedgerTransaction[]
+  /** Projects whose spending also counts toward these budgets. */
+  countedProjectIds: ReadonlySet<string>
   categories: Category[]
   currency: Currency
   /** Opens the range tab when the user came from a range panel. */
@@ -156,6 +158,7 @@ export function BudgetSettings({
   budgets,
   ranges,
   transactions,
+  countedProjectIds,
   categories,
   currency,
   focusTab,
@@ -204,11 +207,13 @@ export function BudgetSettings({
 
   const preview = useMemo(() => {
     if (!built.budget) return null
-    return getMonthBudgetMetrics(transactions, selectedMonth, {
-      ...budgets,
-      [selectedMonth]: built.budget,
-    })
-  }, [built.budget, budgets, selectedMonth, transactions])
+    return getMonthBudgetMetrics(
+      transactions,
+      selectedMonth,
+      { ...budgets, [selectedMonth]: built.budget },
+      countedProjectIds,
+    )
+  }, [built.budget, budgets, selectedMonth, transactions, countedProjectIds])
 
   const categorySpend = useMemo(() => {
     const bounds = monthDateBounds(selectedMonth)
@@ -216,8 +221,9 @@ export function BudgetSettings({
       transactions,
       bounds.startDate,
       bounds.endDate,
+      countedProjectIds,
     )
-  }, [transactions, selectedMonth])
+  }, [transactions, selectedMonth, countedProjectIds])
 
   const symbol = getCurrency(currency).symbol
   const dayCount = daysInMonthOfKey(selectedMonth)
@@ -381,6 +387,7 @@ export function BudgetSettings({
         <RangeBudgetSettings
           ranges={ranges}
           transactions={transactions}
+          countedProjectIds={countedProjectIds}
           categories={categories}
           currency={currency}
           defaultAmountCents={amountCents ?? resolved.budget.amountCents}

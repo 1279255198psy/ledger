@@ -35,6 +35,8 @@ import type {
 interface RangeBudgetSettingsProps {
   ranges: RangeBudget[]
   transactions: LedgerTransaction[]
+  /** Projects whose spending also counts toward range budgets. */
+  countedProjectIds: ReadonlySet<string>
   categories: Category[]
   currency: Currency
   /** Seeds the amount of a brand-new range. */
@@ -156,6 +158,7 @@ function buildRangeBudget(
 export function RangeBudgetSettings({
   ranges,
   transactions,
+  countedProjectIds,
   categories,
   currency,
   defaultAmountCents,
@@ -190,9 +193,14 @@ export function RangeBudgetSettings({
     () =>
       ranges.map((range) => ({
         range,
-        metrics: getRangeBudgetMetrics(transactions, range, today),
+        metrics: getRangeBudgetMetrics(
+          transactions,
+          range,
+          today,
+          countedProjectIds,
+        ),
       })),
-    [ranges, transactions, today],
+    [ranges, transactions, today, countedProjectIds],
   )
 
   const dates = useMemo(
@@ -207,8 +215,13 @@ export function RangeBudgetSettings({
 
   const preview = useMemo(() => {
     if (!built?.range) return null
-    return getRangeBudgetMetrics(transactions, built.range, today)
-  }, [built?.range, transactions, today])
+    return getRangeBudgetMetrics(
+      transactions,
+      built.range,
+      today,
+      countedProjectIds,
+    )
+  }, [built?.range, transactions, today, countedProjectIds])
 
   const categorySpend = useMemo(() => {
     if (dates.length === 0) return new Map<string, number>()
@@ -216,8 +229,9 @@ export function RangeBudgetSettings({
       transactions,
       dates[0],
       dates[dates.length - 1],
+      countedProjectIds,
     )
-  }, [transactions, dates])
+  }, [transactions, dates, countedProjectIds])
 
   const daily = preview?.daily ?? null
   const warnings = preview ? getRangeBudgetWarnings(preview) : []
