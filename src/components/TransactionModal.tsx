@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   CalendarDays,
   Check,
+  ChevronRight,
   Feather,
   Plus,
   Trash2,
@@ -283,6 +284,10 @@ export function TransactionModal({
     type === 'expense' ? 'shapes' : 'ellipsis',
   )
   const [creatorError, setCreatorError] = useState('')
+  // Only the big categories show at first; the chevron reveals subcategories.
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(
+    new Set(),
+  )
 
   const categories = useMemo(
     () => allCategories.filter((category) => category.type === type),
@@ -309,6 +314,15 @@ export function TransactionModal({
     (category) => category.id === categoryId,
   )
   const selectedRootId = selectedCategory?.parentId ?? selectedCategory?.id
+
+  const toggleCategoryExpanded = (id: string) => {
+    setExpandedCategoryIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const openCategoryCreator = (parentId = '') => {
     const parent = parentId
@@ -365,6 +379,13 @@ export function TransactionModal({
       ...(creatorParentId ? { parentId: creatorParentId } : {}),
     })
     setCategoryId(created.id)
+    if (creatorParentId) {
+      setExpandedCategoryIds((current) =>
+        current.has(creatorParentId)
+          ? current
+          : new Set(current).add(creatorParentId),
+      )
+    }
     closeCategoryCreator()
     setError('')
   }
@@ -419,6 +440,12 @@ export function TransactionModal({
       setSpendingNature(editing.spendingNature ?? '')
       setScope(getScope(editing))
       setProjectId(getProjectIds(editing)[0] ?? '')
+      const parentId = allCategories.find(
+        (category) => category.id === editing.categoryId,
+      )?.parentId
+      setExpandedCategoryIds(
+        parentId ? new Set([parentId]) : new Set(),
+      )
       setSplitMode('amount')
       setSplitRows(
         editing.allocations.map((line) => ({
@@ -436,6 +463,7 @@ export function TransactionModal({
       setType('expense')
       setAmount('')
       setCategoryId(firstExpenseCategoryId)
+      setExpandedCategoryIds(new Set())
       setAccountId('wechat')
       setDate(defaultDate)
       setNote('')
@@ -465,6 +493,7 @@ export function TransactionModal({
     setType(nextType)
     setError('')
     if (nextType === 'income') setSpendingNature('')
+    setExpandedCategoryIds(new Set())
     setCreatorOpen(false)
     const nextCategories = allCategories.filter(
       (category) => category.type === nextType,
@@ -885,61 +914,89 @@ export function TransactionModal({
 
           <fieldset className="form-section">
             <legend className="field-label">分类</legend>
+            <p className="category-picker-hint">
+              <ChevronRight size={12} aria-hidden />
+              点大分类右侧的小箭头，展开后可以把这笔记到更细的小分类。
+            </p>
             <div className="category-tree-picker">
-              {categoryTree.map(({ parent, children }) => (
-                <div
-                  className={`category-group${
-                    selectedRootId === parent.id ? ' is-current' : ''
-                  }`}
-                  key={parent.id}
-                >
-                  <button
-                    type="button"
-                    className={`category-option category-option--parent${
-                      categoryId === parent.id ? ' is-selected' : ''
+              {categoryTree.map(({ parent, children }) => {
+                const expanded = expandedCategoryIds.has(parent.id)
+                return (
+                  <div
+                    className={`category-group${
+                      selectedRootId === parent.id ? ' is-current' : ''
                     }`}
-                    onClick={() => setCategoryId(parent.id)}
-                    aria-pressed={categoryId === parent.id}
+                    key={parent.id}
                   >
-                    <CategoryIcon category={parent} size={19} />
-                    <span>{parent.name}</span>
-                    {categoryId === parent.id ? (
-                      <Check
-                        className="category-check"
-                        size={13}
-                        aria-hidden
-                      />
-                    ) : null}
-                  </button>
-
-                  <div className="subcategory-row">
-                    {children.map((child) => (
+                    <div className="category-parent-row">
                       <button
-                        key={child.id}
                         type="button"
-                        className={`subcategory-option${
-                          categoryId === child.id ? ' is-selected' : ''
+                        className={`category-option category-option--parent${
+                          categoryId === parent.id ? ' is-selected' : ''
                         }`}
-                        onClick={() => setCategoryId(child.id)}
-                        aria-pressed={categoryId === child.id}
-                        title={child.name}
+                        onClick={() => setCategoryId(parent.id)}
+                        aria-pressed={categoryId === parent.id}
                       >
-                        <CategoryIcon category={child} size={13} />
-                        <span>{child.name}</span>
+                        <CategoryIcon category={parent} size={19} />
+                        <span>{parent.name}</span>
+                        {categoryId === parent.id ? (
+                          <Check
+                            className="category-check"
+                            size={13}
+                            aria-hidden
+                          />
+                        ) : null}
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      className="subcategory-option subcategory-option--add"
-                      onClick={() => openCategoryCreator(parent.id)}
-                      title={`在「${parent.name}」下新建小分类`}
-                    >
-                      <Plus size={12} />
-                      <span>小分类</span>
-                    </button>
+                      {children.length > 0 ? (
+                        <button
+                          type="button"
+                          className="category-expand"
+                          onClick={() => toggleCategoryExpanded(parent.id)}
+                          aria-expanded={expanded}
+                          aria-label={`${expanded ? '收起' : '展开'}${
+                            parent.name
+                          }的小分类`}
+                          title={expanded ? '收起小分类' : '展开小分类'}
+                        >
+                          <ChevronRight
+                            size={15}
+                            className={expanded ? 'is-expanded' : undefined}
+                          />
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {expanded ? (
+                      <div className="subcategory-row">
+                        {children.map((child) => (
+                          <button
+                            key={child.id}
+                            type="button"
+                            className={`subcategory-option${
+                              categoryId === child.id ? ' is-selected' : ''
+                            }`}
+                            onClick={() => setCategoryId(child.id)}
+                            aria-pressed={categoryId === child.id}
+                            title={child.name}
+                          >
+                            <CategoryIcon category={child} size={13} />
+                            <span>{child.name}</span>
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="subcategory-option subcategory-option--add"
+                          onClick={() => openCategoryCreator(parent.id)}
+                          title={`在「${parent.name}」下新建小分类`}
+                        >
+                          <Plus size={12} />
+                          <span>小分类</span>
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <button

@@ -14,9 +14,15 @@
  * 首次运行会自动初始化 git 仓库、配置 origin、上传缺失的签名 Secrets。
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -564,10 +570,13 @@ async function waitForWorkflow(sha, target) {
 // ---------- 手机安装包 ----------
 
 function uploadAndroidApk(target) {
+  const asciiName = `zhangye-v${target}-android.apk`;
   const candidates = [
     process.env.ZHANGYE_ANDROID_APK,
     join(ROOT, '..', 'ledger-android', 'release', `账页-v${target}-android.apk`),
+    join(ROOT, '..', 'ledger-android', 'release', asciiName),
     join(ROOT, '..', `账页-v${target}-android.apk`),
+    join(ROOT, '..', asciiName),
   ].filter(Boolean);
   const apk = candidates.find((path) => existsSync(path));
 
@@ -576,8 +585,18 @@ function uploadAndroidApk(target) {
     return;
   }
 
+  // gh 上传时会丢掉文件名里的中文（账页-v3.0.0-android.apk 变成了
+  // -v3.0.0-android.apk），所以统一用 ASCII 文件名上传。手机端只按 .apk
+  // 后缀识别资源，不受文件名影响。
+  const uploadPath = basename(apk) === asciiName ? apk : join(tmpdir(), asciiName);
+  if (uploadPath !== apk) copyFileSync(apk, uploadPath);
+
   log(`→ 上传手机安装包 ${apk} …`);
-  run('gh', ['release', 'upload', `v${target}`, apk, '--repo', REPO, '--clobber']);
+  try {
+    run('gh', ['release', 'upload', `v${target}`, uploadPath, '--repo', REPO, '--clobber']);
+  } finally {
+    if (uploadPath !== apk) rmSync(uploadPath, { force: true });
+  }
   log('  ✓ 手机安装包已上传');
 }
 

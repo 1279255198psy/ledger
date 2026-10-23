@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Check, Palette, Pencil, Plus, Trash2, X } from 'lucide-react'
+import {
+  Check,
+  ChevronRight,
+  Palette,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react'
 import {
   CATEGORY_ICON_OPTIONS,
   CategoryIcon,
@@ -39,6 +47,9 @@ export function CategorySettings({
   const [tab, setTab] = useState<TransactionType>('expense')
   const [editor, setEditor] = useState<EditorState | null>(null)
   const [error, setError] = useState('')
+  // Subcategories stay hidden until the little chevron on the parent row is
+  // clicked, so a long preset list stays quiet.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const editorRef = useRef<HTMLFormElement>(null)
   const editorKey = editor ? `${editor.mode}:${editor.id ?? ''}` : ''
 
@@ -65,7 +76,24 @@ export function CategorySettings({
       ),
     }))
 
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const revealParent = (parentId?: string) => {
+    if (!parentId) return
+    setExpandedIds((current) =>
+      current.has(parentId) ? current : new Set(current).add(parentId),
+    )
+  }
+
   const startCreate = (parentId = '') => {
+    revealParent(parentId)
     const parent = parentId
       ? categories.find((category) => category.id === parentId)
       : undefined
@@ -83,6 +111,7 @@ export function CategorySettings({
   }
 
   const startEdit = (category: Category) => {
+    revealParent(category.parentId)
     setEditor({
       mode: 'edit',
       id: category.id,
@@ -199,6 +228,8 @@ export function CategorySettings({
       })
     }
 
+    // Keep the parent open so the new or moved subcategory is visible.
+    revealParent(editor.parentId)
     setTab(editor.type)
     closeEditor()
   }
@@ -274,6 +305,32 @@ export function CategorySettings({
           return (
             <div className="category-admin-group" key={parent.id}>
               <div className="category-admin-row category-admin-row--parent">
+                {children.length > 0 ? (
+                  <button
+                    type="button"
+                    className="category-admin-action category-admin-expand"
+                    onClick={() => toggleExpanded(parent.id)}
+                    aria-expanded={expandedIds.has(parent.id)}
+                    aria-label={`${
+                      expandedIds.has(parent.id) ? '收起' : '展开'
+                    }${parent.name}的小分类`}
+                    title={
+                      expandedIds.has(parent.id) ? '收起小分类' : '展开小分类'
+                    }
+                  >
+                    <ChevronRight
+                      size={14}
+                      className={
+                        expandedIds.has(parent.id) ? 'is-expanded' : undefined
+                      }
+                    />
+                  </button>
+                ) : (
+                  <span
+                    className="category-admin-expand-spacer"
+                    aria-hidden="true"
+                  />
+                )}
                 <CategoryIcon category={parent} size={17} />
                 <div className="category-admin-copy">
                   <strong>{parent.name}</strong>
@@ -319,7 +376,8 @@ export function CategorySettings({
                 </button>
               </div>
 
-              {children.map((child) => {
+              {expandedIds.has(parent.id)
+                ? children.map((child) => {
                 const transactions = transactionUsage[child.id] ?? 0
                 const projects = projectUsage[child.id] ?? 0
                 return (
@@ -360,7 +418,8 @@ export function CategorySettings({
                     </button>
                   </div>
                 )
-              })}
+                })
+                : null}
             </div>
           )
         })}

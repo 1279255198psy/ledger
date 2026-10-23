@@ -9180,6 +9180,463 @@ a {
   }
 }
 
+/* ---------- Settings navigation ---------- */
+
+.settings-modal {
+  display: flex;
+  width: min(880px, 100%);
+  height: min(720px, calc(100vh - 48px));
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-header {
+  flex: 0 0 auto;
+}
+
+.settings-shell {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+}
+
+.settings-nav {
+  display: flex;
+  width: 188px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 14px 10px;
+  background: var(--surface-soft);
+  border-right: 1px solid var(--line);
+}
+
+.settings-nav button {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  font-size: calc(11.5px * var(--font-scale));
+  text-align: left;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.settings-nav button:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.settings-nav button.is-active {
+  color: var(--accent-ink);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(30, 36, 31, 0.08);
+  font-weight: 600;
+}
+
+.settings-menu {
+  display: none;
+}
+
+.settings-content {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.settings-content-head {
+  display: none;
+}
+
+.settings-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 26px 26px;
+  overscroll-behavior: contain;
+}
+
+.settings-page .settings-section {
+  padding: 12px 0 0;
+  border-top: 0;
+}
+
+.settings-page .settings-section + .settings-section {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Collapsible subcategories ---------- */
+
+.category-admin-expand svg,
+.category-expand svg,
+.category-filter-expand svg {
+  transition: transform 150ms ease;
+}
+
+.category-admin-expand svg.is-expanded,
+.category-expand svg.is-expanded,
+.category-filter-expand svg.is-expanded {
+  transform: rotate(90deg);
+}
+
+.category-admin-expand-spacer {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+}
+
+.category-parent-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.category-parent-row .category-option--parent {
+  min-width: 0;
+  flex: 1;
+}
+
+.category-expand {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--ink-muted);
+  background: var(--surface);
+  border: 0;
+  border-radius: 8px;
+}
+
+.category-expand:hover {
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+
+.category-picker-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 0;
+  color: var(--ink-faint);
+  font-size: calc(9px * var(--font-scale));
+  line-height: 1.5;
+}
+
+.category-picker-hint svg {
+  flex: 0 0 auto;
+}
+
+/* ---------- Transaction category path ---------- */
+
+.transaction-category {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.transaction-category-parent {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.transaction-category-sep {
+  color: var(--ink-muted);
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+/* ---------- Category filter popover ---------- */
+
+.category-filter {
+  position: relative;
+}
+
+.category-filter-trigger {
+  display: flex;
+  max-width: 168px;
+  height: 100%;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  font-size: calc(11px * var(--font-scale));
+}
+
+.category-filter-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-filter-trigger svg {
+  flex: 0 0 auto;
+  transition: transform 150ms ease;
+}
+
+.category-filter-trigger svg.is-open {
+  transform: rotate(180deg);
+}
+
+.category-filter-popover {
+  /* Coordinates come from the trigger's bounding rect so the panel never
+     runs past the viewport edge. */
+  position: fixed;
+  z-index: 60;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-raised);
+}
+
+.category-filter-option {
+  display: flex;
+  width: 100%;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: calc(10.5px * var(--font-scale));
+  text-align: left;
+}
+
+.category-filter-option > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-filter-option:hover {
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+
+.category-filter-option.is-selected {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.category-filter-option .category-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.category-filter-option--all {
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.category-filter-option--child {
+  width: calc(100% - 16px);
+  margin-left: 16px;
+}
+
+.category-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.category-filter-row .category-filter-option {
+  min-width: 0;
+  flex: 1;
+}
+
+.category-filter-expand {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+}
+
+.category-filter-expand:hover {
+  color: var(--ink);
+  background: var(--surface-soft);
+}
+
+.category-filter-check {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.category-filter-label {
+  padding: 7px 8px 3px;
+  color: var(--ink-faint);
+  font-size: calc(8.5px * var(--font-scale));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 720px) {
+  .settings-modal {
+    width: 100%;
+    height: 92vh;
+    max-height: 92vh;
+    border-radius: 22px 22px 0 0;
+  }
+
+  .settings-header {
+    padding-bottom: 12px;
+  }
+
+  .settings-shell {
+    display: block;
+  }
+
+  .settings-nav {
+    display: none;
+  }
+
+  .settings-menu {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 2px 16px 18px;
+  }
+
+  .settings-menu-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 8px;
+    color: var(--ink);
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+  }
+
+  .settings-menu-row:last-child {
+    border-bottom: 0;
+  }
+
+  .settings-shell.is-page-open .settings-menu {
+    display: none;
+  }
+
+  .settings-menu-icon {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    border-radius: 9px;
+  }
+
+  .settings-menu-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .settings-menu-copy strong {
+    font-size: calc(12.5px * var(--font-scale));
+    font-weight: 600;
+  }
+
+  .settings-menu-copy small {
+    color: var(--ink-faint);
+    font-size: calc(9.5px * var(--font-scale));
+  }
+
+  .settings-menu-chevron {
+    color: var(--ink-faint);
+  }
+
+  .settings-content {
+    display: none;
+    height: 100%;
+  }
+
+  .settings-content.is-open {
+    display: flex;
+  }
+
+  .settings-content-head {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 16px 10px;
+  }
+
+  .settings-content-head h3 {
+    margin-top: 2px;
+    font-size: calc(17px * var(--font-scale));
+    font-weight: 620;
+    letter-spacing: -0.02em;
+  }
+
+  .settings-back {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--ink-secondary);
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+
+  .settings-page {
+    padding: 0 18px 22px;
+  }
+
+  .settings-page .settings-heading h3 {
+    display: none;
+  }
+
+  /* The filter bar has three controls; give the segmented type filter its
+     own row and split the two selects evenly so nothing gets squeezed. */
+  .filter-row .type-filter {
+    flex: 1 1 100%;
+  }
+
+  .filter-row .select-field {
+    min-width: 0;
+    flex: 1 1 calc(50% - 5px);
+  }
+
+  .category-filter-trigger {
+    min-width: 0;
+    max-width: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

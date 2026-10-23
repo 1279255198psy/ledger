@@ -1,6 +1,7 @@
 import { Pencil, Trash2 } from 'lucide-react'
 import { CategoryIcon } from './CategoryIcon'
 import { getAccount, getCategory } from '../lib/data'
+import { getParentCategory } from '../lib/categories'
 import {
   getProjectAmountCents,
   getProjectIds,
@@ -29,6 +30,10 @@ export function TransactionRow({
   compact = false,
 }: TransactionRowProps) {
   const category = getCategory(transaction.categoryId, transaction.type)
+  const parentCategory = getParentCategory(category)
+  const categoryLabel = parentCategory
+    ? `${parentCategory.name} · ${category.name}`
+    : category.name
   const account = getAccount(transaction.accountId)
   const isIncome = transaction.type === 'income'
   const amountCents =
@@ -53,7 +58,21 @@ export function TransactionRow({
 
       <div className="transaction-main">
         <div className="transaction-title">
-          <span>{category.name}</span>
+          <span className="transaction-category">
+            {parentCategory ? (
+              <>
+                <span className="transaction-category-parent">
+                  {parentCategory.name}
+                </span>
+                <span className="transaction-category-sep" aria-hidden>
+                  ·
+                </span>
+                <span>{category.name}</span>
+              </>
+            ) : (
+              category.name
+            )}
+          </span>
           {transaction.note ? (
             <span className="transaction-note">{transaction.note}</span>
           ) : null}
@@ -104,7 +123,7 @@ export function TransactionRow({
           type="button"
           className="row-action"
           onClick={() => onEdit(transaction)}
-          aria-label={`编辑${category.name}记录`}
+          aria-label={`编辑${categoryLabel}记录`}
           title="编辑"
         >
           <Pencil size={15} />
@@ -113,7 +132,7 @@ export function TransactionRow({
           type="button"
           className="row-action row-action--danger"
           onClick={() => onDelete(transaction.id)}
-          aria-label={`删除${category.name}记录`}
+          aria-label={`删除${categoryLabel}记录`}
           title="删除"
         >
           <Trash2 size={15} />

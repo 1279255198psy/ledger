@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
+  Check,
+  ChevronDown,
+  ChevronRight,
   Plus,
   RotateCcw,
   Search,
   SlidersHorizontal,
 } from 'lucide-react'
+import { CategoryIcon } from '../components/CategoryIcon'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { TransactionRow } from '../components/TransactionRow'
 import { ACCOUNTS } from '../lib/data'
@@ -54,12 +59,29 @@ export function Transactions({
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [accountFilter, setAccountFilter] = useState('')
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
+  // The filter sits at the right edge of the filter bar, so an anchored
+  // popover would run off-screen. Measure the trigger and clamp the panel
+  // into the viewport instead.
+  const [categoryMenuPosition, setCategoryMenuPosition] = useState<{
+    left: number
+    top: number
+    width: number
+    maxHeight: number
+  } | null>(null)
+  const [expandedFilterIds, setExpandedFilterIds] = useState<Set<string>>(
+    new Set(),
+  )
+  const categoryMenuRef = useRef<HTMLDivElement>(null)
+  const categoryPopoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setQuery('')
     setTypeFilter('all')
     setCategoryFilter('')
     setAccountFilter('')
+    setCategoryMenuOpen(false)
+    setExpandedFilterIds(new Set())
   }, [monthKey])
 
   const monthTransactions = getMonthTransactions(transactions, monthKey)
@@ -88,6 +110,58 @@ export function Transactions({
     () => categoryTree.filter(({ parent }) => parent.type === 'income'),
     [categoryTree],
   )
+
+  const positionCategoryMenu = () => {
+    const trigger = categoryMenuRef.current?.getBoundingClientRect()
+    if (!trigger) return
+    const gutter = 12
+    const width = Math.min(272, window.innerWidth - gutter * 2)
+    const left = Math.min(
+      Math.max(gutter, trigger.right - width),
+      window.innerWidth - width - gutter,
+    )
+    const top = trigger.bottom + 7
+    const maxHeight = Math.max(
+      180,
+      Math.min(360, window.innerHeight - top - gutter),
+    )
+    setCategoryMenuPosition({ left, top, width, maxHeight })
+  }
+
+  const toggleCategoryMenu = () => {
+    setCategoryMenuOpen((current) => {
+      const next = !current
+      if (next) positionCategoryMenu()
+      return next
+    })
+  }
+
+  useEffect(() => {
+    if (!categoryMenuOpen) return
+    const closeOnOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (
+        !categoryMenuRef.current?.contains(target) &&
+        !categoryPopoverRef.current?.contains(target)
+      ) {
+        setCategoryMenuOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCategoryMenuOpen(false)
+    }
+    const reposition = () => positionCategoryMenu()
+    document.addEventListener('mousedown', closeOnOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('resize', reposition)
+    window.addEventListener('scroll', reposition, true)
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
+    }
+  }, [categoryMenuOpen])
 
   useEffect(() => {
     if (!categoryFilter) return
@@ -162,10 +236,14 @@ export function Transactions({
     setTypeFilter('all')
     setCategoryFilter('')
     setAccountFilter('')
+    setCategoryMenuOpen(false)
+    setExpandedFilterIds(new Set())
   }
 
   const handleTypeFilter = (next: TypeFilter) => {
     setTypeFilter(next)
+    setCategoryMenuOpen(false)
+    setExpandedFilterIds(new Set())
     if (next !== 'all' && categoryFilter) {
       const valid = categories.some(
         (category) =>
@@ -175,18 +253,96 @@ export function Transactions({
     }
   }
 
-  const renderTreeOptions = (nodes: typeof categoryTree) =>
-    nodes.flatMap(({ parent, children }) => [
-      <option key={parent.id} value={parent.id}>
-        {parent.name}
-      </option>,
-      ...children.map((child) => (
-        <option key={child.id} value={child.id}>
-          {'　└ '}
-          {child.name}
-        </option>
-      )),
-    ])
+  const selectedFilterCategory = categoryFilter
+    ? categories.find((category) => category.id === categoryFilter)
+    : undefined
+  const categoryFilterLabel = selectedFilterCategory
+    ? getCategoryPathName(selectedFilterCategory)
+    : '全部分类'
+
+  const toggleFilterExpanded = (id: string) => {
+    setExpandedFilterIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const pickCategoryFilter = (id: string) => {
+    setCategoryFilter(id)
+    setCategoryMenuOpen(false)
+  }
+
+  const renderCategoryFilterTree = (
+    label: string | null,
+    nodes: typeof categoryTree,
+  ) => (
+    <div className="category-filter-section">
+      {label ? (
+        <p className="category-filter-label">{label}</p>
+      ) : null}
+      {nodes.map(({ parent, children }) => {
+        const expanded = expandedFilterIds.has(parent.id)
+        return (
+          <div className="category-filter-group" key={parent.id}>
+            <div className="category-filter-row">
+              <button
+                type="button"
+                className={`category-filter-option${
+                  categoryFilter === parent.id ? ' is-selected' : ''
+                }`}
+                onClick={() => pickCategoryFilter(parent.id)}
+                aria-pressed={categoryFilter === parent.id}
+              >
+                <CategoryIcon category={parent} size={16} />
+                <span>{parent.name}</span>
+                {categoryFilter === parent.id ? (
+                  <Check size={12} className="category-filter-check" />
+                ) : null}
+              </button>
+              {children.length > 0 ? (
+                <button
+                  type="button"
+                  className="category-filter-expand"
+                  onClick={() => toggleFilterExpanded(parent.id)}
+                  aria-expanded={expanded}
+                  aria-label={`${expanded ? '收起' : '展开'}${
+                    parent.name
+                  }的小分类`}
+                  title={expanded ? '收起小分类' : '展开小分类'}
+                >
+                  <ChevronRight
+                    size={14}
+                    className={expanded ? 'is-expanded' : undefined}
+                  />
+                </button>
+              ) : null}
+            </div>
+            {expanded
+              ? children.map((child) => (
+                  <button
+                    key={child.id}
+                    type="button"
+                    className={`category-filter-option category-filter-option--child${
+                      categoryFilter === child.id ? ' is-selected' : ''
+                    }`}
+                    onClick={() => pickCategoryFilter(child.id)}
+                    aria-pressed={categoryFilter === child.id}
+                  >
+                    <CategoryIcon category={child} size={14} />
+                    <span>{child.name}</span>
+                    {categoryFilter === child.id ? (
+                      <Check size={12} className="category-filter-check" />
+                    ) : null}
+                  </button>
+                ))
+              : null}
+          </div>
+        )
+      })}
+    </div>
+  )
 
   if (transactions.length === 0) {
     return (
@@ -252,32 +408,69 @@ export function Transactions({
             ))}
           </div>
 
-          <label className="select-field">
+          <div className="select-field category-filter" ref={categoryMenuRef}>
             <SlidersHorizontal size={15} aria-hidden />
-            <span className="sr-only">分类</span>
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
+            <button
+              type="button"
+              className="category-filter-trigger"
+              onClick={toggleCategoryMenu}
+              aria-haspopup="dialog"
+              aria-expanded={categoryMenuOpen}
+              aria-label={`筛选分类：${categoryFilterLabel}`}
             >
-              <option value="">全部分类</option>
-              {typeFilter === 'all' ? (
-                <>
-                  {expenseTree.length > 0 ? (
-                    <optgroup label="支出">
-                      {renderTreeOptions(expenseTree)}
-                    </optgroup>
-                  ) : null}
-                  {incomeTree.length > 0 ? (
-                    <optgroup label="收入">
-                      {renderTreeOptions(incomeTree)}
-                    </optgroup>
-                  ) : null}
-                </>
-              ) : (
-                renderTreeOptions(categoryTree)
-              )}
-            </select>
-          </label>
+              <span>{categoryFilterLabel}</span>
+              <ChevronDown
+                size={13}
+                aria-hidden
+                className={categoryMenuOpen ? 'is-open' : undefined}
+              />
+            </button>
+
+            {categoryMenuOpen && categoryMenuPosition
+              ? createPortal(
+                  <div
+                    className="category-filter-popover"
+                    role="dialog"
+                    aria-label="选择分类"
+                    ref={categoryPopoverRef}
+                    style={{
+                      left: categoryMenuPosition.left,
+                      top: categoryMenuPosition.top,
+                      width: categoryMenuPosition.width,
+                      maxHeight: categoryMenuPosition.maxHeight,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className={`category-filter-option category-filter-option--all${
+                        categoryFilter === '' ? ' is-selected' : ''
+                      }`}
+                      onClick={() => pickCategoryFilter('')}
+                      aria-pressed={categoryFilter === ''}
+                    >
+                      <span>全部分类</span>
+                      {categoryFilter === '' ? (
+                        <Check size={12} className="category-filter-check" />
+                      ) : null}
+                    </button>
+
+                    {typeFilter === 'all' ? (
+                      <>
+                        {expenseTree.length > 0
+                          ? renderCategoryFilterTree('支出', expenseTree)
+                          : null}
+                        {incomeTree.length > 0
+                          ? renderCategoryFilterTree('收入', incomeTree)
+                          : null}
+                      </>
+                    ) : (
+                      renderCategoryFilterTree(null, categoryTree)
+                    )}
+                  </div>,
+                  document.body,
+                )
+              : null}
+          </div>
 
           <label className="select-field">
             <span className="sr-only">账户</span>
