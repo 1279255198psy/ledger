@@ -11,6 +11,7 @@ import type {
   Palette,
   Project,
   RangeBudget,
+  ReminderSettings,
   Theme,
 } from '../types'
 import {
@@ -33,6 +34,7 @@ import {
 import { makeDailyAllocation } from './allocations'
 import { isCurrency, normalizeCurrency } from './currency'
 import { normalizeFontSize } from './fontSize'
+import { DEFAULT_REMINDERS, normalizeReminders } from './reminders'
 import { isPalette, normalizePalette } from './themes'
 import {
   normalizeBudgetBook,
@@ -63,6 +65,7 @@ const KEYS = {
   fontSize: 'zhangye.fontSize.v1',
   currency: 'zhangye.currency.v1',
   indexPrefs: 'zhangye.indexPrefs.v1',
+  reminders: 'zhangye.reminders.v1',
   seeded: 'zhangye.seeded.v1',
   updatedAt: 'zhangye.updatedAt.v1',
 } as const
@@ -100,6 +103,7 @@ interface DesktopLedgerSnapshot {
   fontSize: FontSize
   currency: Currency
   indexPrefs: IndexPreferences
+  reminders: ReminderSettings
   seeded: boolean
 }
 
@@ -292,6 +296,17 @@ function readStoredBudgetRanges(): RangeBudget[] {
   }
 }
 
+function readStoredReminders(): ReminderSettings {
+  const raw = safeGet(KEYS.reminders)
+  if (raw === null) return { ...DEFAULT_REMINDERS }
+  try {
+    return normalizeReminders(JSON.parse(raw))
+  } catch {
+    // Reminder settings are cheap to rebuild; never block the ledger on them.
+    return { ...DEFAULT_REMINDERS }
+  }
+}
+
 function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   // Categories must be resolved first: transaction and project validation
   // checks every category id against this list.
@@ -399,6 +414,9 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   if (indexPrefs) {
     safeSet(KEYS.indexPrefs, JSON.stringify(indexPrefs))
   }
+  if (snapshot.reminders !== undefined) {
+    safeSet(KEYS.reminders, JSON.stringify(normalizeReminders(snapshot.reminders)))
+  }
   if (typeof snapshot.seeded === 'boolean') {
     safeSet(KEYS.seeded, String(snapshot.seeded))
   }
@@ -435,6 +453,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     fontSize: normalizeFontSize(safeGet(KEYS.fontSize)),
     currency: normalizeCurrency(safeGet(KEYS.currency)),
     indexPrefs: loadIndexPreferences(),
+    reminders: readStoredReminders(),
     seeded: safeGet(KEYS.seeded) === 'true',
   }
 }
@@ -685,6 +704,15 @@ export function loadIndexPreferences(): IndexPreferences {
 
 export function saveIndexPreferences(preferences: IndexPreferences): void {
   safeSet(KEYS.indexPrefs, JSON.stringify(preferences))
+  scheduleDesktopPersist()
+}
+
+export function loadReminders(): ReminderSettings {
+  return readStoredReminders()
+}
+
+export function saveReminders(reminders: ReminderSettings): void {
+  safeSet(KEYS.reminders, JSON.stringify(reminders))
   scheduleDesktopPersist()
 }
 

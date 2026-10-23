@@ -1,6 +1,6 @@
 [package]
 name = "zhangye"
-version = "3.1.1"
+version = "3.2.0"
 description = "账页 · 生活账簿"
 authors = ["账页"]
 edition = "2021"
@@ -16,10 +16,13 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
+chrono = "0.4"
 
 [profile.release]
 panic = "abort"

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
 import {
+  BellRing,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -28,6 +29,7 @@ import {
 import { Modal } from './Modal'
 import { CategorySettings } from './CategorySettings'
 import { BudgetSettings } from './BudgetSettings'
+import { ReminderSettingsSection } from './ReminderSettingsSection'
 import {
   GITHUB_RELEASES_URL,
   GITHUB_REPO_URL,
@@ -46,6 +48,7 @@ import type {
   MonthBudget,
   Palette,
   RangeBudget,
+  ReminderSettings,
   Theme,
 } from '../types'
 import type { LedgerTransaction } from '../types'
@@ -64,6 +67,7 @@ interface SettingsModalProps {
   palette: Palette
   fontSize: FontSize
   currency: Currency
+  reminders: ReminderSettings
   categories: Category[]
   categoryTransactionUsage: Record<string, number>
   categoryProjectUsage: Record<string, number>
@@ -80,6 +84,8 @@ interface SettingsModalProps {
   onPaletteChange: (palette: Palette) => void
   onFontSizeChange: (fontSize: FontSize) => void
   onCurrencyChange: (currency: Currency) => void
+  onRemindersChange: (reminders: ReminderSettings) => void
+  onNotify: (message: string, kind: 'success' | 'error') => void
   onExportJson: () => void
   onExportCsv: () => void
   onImportFile: (file: File) => void
@@ -90,6 +96,7 @@ interface SettingsModalProps {
 type SettingsPageId =
   | 'appearance'
   | 'currency'
+  | 'reminders'
   | 'categories'
   | 'opening'
   | 'budget'
@@ -115,6 +122,12 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
     label: '货币',
     detail: '记账使用的货币符号',
     icon: Coins,
+  },
+  {
+    id: 'reminders',
+    label: '记账提醒',
+    detail: '定时提醒，别漏掉当天的账',
+    icon: BellRing,
   },
   {
     id: 'categories',
@@ -161,6 +174,7 @@ export function SettingsModal({
   palette,
   fontSize,
   currency,
+  reminders,
   categories,
   categoryTransactionUsage,
   categoryProjectUsage,
@@ -177,6 +191,8 @@ export function SettingsModal({
   onPaletteChange,
   onFontSizeChange,
   onCurrencyChange,
+  onRemindersChange,
+  onNotify,
   onExportJson,
   onExportCsv,
   onImportFile,
@@ -524,6 +540,14 @@ export function SettingsModal({
                   })}
                 </div>
               </section>
+            ) : null}
+
+            {activePage === 'reminders' ? (
+              <ReminderSettingsSection
+                settings={reminders}
+                onChange={onRemindersChange}
+                onNotify={onNotify}
+              />
             ) : null}
 
             {activePage === 'categories' ? (

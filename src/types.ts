@@ -36,6 +36,24 @@ export type Currency = 'CNY' | 'USD' | 'GBP' | 'EUR' | 'JPY' | 'KRW'
 
 export type FontSize = 'small' | 'standard' | 'large' | 'xlarge'
 
+export type ReminderFrequency = 'daily' | 'weekdays' | 'weekends' | 'custom'
+
+/**
+ * A gentle nudge to keep the ledger current. The same settings drive three
+ * schedulers: the Tauri tray app, Android local notifications, and the
+ * browser Notification API used in the preview build.
+ */
+export interface ReminderSettings {
+  enabled: boolean
+  /** Local wall-clock time, "HH:mm". */
+  time: string
+  frequency: ReminderFrequency
+  /** Days used by the custom frequency; 0 = Sunday … 6 = Saturday. */
+  weekdays: number[]
+  /** Desktop only: launch at login and start minimized to the tray. */
+  autoStart: boolean
+}
+
 /** How the daily budget is derived for one month. */
 export type DailyBudgetMode = 'off' | 'auto' | 'manual'
 

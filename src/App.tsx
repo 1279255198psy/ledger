@@ -12,6 +12,7 @@ import { TransactionModal } from './components/TransactionModal'
 import { SettingsModal } from './components/SettingsModal'
 import { UpdateDialog } from './components/UpdateDialog'
 import { useUpdater } from './hooks/useUpdater'
+import { useReminderScheduler } from './hooks/useReminderScheduler'
 import { Overview } from './pages/Overview'
 import { Transactions } from './pages/Transactions'
 import { Projects } from './pages/Projects'
@@ -42,6 +43,7 @@ import {
   loadOpeningBalance,
   loadPalette,
   loadProjects,
+  loadReminders,
   loadTheme,
   loadTransactions,
   parseBackup,
@@ -54,6 +56,7 @@ import {
   saveOpeningBalance,
   savePalette,
   saveProjects,
+  saveReminders,
   saveTheme,
   saveTransactions,
 } from './lib/storage'
@@ -99,6 +102,7 @@ import type {
   Project,
   ProjectDraft,
   RangeBudget,
+  ReminderSettings,
   RepaymentDraft,
   Theme,
   TransactionDraft,
@@ -147,6 +151,7 @@ export default function App() {
     setActiveCurrency(stored)
     return stored
   })
+  const [reminders, setReminders] = useState<ReminderSettings>(loadReminders)
   const [transactionModalOpen, setTransactionModalOpen] = useState(false)
   const [editing, setEditing] = useState<LedgerTransaction | null>(null)
   const [transactionProjectId, setTransactionProjectId] = useState<
@@ -256,6 +261,12 @@ export default function App() {
   useEffect(() => {
     saveCurrency(currency)
   }, [currency])
+
+  useEffect(() => {
+    saveReminders(reminders)
+  }, [reminders])
+
+  useReminderScheduler(reminders)
 
   useEffect(() => {
     document.documentElement.dataset.palette = palette
@@ -1046,6 +1057,7 @@ export default function App() {
         palette={palette}
         fontSize={fontSize}
         currency={currency}
+        reminders={reminders}
         categories={categories}
         categoryTransactionUsage={categoryTransactionUsage}
         categoryProjectUsage={categoryProjectUsage}
@@ -1065,6 +1077,8 @@ export default function App() {
         onPaletteChange={setPalette}
         onFontSizeChange={setFontSize}
         onCurrencyChange={handleCurrencyChange}
+        onRemindersChange={setReminders}
+        onNotify={showToast}
         onExportJson={handleExportJson}
         onExportCsv={handleExportCsv}
         onImportFile={handleImportFile}
