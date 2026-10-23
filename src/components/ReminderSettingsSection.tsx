@@ -74,6 +74,19 @@ export function ReminderSettingsSection({
     }
   }, [settings.enabled])
 
+  // The user may grant or revoke notifications from system settings while the
+  // app is in the background; re-read the state when they come back.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      getReminderPermission()
+        .then(setPermission)
+        .catch(() => undefined)
+    }
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [])
+
   const update = (patch: Partial<ReminderSettings>) => {
     onChange(normalizeReminders({ ...settings, ...patch }))
   }
@@ -91,7 +104,16 @@ export function ReminderSettingsSection({
         await Notification.requestPermission().catch(() => undefined)
       }
     }
-    setPermission(await getReminderPermission())
+    const nextPermission = await getReminderPermission()
+    setPermission(nextPermission)
+    if (enabled && nextPermission !== 'granted') {
+      onNotify(
+        mobile
+          ? '通知权限还没有开启，提醒暂时无法送达；请在系统设置里允许账页通知，再回来打开提醒。'
+          : '通知权限还没有开启，提醒暂时无法送达。',
+        'error',
+      )
+    }
   }
 
   const handleFrequency = (frequency: ReminderFrequency) => {
@@ -287,6 +309,11 @@ export function ReminderSettingsSection({
               )}
               {PERMISSION_COPY[permission]}
             </p>
+            {desktop ? (
+              <p className="reminder-note">
+                Windows 的通知开关由系统统一管理，安装后默认允许，账页不会也无法弹出授权窗口；若收不到提醒，请到「设置 › 系统 › 通知」检查账页是否被关闭。
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

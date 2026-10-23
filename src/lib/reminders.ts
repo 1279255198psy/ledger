@@ -1,7 +1,7 @@
 import type { ReminderFrequency, ReminderSettings } from '../types'
 
-export const REMINDER_TITLE = '账页 · 记账提醒'
-export const REMINDER_BODY = '今天的花销记下来了吗？花一分钟，把收支补上。'
+export const REMINDER_TITLE = '账页 · 记账小提醒'
+export const REMINDER_BODY = '今天若有还没记下的收支，顺手记一笔就好。'
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6]
@@ -151,6 +151,14 @@ export interface MobileReminderSchedule {
   id: number
   title: string
   body: string
+  /**
+   * Android 12+ treats exact alarms as a separate special permission, and the
+   * local-notifications plugin opens a system settings screen while scheduling
+   * when this is left at its default (`true`). A minute-level reminder does not
+   * need that detour, so opt into inexact alarms and let the plugin schedule
+   * reliably without extra permission.
+   */
+  isExactNotification: false
   schedule: {
     on: { hour: number; minute: number; weekday?: number }
     repeats: true
@@ -175,6 +183,7 @@ export function buildMobileSchedules(
         id: MOBILE_REMINDER_IDS[0],
         title: REMINDER_TITLE,
         body: REMINDER_BODY,
+        isExactNotification: false,
         schedule: {
           on: { hour, minute },
           repeats: true,
@@ -188,6 +197,7 @@ export function buildMobileSchedules(
     id: MOBILE_REMINDER_IDS[1 + day],
     title: REMINDER_TITLE,
     body: REMINDER_BODY,
+    isExactNotification: false,
     schedule: {
       on: { weekday: day + 1, hour, minute },
       repeats: true,

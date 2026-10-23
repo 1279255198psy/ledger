@@ -180,8 +180,8 @@ fn show_reminder(app: &tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_notification::NotificationExt;
     app.notification()
         .builder()
-        .title("账页 · 记账提醒")
-        .body("今天的花销记下来了吗？花一分钟，把收支补上。")
+        .title("账页 · 记账小提醒")
+        .body("今天若有还没记下的收支，顺手记一笔就好。")
         .show()
         .map_err(|error| format!("发送提醒失败：{error}"))
 }

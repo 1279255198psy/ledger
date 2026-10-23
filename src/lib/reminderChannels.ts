@@ -105,22 +105,15 @@ async function applyMobile(settings: ReminderSettings): Promise<void> {
   const notifications = buildMobileSchedules(settings)
   if (notifications.length === 0) return
   const plugin = await loadMobilePlugin()
-  const payload = notifications.map((item) => ({
-    ...item,
-    channelId: 'reminders',
-  }))
-  try {
-    await plugin.schedule({ notifications: payload })
-  } catch {
-    // Android 12+ can refuse exact alarms. Inexact repeating alarms still
-    // arrive while the app is closed, so fall back instead of losing them.
-    await plugin.schedule({
-      notifications: payload.map((item) => ({
-        ...item,
-        schedule: { ...item.schedule, allowWhileIdle: false },
-      })),
-    })
-  }
+  // `isExactNotification: false` keeps Android from sending the user to the
+  // "Alarms & reminders" permission screen here. Inexact alarms still survive
+  // a closed app, and allowWhileIdle keeps them firing through Doze.
+  await plugin.schedule({
+    notifications: notifications.map((item) => ({
+      ...item,
+      channelId: 'reminders',
+    })),
+  })
 }
 
 /**
@@ -160,13 +153,28 @@ export async function sendTestReminder(): Promise<ReminderActionResult> {
             title: REMINDER_TITLE,
             body: REMINDER_BODY,
             channelId: 'reminders',
-            schedule: { at: new Date(Date.now() + 2000) },
+            isExactNotification: false,
+            // A one-shot `at` in the past is delivered immediately by the
+            // plugin. Using a future time would go through AlarmManager, which
+            // Android can delay (or block behind the exact-alarm permission).
+            schedule: { at: new Date(Date.now() - 1000) },
           },
         ],
       })
-      return { ok: true, message: '测试通知已安排，几秒后会出现。' }
-    } catch {
-      return { ok: false, message: '测试通知发送失败，请检查通知权限。' }
+      return { ok: true, message: '测试通知已发送，请看看通知栏。' }
+    } catch (error) {
+      console.error('测试提醒发送失败', error)
+      const detail =
+        typeof error === 'object' && error !== null && 'message' in error
+          ? String((error as { message?: unknown }).message ?? '')
+          : ''
+      if (/disable|denied|not.*permission|permission/i.test(detail)) {
+        return {
+          ok: false,
+          message: '系统里关闭了账页的通知，请到系统设置中允许通知后再试。',
+        }
+      }
+      return { ok: false, message: '测试通知发送失败，请检查通知权限后重试。' }
     }
   }
 

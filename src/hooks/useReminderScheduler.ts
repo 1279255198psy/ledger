@@ -43,6 +43,21 @@ export function useReminderScheduler(settings: ReminderSettings): void {
     }
   }, [settings])
 
+  // If the user grants notification permission in system settings while the
+  // app is open (or returns to it after changing the time), rebuild the
+  // native schedule as soon as the app becomes visible again.
+  useEffect(() => {
+    if (!isMobileApp()) return
+    const reapply = () => {
+      if (document.visibilityState !== 'visible') return
+      applyReminderSchedule(settings).catch((error) => {
+        console.error('应用记账提醒设置失败', error)
+      })
+    }
+    document.addEventListener('visibilitychange', reapply)
+    return () => document.removeEventListener('visibilitychange', reapply)
+  }, [settings])
+
   useEffect(() => {
     if (isMobileApp() || isDesktopApp()) return
     if (!settings.enabled) return
