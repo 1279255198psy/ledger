@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
 import {
   BellRing,
+  BookOpen,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -34,6 +35,7 @@ import { AccountSettings } from './AccountSettings'
 import { CategorySettings } from './CategorySettings'
 import { BudgetSettings } from './BudgetSettings'
 import { ReminderSettingsSection } from './ReminderSettingsSection'
+import { GuideSection } from './GuideSection'
 import { CaptureDebugSection } from './CaptureDebugSection'
 import { SyncSettingsSection } from './SyncSettingsSection'
 import {
@@ -63,7 +65,13 @@ import type { LedgerTransaction } from '../types'
 
 interface SettingsModalProps {
   open: boolean
-  focusSection: 'opening-balance' | 'budget' | 'budget-ranges' | null
+  focusSection:
+    | 'opening-balance'
+    | 'budget'
+    | 'budget-ranges'
+    | 'reminders'
+    | 'guide'
+    | null
   monthKey: string
   budgets: BudgetBook
   ranges: RangeBudget[]
@@ -107,6 +115,7 @@ interface SettingsModalProps {
 }
 
 type SettingsPageId =
+  | 'guide'
   | 'appearance'
   | 'currency'
   | 'reminders'
@@ -127,6 +136,12 @@ interface SettingsPageMeta {
 }
 
 const SETTINGS_PAGES: SettingsPageMeta[] = [
+  {
+    id: 'guide',
+    label: '使用指南',
+    detail: '常用操作速查',
+    icon: BookOpen,
+  },
   {
     id: 'appearance',
     label: '外观',
@@ -267,7 +282,11 @@ export function SettingsModal({
         ? 'opening'
         : focusSection === 'budget' || focusSection === 'budget-ranges'
           ? 'budget'
-          : null,
+          : focusSection === 'reminders'
+            ? 'reminders'
+            : focusSection === 'guide'
+              ? 'guide'
+              : null,
     )
   }, [open, focusSection])
 
@@ -434,6 +453,8 @@ export function SettingsModal({
           </header>
 
           <div className="settings-page" key={activePage}>
+            {activePage === 'guide' ? <GuideSection /> : null}
+
             {activePage === 'appearance' ? (
               <section className="settings-section">
                 <div className="settings-heading">

@@ -45,6 +45,7 @@ import {
   loadCurrency,
   loadFontSize,
   loadLiabilities,
+  loadOnboardingDismissed,
   loadOpeningBalance,
   loadPalette,
   loadProjects,
@@ -59,6 +60,7 @@ import {
   saveCurrency,
   saveFontSize,
   saveLiabilities,
+  saveOnboardingDismissed,
   saveOpeningBalance,
   savePalette,
   saveProjects,
@@ -173,8 +175,16 @@ export default function App() {
   >(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsFocus, setSettingsFocus] = useState<
-    'opening-balance' | 'budget' | 'budget-ranges' | null
+    | 'opening-balance'
+    | 'budget'
+    | 'budget-ranges'
+    | 'reminders'
+    | 'guide'
+    | null
   >(null)
+  const [onboardingDismissed, setOnboardingDismissed] = useState(
+    loadOnboardingDismissed,
+  )
   const [toast, setToast] = useState<ToastState | null>(null)
   const updater = useUpdater()
 
@@ -1149,6 +1159,17 @@ export default function App() {
               setSettingsOpen(true)
             }}
             onLoadSample={handleLoadSample}
+            showOnboarding={!onboardingDismissed}
+            hasMonthBudget={budgetMetrics.source !== 'default'}
+            hasCategoryBudget={budgetMetrics.categories.length > 0}
+            onOpenGuide={() => {
+              setSettingsFocus('guide')
+              setSettingsOpen(true)
+            }}
+            onDismissOnboarding={() => {
+              saveOnboardingDismissed()
+              setOnboardingDismissed(true)
+            }}
           />
         ) : null}
 

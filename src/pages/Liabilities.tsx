@@ -419,43 +419,48 @@ export function Liabilities({
 
                   {!summary.settled ? (
                     expanded ? (
-                      <form
-                        className="repayment-form"
-                        onSubmit={(event) => handleRepay(event, liability)}
-                      >
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={repayAmount}
-                          onChange={(event) => {
-                            setRepayAmount(sanitizeMoney(event.target.value))
-                            setRepayError('')
-                          }}
-                          placeholder="还款金额"
-                          aria-label="还款金额"
-                        />
-                        <input
-                          type="date"
-                          value={repayDate}
-                          max={localDateKey()}
-                          onChange={(event) => {
-                            setRepayDate(event.target.value)
-                            setRepayError('')
-                          }}
-                          aria-label="还款日期"
-                        />
-                        <input
-                          type="text"
-                          value={repayNote}
-                          onChange={(event) => setRepayNote(event.target.value)}
-                          placeholder="备注（选填）"
-                          maxLength={200}
-                          aria-label="还款备注"
-                        />
-                        <button type="submit" className="button secondary">
-                          记下还款
-                        </button>
-                      </form>
+                      <>
+                        <form
+                          className="repayment-form"
+                          onSubmit={(event) => handleRepay(event, liability)}
+                        >
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={repayAmount}
+                            onChange={(event) => {
+                              setRepayAmount(sanitizeMoney(event.target.value))
+                              setRepayError('')
+                            }}
+                            placeholder="还款金额"
+                            aria-label="还款金额"
+                          />
+                          <input
+                            type="date"
+                            value={repayDate}
+                            max={localDateKey()}
+                            onChange={(event) => {
+                              setRepayDate(event.target.value)
+                              setRepayError('')
+                            }}
+                            aria-label="还款日期"
+                          />
+                          <input
+                            type="text"
+                            value={repayNote}
+                            onChange={(event) => setRepayNote(event.target.value)}
+                            placeholder="备注（选填）"
+                            maxLength={200}
+                            aria-label="还款备注"
+                          />
+                          <button type="submit" className="button secondary">
+                            记下还款
+                          </button>
+                        </form>
+                        <p className="repayment-hint">
+                          还款只记在这里，不会生成流水；如果这笔钱确实从账户付出，请再到流水里记一笔支出。
+                        </p>
+                      </>
                     ) : (
                       <button
                         type="button"

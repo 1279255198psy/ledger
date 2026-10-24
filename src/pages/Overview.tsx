@@ -17,6 +17,7 @@ import { CategoryBars } from '../components/charts/CategoryBars'
 import { RangeBudgetPanel } from '../components/RangeBudgetPanel'
 import { activeCurrencySymbol } from '../lib/currency'
 import { EmptyLedger } from '../components/EmptyLedger'
+import { OnboardingCard } from '../components/OnboardingCard'
 import { ExpenseTrendChart } from '../components/charts/ExpenseTrendChart'
 import { TransactionRow } from '../components/TransactionRow'
 import { getCountedProjectIds, getMonthSpendCents } from '../lib/allocations'
@@ -63,6 +64,11 @@ interface OverviewProps {
   onOpenRangeBudget: () => void
   onOpenOpeningBalance: () => void
   onLoadSample: () => void
+  showOnboarding: boolean
+  hasMonthBudget: boolean
+  hasCategoryBudget: boolean
+  onOpenGuide: () => void
+  onDismissOnboarding: () => void
 }
 
 function PendingCaptureBanner({
@@ -126,6 +132,11 @@ export function Overview({
   onOpenRangeBudget,
   onOpenOpeningBalance,
   onLoadSample,
+  showOnboarding,
+  hasMonthBudget,
+  hasCategoryBudget,
+  onOpenGuide,
+  onDismissOnboarding,
 }: OverviewProps) {
   if (transactions.length === 0) {
     return (
@@ -212,6 +223,16 @@ export function Overview({
         totalCents={pendingCaptureTotalCents}
         onOpen={onOpenPendingCaptures}
       />
+
+      {showOnboarding ? (
+        <OnboardingCard
+          hasMonthBudget={hasMonthBudget}
+          hasCategoryBudget={hasCategoryBudget}
+          onOpenBudget={onOpenBudget}
+          onOpenGuide={onOpenGuide}
+          onDismiss={onDismissOnboarding}
+        />
+      ) : null}
 
       <div className="overview-hero-grid">
         <section className="hero-card" aria-labelledby="balance-heading">

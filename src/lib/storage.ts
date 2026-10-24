@@ -76,6 +76,7 @@ const KEYS = {
   reminders: 'zhangye.reminders.v1',
   seeded: 'zhangye.seeded.v1',
   updatedAt: 'zhangye.updatedAt.v1',
+  onboardingDismissed: 'zhangye.onboardingDismissed.v1',
 } as const
 
 function safeGet(key: string): string | null {
@@ -890,6 +891,18 @@ export function loadIndexPreferences(): IndexPreferences {
 export function saveIndexPreferences(preferences: IndexPreferences): void {
   safeSet(KEYS.indexPrefs, JSON.stringify(preferences))
   scheduleDesktopPersist()
+}
+
+/**
+ * The getting-started card is a local preference: dismissing it on one device
+ * should not hide it on another, so it is never part of the synced snapshot.
+ */
+export function loadOnboardingDismissed(): boolean {
+  return safeGet(KEYS.onboardingDismissed) === 'true'
+}
+
+export function saveOnboardingDismissed(): void {
+  safeSet(KEYS.onboardingDismissed, 'true')
 }
 
 export function loadReminders(): ReminderSettings {

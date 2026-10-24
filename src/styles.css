@@ -11185,3 +11185,157 @@ a {
     justify-content: flex-end;
   }
 }
+
+/* ---------- Getting started checklist ---------- */
+
+.onboarding-card {
+  padding: 18px 20px 14px;
+}
+
+.onboarding-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.onboarding-head h2 {
+  color: var(--ink);
+  font-size: calc(16px * var(--font-scale));
+  font-weight: 640;
+  letter-spacing: -0.02em;
+}
+
+.onboarding-count {
+  flex-shrink: 0;
+  margin-top: 2px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: calc(9.5px * var(--font-scale));
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.onboarding-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-step {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  transition: background 150ms ease;
+}
+
+.onboarding-step:hover:not(:disabled) {
+  background: var(--surface-soft);
+}
+
+.onboarding-step:disabled {
+  cursor: default;
+}
+
+.onboarding-mark {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--surface);
+}
+
+.onboarding-step.is-done .onboarding-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.onboarding-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.onboarding-copy strong {
+  color: var(--ink);
+  font-size: calc(12.5px * var(--font-scale));
+  font-weight: 640;
+}
+
+.onboarding-copy small {
+  color: var(--ink-muted);
+  font-size: calc(10px * var(--font-scale));
+}
+
+.onboarding-step.is-done .onboarding-copy strong {
+  color: var(--ink-muted);
+  font-weight: 560;
+}
+
+.onboarding-step > svg {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+}
+
+.onboarding-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 10px 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.onboarding-dismiss {
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: calc(10px * var(--font-scale));
+  transition: color 150ms ease;
+}
+
+.onboarding-dismiss:hover {
+  color: var(--ink-secondary);
+}
+
+.repayment-hint {
+  margin-bottom: 10px;
+  color: var(--ink-muted);
+  font-size: calc(10.5px * var(--font-scale));
+  line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+  .onboarding-card {
+    padding: 16px 14px 12px;
+  }
+
+  .onboarding-head {
+    gap: 10px;
+  }
+
+  /* The settings header already names the page, so section headings are
+     hidden on phones — except in the guide, where every topic needs one. */
+  .settings-page .guide-heading h3 {
+    display: block;
+  }
+}
