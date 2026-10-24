@@ -312,9 +312,14 @@ export interface LiabilitySummary {
   overdue: boolean
 }
 
+export type AccountType = 'wechat' | 'alipay' | 'cash' | 'bank'
+
 export interface Account {
   id: string
   name: string
+  type: AccountType
+  /** Issuing bank for type 'bank'; free-form custom names are allowed. */
+  bank?: string
 }
 
 export interface MonthTotals {

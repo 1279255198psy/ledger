@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Coins,
+  CreditCard,
   Database,
   Download,
   ExternalLink,
@@ -28,6 +29,7 @@ import {
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
+import { AccountSettings } from './AccountSettings'
 import { CategorySettings } from './CategorySettings'
 import { BudgetSettings } from './BudgetSettings'
 import { ReminderSettingsSection } from './ReminderSettingsSection'
@@ -43,6 +45,7 @@ import { PALETTES } from '../lib/themes'
 import type { CategoryDraft } from '../lib/categories'
 import type { UpdaterController } from '../hooks/useUpdater'
 import type {
+  Account,
   BudgetBook,
   Category,
   Currency,
@@ -73,6 +76,8 @@ interface SettingsModalProps {
   categories: Category[]
   categoryTransactionUsage: Record<string, number>
   categoryProjectUsage: Record<string, number>
+  accounts: Account[]
+  accountTransactionUsage: Record<string, number>
   updater: UpdaterController
   onClose: () => void
   onBudgetSave: (budget: MonthBudget) => void
@@ -82,6 +87,9 @@ interface SettingsModalProps {
   onCreateCategory: (draft: CategoryDraft) => void
   onUpdateCategory: (id: string, draft: CategoryDraft) => void
   onDeleteCategory: (id: string) => void
+  onCreateAccount: (bank: string, name: string) => void
+  onRenameAccount: (id: string, name: string) => void
+  onDeleteAccount: (id: string) => void
   onThemeChange: (theme: Theme) => void
   onPaletteChange: (palette: Palette) => void
   onFontSizeChange: (fontSize: FontSize) => void
@@ -100,6 +108,7 @@ type SettingsPageId =
   | 'currency'
   | 'reminders'
   | 'categories'
+  | 'accounts'
   | 'opening'
   | 'budget'
   | 'sync'
@@ -137,6 +146,12 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
     label: '分类',
     detail: '管理收入、支出与小分类',
     icon: Tags,
+  },
+  {
+    id: 'accounts',
+    label: '账户',
+    detail: '常用钱包与银行卡，支持多张卡',
+    icon: CreditCard,
   },
   {
     id: 'opening',
@@ -187,6 +202,8 @@ export function SettingsModal({
   categories,
   categoryTransactionUsage,
   categoryProjectUsage,
+  accounts,
+  accountTransactionUsage,
   updater,
   onClose,
   onBudgetSave,
@@ -196,6 +213,9 @@ export function SettingsModal({
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
+  onCreateAccount,
+  onRenameAccount,
+  onDeleteAccount,
   onThemeChange,
   onPaletteChange,
   onFontSizeChange,
@@ -579,6 +599,25 @@ export function SettingsModal({
               </section>
             ) : null}
 
+            {activePage === 'accounts' ? (
+              <section className="settings-section">
+                <div className="settings-heading">
+                  <h3>账户</h3>
+                  <p>
+                    记一笔和流水筛选里的账户都来自这里。微信、支付宝和现金是固定账户；
+                    银行卡可以添加多张，名称重复时会自动编号，也可以随时改名方便区分。
+                  </p>
+                </div>
+                <AccountSettings
+                  accounts={accounts}
+                  transactionUsage={accountTransactionUsage}
+                  onCreate={onCreateAccount}
+                  onRename={onRenameAccount}
+                  onDelete={onDeleteAccount}
+                />
+              </section>
+            ) : null}
+
             {activePage === 'opening' ? (
               <section
                 className="settings-section"
@@ -701,7 +740,7 @@ export function SettingsModal({
                     <span className="data-row-text">
                       <strong>导出完整备份</strong>
                       <small>
-                        包含流水、分类、项目、月度与区间预算、起始资金的 JSON 文件
+                        包含流水、分类、账户、项目、月度与区间预算、起始资金的 JSON 文件
                       </small>
                     </span>
                   </button>

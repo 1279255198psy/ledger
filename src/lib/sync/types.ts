@@ -1,4 +1,5 @@
 import type {
+  Account,
   BudgetBook,
   Category,
   LedgerTransaction,
@@ -16,6 +17,8 @@ export interface LedgerDataSnapshot {
   syncVersion: 1
   updatedAt: string
   categories: Category[]
+  /** Absent in snapshots created before custom bank cards existed. */
+  accounts?: Account[]
   transactions: LedgerTransaction[]
   projects: Project[]
   liabilities: Liability[]
@@ -77,6 +80,7 @@ export type SyncConflictKind =
   | 'liability'
   | 'repayment'
   | 'category'
+  | 'account'
   | 'budget'
   | 'range'
   | 'openingBalance'

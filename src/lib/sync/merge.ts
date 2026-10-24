@@ -1,7 +1,9 @@
+import { DEFAULT_ACCOUNTS } from '../accounts'
 import { DEFAULT_CATEGORIES } from '../categories'
 import { sortTransactions } from '../data'
 import { sortLiabilities } from '../liabilities'
 import type {
+  Account,
   BudgetBook,
   Category,
   LedgerTransaction,
@@ -501,6 +503,15 @@ export function mergeSnapshots(
     'category',
     { favor },
   )
+  // A peer on an older build sends no accounts; treating that as the built-in
+  // wallets keeps the union intact instead of dropping this device's cards.
+  const accounts = mergeCollection<Account>(
+    base?.accounts ?? null,
+    local.accounts ?? DEFAULT_ACCOUNTS,
+    remote.accounts ?? DEFAULT_ACCOUNTS,
+    'account',
+    { favor },
+  )
   const budgets = mergeCollection<BudgetEntry>(
     base ? toBudgetEntries(base.budgets) : null,
     toBudgetEntries(local.budgets),
@@ -521,6 +532,7 @@ export function mergeSnapshots(
     projects,
     liabilities,
     categories,
+    accounts,
     budgets,
     ranges,
   ]) {
@@ -553,6 +565,7 @@ export function mergeSnapshots(
     syncVersion: 1,
     updatedAt: new Date().toISOString(),
     categories: categories.items,
+    accounts: accounts.items,
     transactions: sortTransactions(transactions.items),
     projects: projects.items,
     liabilities: sortLiabilities(liabilities.items),

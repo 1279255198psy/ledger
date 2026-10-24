@@ -10,10 +10,12 @@ import {
   Feather,
   Plus,
   Trash2,
+  Wallet,
   WalletCards,
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
+import { SelectMenu } from './SelectMenu'
 import {
   CATEGORY_ICON_OPTIONS,
   CategoryIcon,
@@ -24,7 +26,7 @@ import {
   defaultCategoryColor,
 } from '../lib/categories'
 import type { CategoryDraft } from '../lib/categories'
-import { ACCOUNTS } from '../lib/data'
+import { getDefaultAccountId } from '../lib/accounts'
 import {
   getProjectIds,
   getScope,
@@ -36,6 +38,7 @@ import {
 import { activeCurrencySymbol } from '../lib/currency'
 import { formatMoney, localDateKey } from '../lib/utils'
 import type {
+  Account,
   AllocationLine,
   AllocationTarget,
   Category,
@@ -52,6 +55,7 @@ interface TransactionModalProps {
   editing: LedgerTransaction | null
   projects: Project[]
   categories: Category[]
+  accounts: Account[]
   defaultDate: string
   defaultProjectId?: string
   onClose: () => void
@@ -255,6 +259,7 @@ export function TransactionModal({
   editing,
   projects,
   categories: allCategories,
+  accounts,
   defaultDate,
   defaultProjectId,
   onClose,
@@ -293,6 +298,24 @@ export function TransactionModal({
     () => allCategories.filter((category) => category.type === type),
     [allCategories, type],
   )
+
+  const accountOptions = useMemo(() => {
+    const wallet = accounts
+      .filter((account) => account.type !== 'bank')
+      .map((account) => ({
+        value: account.id,
+        label: account.name,
+        group: '常用账户',
+      }))
+    const cards = accounts
+      .filter((account) => account.type === 'bank')
+      .map((account) => ({
+        value: account.id,
+        label: account.name,
+        group: '银行卡',
+      }))
+    return [...wallet, ...cards]
+  }, [accounts])
 
   const categoryTree = useMemo(() => {
     const childrenByParent = new Map<string, Category[]>()
@@ -464,7 +487,7 @@ export function TransactionModal({
       setAmount('')
       setCategoryId(firstExpenseCategoryId)
       setExpandedCategoryIds(new Set())
-      setAccountId('wechat')
+      setAccountId(getDefaultAccountId(accounts))
       setDate(defaultDate)
       setNote('')
       setSpendingNature('')
@@ -487,6 +510,7 @@ export function TransactionModal({
     defaultProjectId,
     selectableProjects,
     firstExpenseCategoryId,
+    accounts,
   ])
 
   const handleTypeChange = (nextType: TransactionType) => {
@@ -1189,21 +1213,21 @@ export function TransactionModal({
               />
             </label>
 
-            <label className="field">
+            <div className="field account-field">
               <span className="field-label">
                 <WalletCards size={14} /> 账户
               </span>
-              <select
+              <SelectMenu
                 value={accountId}
-                onChange={(event) => setAccountId(event.target.value)}
-              >
-                {ACCOUNTS.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={accountOptions}
+                onChange={setAccountId}
+                ariaLabel="选择账户"
+                icon={<Wallet size={15} aria-hidden />}
+                className="account-select"
+                elevated
+                footer="在「设置 → 账户」里可以添加或重命名银行卡"
+              />
+            </div>
           </div>
 
           <label className="field">

@@ -10,6 +10,7 @@ import {
   Smartphone,
   Wifi,
 } from 'lucide-react'
+import { SelectMenu } from './SelectMenu'
 import { useSync } from '../hooks/useSync'
 import { isDesktopApp } from '../lib/desktop'
 import { isMobileApp } from '../lib/platform'
@@ -26,7 +27,13 @@ import {
   syncNow,
 } from '../lib/sync/engine'
 import { formatSyncCode } from '../lib/sync/crypto'
-import type { SyncPriority } from '../lib/sync/types'
+import type { SyncFavor, SyncPriority } from '../lib/sync/types'
+
+const PRIORITY_OPTIONS: Array<{ value: SyncFavor; label: string }> = [
+  { value: 'latest', label: '按最后改动时间' },
+  { value: 'phone', label: '手机优先' },
+  { value: 'desktop', label: '电脑优先' },
+]
 
 const PHASE_COPY: Record<string, string> = {
   idle: '待命',
@@ -77,6 +84,7 @@ export function SyncSettingsSection() {
   const [code, setCode] = useState(sync.code ?? '')
   const [busy, setBusy] = useState(false)
   const [rememberPriority, setRememberPriority] = useState(false)
+  const [pendingChoice, setPendingChoice] = useState<SyncFavor>('latest')
   const [notice, setNotice] = useState<{ text: string; kind: 'ok' | 'bad' } | null>(
     null,
   )
@@ -88,7 +96,10 @@ export function SyncSettingsSection() {
   }, [sync.role, sync.enabled])
 
   useEffect(() => {
-    if (sync.pendingPriority) setRememberPriority(false)
+    if (sync.pendingPriority) {
+      setRememberPriority(false)
+      setPendingChoice('latest')
+    }
   }, [sync.pendingPriority])
 
   // The sync engine may finish loading after this section first renders, and a
@@ -320,29 +331,23 @@ export function SyncSettingsSection() {
                   不会整份覆盖。
                 </p>
               </div>
-              <div className="sync-direction-actions">
+              <div className="sync-priority-picker">
+                <SelectMenu
+                  value={pendingChoice}
+                  options={PRIORITY_OPTIONS}
+                  onChange={(value) => setPendingChoice(value as SyncFavor)}
+                  ariaLabel="冲突时以哪边为准"
+                  className="sync-select-menu"
+                  elevated
+                />
                 <button
                   type="button"
                   className="button primary"
                   onClick={() =>
-                    resolvePriority('latest', rememberPriority)
+                    resolvePriority(pendingChoice, rememberPriority)
                   }
                 >
-                  按最后改动时间
-                </button>
-                <button
-                  type="button"
-                  className="button ghost"
-                  onClick={() => resolvePriority('phone', rememberPriority)}
-                >
-                  手机优先
-                </button>
-                <button
-                  type="button"
-                  className="button ghost"
-                  onClick={() => resolvePriority('desktop', rememberPriority)}
-                >
-                  电脑优先
+                  按这个方案同步
                 </button>
               </div>
               <p className="sync-priority-hint">
@@ -447,19 +452,19 @@ export function SyncSettingsSection() {
 
                 <div className="sync-inline">
                   <span className="sync-label">冲突时</span>
-                  <select
-                    className="sync-select"
+                  <SelectMenu
                     value={sync.priority}
-                    onChange={(event) =>
-                      setSyncPriority(event.target.value as SyncPriority)
+                    options={[
+                      { value: 'ask', label: '每次连接时询问' },
+                      ...PRIORITY_OPTIONS,
+                    ]}
+                    onChange={(value) =>
+                      setSyncPriority(value as SyncPriority)
                     }
-                    aria-label="两边都改过同一笔记录时以哪边为准"
-                  >
-                    <option value="ask">每次连接时询问</option>
-                    <option value="latest">按最后改动时间</option>
-                    <option value="phone">手机优先</option>
-                    <option value="desktop">电脑优先</option>
-                  </select>
+                    ariaLabel="两边都改过同一笔记录时以哪边为准"
+                    className="sync-select-menu"
+                    elevated
+                  />
                 </div>
                 <p className="sync-note">
                   「按最后改动时间」比较的是最后一次编辑记录的时间，不是账目日期；

@@ -1,4 +1,5 @@
 import type {
+  Account,
   BudgetBook,
   Category,
   Currency,
@@ -14,6 +15,11 @@ import type {
   ReminderSettings,
   Theme,
 } from '../types'
+import {
+  DEFAULT_ACCOUNTS,
+  normalizeAccounts,
+  setActiveAccounts,
+} from './accounts'
 import {
   isValidProject,
   migrateV1Transaction,
@@ -54,6 +60,7 @@ const KEYS = {
   transactionsV1: 'zhangye.transactions.v1',
   categories: 'zhangye.categories.v1',
   categoryPresets: 'zhangye.categoryPresets.v1',
+  accounts: 'zhangye.accounts.v1',
   projects: 'zhangye.projects.v1',
   liabilities: 'zhangye.liabilities.v1',
   budget: 'zhangye.budget.v2',
@@ -92,6 +99,7 @@ interface DesktopLedgerSnapshot {
   version: 2
   updatedAt: string
   categories: Category[]
+  accounts?: Account[]
   projects: Project[]
   liabilities: Liability[]
   transactions: LedgerTransaction[]
@@ -164,6 +172,19 @@ function readStoredCategories(): Category[] {
     }
   }
   return applyPresetMigration(DEFAULT_CATEGORIES)
+}
+
+function readStoredAccounts(): Account[] {
+  const raw = safeGet(KEYS.accounts)
+  if (raw !== null) {
+    try {
+      const normalized = normalizeAccounts(JSON.parse(raw))
+      if (normalized) return normalized
+    } catch {
+      // A broken account list falls back to the built-in wallets.
+    }
+  }
+  return DEFAULT_ACCOUNTS
 }
 
 function readStoredTransactions(
@@ -340,6 +361,16 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   }
   setActiveCategories(categories)
 
+  if (Array.isArray(snapshot.accounts)) {
+    const accounts = normalizeAccounts(snapshot.accounts)
+    if (accounts) {
+      safeSet(KEYS.accounts, JSON.stringify(accounts))
+      setActiveAccounts(accounts)
+    }
+  } else {
+    setActiveAccounts(readStoredAccounts())
+  }
+
   if (Array.isArray(snapshot.liabilities)) {
     const liabilities = snapshot.liabilities.filter(isValidLiability)
     if (liabilities.length === snapshot.liabilities.length) {
@@ -461,6 +492,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     version: 2,
     updatedAt: safeGet(KEYS.updatedAt) ?? new Date().toISOString(),
     categories,
+    accounts: readStoredAccounts(),
     projects: readStoredProjects(categories),
     liabilities: readStoredLiabilities(),
     transactions,
@@ -490,6 +522,7 @@ export function readLedgerDataSnapshot(): LedgerDataSnapshot {
     syncVersion: 1,
     updatedAt: new Date().toISOString(),
     categories,
+    accounts: readStoredAccounts(),
     transactions,
     projects: readStoredProjects(categories),
     liabilities: readStoredLiabilities(),
@@ -509,6 +542,14 @@ export function applyLedgerDataSnapshot(
   const categories = normalizeCategories(snapshot.categories)
   if (!categories) {
     throw new Error('同步数据中的分类无法识别')
+  }
+
+  // Older snapshots did not carry accounts; keep the local cards in that case.
+  const accounts = snapshot.accounts
+    ? normalizeAccounts(snapshot.accounts)
+    : readStoredAccounts()
+  if (!accounts) {
+    throw new Error('同步数据中的账户无法识别')
   }
 
   const transactions = snapshot.transactions.map((item) =>
@@ -552,6 +593,7 @@ export function applyLedgerDataSnapshot(
 
   const updatedAt = new Date().toISOString()
   safeSet(KEYS.categories, JSON.stringify(categories))
+  safeSet(KEYS.accounts, JSON.stringify(accounts))
   safeSet(KEYS.transactions, JSON.stringify(sortTransactions(validTransactions)))
   safeSet(KEYS.seeded, 'true')
   safeSet(KEYS.projects, JSON.stringify(projects))
@@ -563,6 +605,7 @@ export function applyLedgerDataSnapshot(
   safeSet(KEYS.openingBalance, String(Math.round(openingBalanceCents)))
   safeSet(KEYS.updatedAt, updatedAt)
   setActiveCategories(categories)
+  setActiveAccounts(accounts)
   scheduleDesktopPersist()
 
   return {
@@ -570,6 +613,7 @@ export function applyLedgerDataSnapshot(
     syncVersion: 1,
     updatedAt,
     categories,
+    accounts,
     transactions: sortTransactions(validTransactions),
     projects,
     liabilities: sortLiabilities(liabilities),
@@ -652,6 +696,19 @@ export async function hydrateDesktopStorage(): Promise<void> {
   } finally {
     installFlushHooks()
   }
+}
+
+export function loadAccounts(): Account[] {
+  const accounts = readStoredAccounts()
+  setActiveAccounts(accounts)
+  return accounts
+}
+
+export function saveAccounts(accounts: Account[]): void {
+  safeSet(KEYS.accounts, JSON.stringify(accounts))
+  setActiveAccounts(accounts)
+  scheduleDesktopPersist()
+  notifyLedgerChanged()
 }
 
 export function loadCategories(): Category[] {
@@ -855,6 +912,8 @@ export interface ImportedBackup {
   liabilities: Liability[] | null
   /** null when the backup predates category export and the local list should stay. */
   categories: Category[] | null
+  /** null when the backup predates account export and the local cards stay. */
+  accounts: Account[] | null
 }
 
 export class ImportError extends Error {}
@@ -893,6 +952,22 @@ export function parseBackup(text: string): ImportedBackup {
     }
     categories = withPresetSubcategories(normalizedCategories)
     hasCategoryData = true
+  }
+
+  let accounts: Account[] | null = null
+  if (record.accounts !== undefined) {
+    const normalizedAccounts = normalizeAccounts(record.accounts)
+    const rawAccountCount = Array.isArray(record.accounts)
+      ? record.accounts.length
+      : -1
+    if (
+      !normalizedAccounts ||
+      rawAccountCount < 0 ||
+      normalizedAccounts.length !== rawAccountCount
+    ) {
+      throw new ImportError('账户数据格式不兼容，请使用账页导出的备份文件')
+    }
+    accounts = normalizedAccounts
   }
 
   const normalized = rawTransactions
@@ -994,6 +1069,7 @@ export function parseBackup(text: string): ImportedBackup {
     openingBalance,
     liabilities,
     categories: hasCategoryData ? categories : null,
+    accounts,
   }
 }
 
@@ -1044,10 +1120,10 @@ function normalizeImportedTransaction(
     银行卡: 'bank',
     现金: 'cash',
   }
-  const knownAccountIds = ['wechat', 'alipay', 'bank', 'cash']
   const accountId =
     typeof item.accountId === 'string' &&
-    knownAccountIds.includes(item.accountId)
+    item.accountId.length > 0 &&
+    item.accountId.length <= 80
       ? item.accountId
       : typeof item.account === 'string'
         ? (accountMap[item.account] ?? 'bank')

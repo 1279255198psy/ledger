@@ -12,8 +12,8 @@ import {
 } from 'lucide-react'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { EmptyLedger } from '../components/EmptyLedger'
+import { SelectMenu } from '../components/SelectMenu'
 import { TransactionRow } from '../components/TransactionRow'
-import { ACCOUNTS } from '../lib/data'
 import {
   getCategory,
   getCategoryPathName,
@@ -27,6 +27,7 @@ import {
   monthLabel,
 } from '../lib/utils'
 import type {
+  Account,
   Category,
   LedgerTransaction,
   Project,
@@ -37,6 +38,7 @@ interface TransactionsProps {
   transactions: LedgerTransaction[]
   projects: Project[]
   categories: Category[]
+  accounts: Account[]
   monthKey: string
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
@@ -82,6 +84,7 @@ export function Transactions({
   transactions,
   projects,
   categories,
+  accounts,
   monthKey,
   onAdd,
   onEdit,
@@ -93,18 +96,13 @@ export function Transactions({
   const [categoryFilter, setCategoryFilter] = useState('')
   const [accountFilter, setAccountFilter] = useState('')
   const [categoryMenuOpen, setCategoryMenuOpen] = useState(false)
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [categoryMenuPosition, setCategoryMenuPosition] =
-    useState<PopoverPosition | null>(null)
-  const [accountMenuPosition, setAccountMenuPosition] =
     useState<PopoverPosition | null>(null)
   const [expandedFilterIds, setExpandedFilterIds] = useState<Set<string>>(
     new Set(),
   )
   const categoryMenuRef = useRef<HTMLDivElement>(null)
   const categoryPopoverRef = useRef<HTMLDivElement>(null)
-  const accountMenuRef = useRef<HTMLDivElement>(null)
-  const accountPopoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setQuery('')
@@ -112,7 +110,6 @@ export function Transactions({
     setCategoryFilter('')
     setAccountFilter('')
     setCategoryMenuOpen(false)
-    setAccountMenuOpen(false)
     setExpandedFilterIds(new Set())
   }, [monthKey])
 
@@ -147,12 +144,7 @@ export function Transactions({
     setCategoryMenuPosition(measurePopover(categoryMenuRef.current))
   }
 
-  const positionAccountMenu = () => {
-    setAccountMenuPosition(measurePopover(accountMenuRef.current))
-  }
-
   const toggleCategoryMenu = () => {
-    setAccountMenuOpen(false)
     setCategoryMenuOpen((current) => {
       const next = !current
       if (next) positionCategoryMenu()
@@ -160,42 +152,23 @@ export function Transactions({
     })
   }
 
-  const toggleAccountMenu = () => {
-    setCategoryMenuOpen(false)
-    setAccountMenuOpen((current) => {
-      const next = !current
-      if (next) positionAccountMenu()
-      return next
-    })
-  }
-
   useEffect(() => {
-    if (!categoryMenuOpen && !accountMenuOpen) return
+    if (!categoryMenuOpen) return
     const closeOnOutside = (event: MouseEvent) => {
       const target = event.target as Node
       if (
-        categoryMenuOpen &&
         !categoryMenuRef.current?.contains(target) &&
         !categoryPopoverRef.current?.contains(target)
       ) {
         setCategoryMenuOpen(false)
       }
-      if (
-        accountMenuOpen &&
-        !accountMenuRef.current?.contains(target) &&
-        !accountPopoverRef.current?.contains(target)
-      ) {
-        setAccountMenuOpen(false)
-      }
     }
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       setCategoryMenuOpen(false)
-      setAccountMenuOpen(false)
     }
     const reposition = () => {
       if (categoryMenuOpen) positionCategoryMenu()
-      if (accountMenuOpen) positionAccountMenu()
     }
     document.addEventListener('mousedown', closeOnOutside)
     document.addEventListener('keydown', closeOnEscape)
@@ -207,7 +180,7 @@ export function Transactions({
       window.removeEventListener('resize', reposition)
       window.removeEventListener('scroll', reposition, true)
     }
-  }, [categoryMenuOpen, accountMenuOpen])
+  }, [categoryMenuOpen])
 
   useEffect(() => {
     if (!categoryFilter) return
@@ -221,6 +194,13 @@ export function Transactions({
       setCategoryFilter('')
     }
   }, [categories, categoryFilter, typeFilter])
+
+  useEffect(() => {
+    if (!accountFilter) return
+    if (!accounts.some((account) => account.id === accountFilter)) {
+      setAccountFilter('')
+    }
+  }, [accounts, accountFilter])
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -283,7 +263,6 @@ export function Transactions({
     setCategoryFilter('')
     setAccountFilter('')
     setCategoryMenuOpen(false)
-    setAccountMenuOpen(false)
     setExpandedFilterIds(new Set())
   }
 
@@ -306,10 +285,23 @@ export function Transactions({
   const categoryFilterLabel = selectedFilterCategory
     ? getCategoryPathName(selectedFilterCategory)
     : '全部分类'
-  const accountFilterLabel = accountFilter
-    ? (ACCOUNTS.find((account) => account.id === accountFilter)?.name ??
-      '全部账户')
-    : '全部账户'
+  const accountOptions = useMemo(() => {
+    const wallet = accounts
+      .filter((account) => account.type !== 'bank')
+      .map((account) => ({
+        value: account.id,
+        label: account.name,
+        group: '常用账户',
+      }))
+    const cards = accounts
+      .filter((account) => account.type === 'bank')
+      .map((account) => ({
+        value: account.id,
+        label: account.name,
+        group: '银行卡',
+      }))
+    return [...wallet, ...cards]
+  }, [accounts])
 
   const toggleFilterExpanded = (id: string) => {
     setExpandedFilterIds((current) => {
@@ -323,11 +315,6 @@ export function Transactions({
   const pickCategoryFilter = (id: string) => {
     setCategoryFilter(id)
     setCategoryMenuOpen(false)
-  }
-
-  const pickAccountFilter = (id: string) => {
-    setAccountFilter(id)
-    setAccountMenuOpen(false)
   }
 
   const renderCategoryFilterTree = (
@@ -528,78 +515,16 @@ export function Transactions({
               : null}
           </div>
 
-          <div className="select-field category-filter" ref={accountMenuRef}>
-            <Wallet size={15} aria-hidden />
-            <button
-              type="button"
-              className="category-filter-trigger"
-              onClick={toggleAccountMenu}
-              aria-haspopup="dialog"
-              aria-expanded={accountMenuOpen}
-              aria-label={`筛选账户：${accountFilterLabel}`}
-            >
-              <span>{accountFilterLabel}</span>
-              <ChevronDown
-                size={13}
-                aria-hidden
-                className={accountMenuOpen ? 'is-open' : undefined}
-              />
-            </button>
-
-            {accountMenuOpen && accountMenuPosition
-              ? createPortal(
-                  <div
-                    className="category-filter-popover"
-                    role="dialog"
-                    aria-label="选择账户"
-                    ref={accountPopoverRef}
-                    style={{
-                      left: accountMenuPosition.left,
-                      top: accountMenuPosition.top,
-                      width: accountMenuPosition.width,
-                      maxHeight: accountMenuPosition.maxHeight,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className={`category-filter-option category-filter-option--all${
-                        accountFilter === '' ? ' is-selected' : ''
-                      }`}
-                      onClick={() => pickAccountFilter('')}
-                      aria-pressed={accountFilter === ''}
-                    >
-                      <span>全部账户</span>
-                      {accountFilter === '' ? (
-                        <Check size={12} className="category-filter-check" />
-                      ) : null}
-                    </button>
-                    {ACCOUNTS.map((account) => {
-                      const selected = accountFilter === account.id
-                      return (
-                        <button
-                          key={account.id}
-                          type="button"
-                          className={`category-filter-option${
-                            selected ? ' is-selected' : ''
-                          }`}
-                          onClick={() => pickAccountFilter(account.id)}
-                          aria-pressed={selected}
-                        >
-                          <span>{account.name}</span>
-                          {selected ? (
-                            <Check
-                              size={12}
-                              className="category-filter-check"
-                            />
-                          ) : null}
-                        </button>
-                      )
-                    })}
-                  </div>,
-                  document.body,
-                )
-              : null}
-          </div>
+          <SelectMenu
+            value={accountFilter}
+            options={accountOptions}
+            onChange={setAccountFilter}
+            ariaLabel="筛选账户"
+            placeholder="全部账户"
+            allLabel="全部账户"
+            icon={<Wallet size={15} aria-hidden />}
+            className="account-filter"
+          />
 
           {hasFilters ? (
             <button

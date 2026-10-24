@@ -19,12 +19,14 @@ import { Projects } from './pages/Projects'
 import { Analytics } from './pages/Analytics'
 import { Liabilities } from './pages/Liabilities'
 import { Indices } from './pages/Indices'
+import { newProjectId, newTransactionId, sortTransactions } from './lib/data'
+import { createSampleLedger } from './lib/sample'
 import {
-  createSeedTransactions,
-  newProjectId,
-  newTransactionId,
-  sortTransactions,
-} from './lib/data'
+  mergeAccounts,
+  newAccountId,
+  setActiveAccounts,
+  uniqueAccountName,
+} from './lib/accounts'
 import {
   detachProjectAllocations,
   getCountedProjectIds,
@@ -34,6 +36,7 @@ import {
 } from './lib/allocations'
 import {
   ImportError,
+  loadAccounts,
   loadBudgetRanges,
   loadBudgets,
   loadCategories,
@@ -47,6 +50,7 @@ import {
   loadTheme,
   loadTransactions,
   parseBackup,
+  saveAccounts,
   saveBudgetRanges,
   saveBudgets,
   saveCategories,
@@ -94,6 +98,7 @@ import {
   transactionsToCsv,
 } from './lib/utils'
 import type {
+  Account,
   AllocationLine,
   BudgetBook,
   Category,
@@ -140,6 +145,7 @@ export default function App() {
   const [monthKey, setMonthKey] = useState(() => currentMonthKey())
   // Categories initialize first: transaction loading validates ids against them.
   const [categories, setCategories] = useState<Category[]>(loadCategories)
+  const [accounts, setAccounts] = useState<Account[]>(loadAccounts)
   const [transactions, setTransactions] =
     useState<LedgerTransaction[]>(loadTransactions)
   const [projects, setProjects] = useState<Project[]>(loadProjects)
@@ -212,6 +218,14 @@ export default function App() {
     return usage
   }, [transactions])
 
+  const accountTransactionUsage = useMemo(() => {
+    const usage: Record<string, number> = {}
+    for (const item of transactions) {
+      usage[item.accountId] = (usage[item.accountId] ?? 0) + 1
+    }
+    return usage
+  }, [transactions])
+
   const categoryProjectUsage = useMemo(() => {
     const usage: Record<string, number> = {}
     for (const project of projects) {
@@ -227,6 +241,10 @@ export default function App() {
   useEffect(() => {
     saveCategories(categories)
   }, [categories])
+
+  useEffect(() => {
+    saveAccounts(accounts)
+  }, [accounts])
 
   useEffect(() => {
     saveTransactions(transactions)
@@ -268,6 +286,7 @@ export default function App() {
       const nextCategories = loadCategories()
       setActiveCategories(nextCategories)
       setCategories(nextCategories)
+      setAccounts(loadAccounts())
       setTransactions(loadTransactions())
       setProjects(loadProjects())
       setLiabilities(loadLiabilities())
@@ -355,6 +374,13 @@ export default function App() {
     setCategories(next)
   }
 
+  // Rows and the CSV export look up account names through module state, so
+  // update it in the same tick as the React list.
+  const commitAccounts = (next: Account[]) => {
+    setActiveAccounts(next)
+    setAccounts(next)
+  }
+
   const handleCreateCategory = (draft: CategoryDraft): Category => {
     const category: Category = {
       id: newCategoryId(),
@@ -403,6 +429,59 @@ export default function App() {
     if (!confirmed) return
     commitCategories(categories.filter((item) => item.id !== id))
     showToast(`分类「${category.name}」已删除`)
+  }
+
+  const handleCreateAccount = (bank: string, name: string) => {
+    const trimmedBank = bank.trim()
+    const desired = name.trim() || trimmedBank
+    const finalName = uniqueAccountName(desired, accounts)
+    const account: Account = {
+      id: newAccountId(),
+      name: finalName || '银行卡',
+      type: 'bank',
+      bank: trimmedBank,
+    }
+    commitAccounts([...accounts, account])
+    showToast(
+      finalName === desired
+        ? `银行卡「${account.name}」已添加`
+        : `同名银行卡已自动编号为「${account.name}」`,
+    )
+  }
+
+  const handleRenameAccount = (id: string, name: string) => {
+    const account = accounts.find((item) => item.id === id)
+    if (!account || account.type !== 'bank') return
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const finalName = uniqueAccountName(trimmed, accounts, id)
+    commitAccounts(
+      accounts.map((item) =>
+        item.id === id ? { ...item, name: finalName } : item,
+      ),
+    )
+    showToast(
+      finalName === trimmed
+        ? `银行卡已改名为「${finalName}」`
+        : `已有同名银行卡，已自动命名为「${finalName}」`,
+    )
+  }
+
+  const handleDeleteAccount = async (id: string) => {
+    const account = accounts.find((item) => item.id === id)
+    if (!account || account.type !== 'bank') return
+    const used = accountTransactionUsage[id] ?? 0
+    if (used > 0) {
+      showToast('这张卡还有流水记录，暂时不能删除', 'error')
+      return
+    }
+    const confirmed = await confirmDesktopAction(
+      `确定删除银行卡「${account.name}」吗？此操作无法撤销。`,
+      '删除银行卡',
+    )
+    if (!confirmed) return
+    commitAccounts(accounts.filter((item) => item.id !== id))
+    showToast(`银行卡「${account.name}」已删除`)
   }
 
   const handleCreateLiability = (draft: LiabilityDraft) => {
@@ -800,6 +879,7 @@ export default function App() {
       openingBalance,
       openingBalanceCents: Math.round(openingBalance * 100),
       categories,
+      accounts,
       projects,
       liabilities,
       transactions,
@@ -848,6 +928,7 @@ export default function App() {
       const text = await file.text()
       const imported = parseBackup(text)
       if (imported.categories) commitCategories(imported.categories)
+      if (imported.accounts) commitAccounts(imported.accounts)
       setTransactions(sortTransactions(imported.transactions))
       setProjects(imported.projects)
       if (imported.liabilities !== null) {
@@ -872,13 +953,24 @@ export default function App() {
     }
   }
 
-  const handleLoadSample = () => {
+  const applySampleLedger = () => {
+    const sample = createSampleLedger()
     commitCategories(DEFAULT_CATEGORIES)
-    setTransactions(createSeedTransactions())
-    setProjects([])
-    setLiabilities([])
+    // Keep cards the user already named; only add the demo cards that are
+    // needed for the sample transactions.
+    commitAccounts(mergeAccounts(accounts, sample.accounts))
+    setTransactions(sample.transactions)
+    setProjects(sample.projects)
+    setLiabilities(sample.liabilities)
+    setBudgets(sample.budgets)
+    setBudgetRanges(sample.budgetRanges)
+    setOpeningBalance(sample.openingBalanceCents / 100)
     setMonthKey(currentMonthKey())
     setView('overview')
+  }
+
+  const handleLoadSample = () => {
+    applySampleLedger()
     showToast('示例账本已载入')
   }
 
@@ -891,17 +983,8 @@ export default function App() {
       '恢复示例账本',
     )
     if (!confirmed) return
-    const seed = createSeedTransactions()
-    commitCategories(DEFAULT_CATEGORIES)
-    setTransactions(seed)
-    setProjects([])
-    setLiabilities([])
-    setBudgets({})
-    setBudgetRanges([])
-    setOpeningBalance(0)
-    setMonthKey(currentMonthKey())
+    applySampleLedger()
     setSettingsOpen(false)
-    setView('overview')
     showToast('示例账本已恢复')
   }
 
@@ -991,6 +1074,7 @@ export default function App() {
             transactions={transactions}
             projects={projects}
             categories={categories}
+            accounts={accounts}
             monthKey={monthKey}
             onAdd={openAdd}
             onEdit={openEdit}
@@ -1084,6 +1168,7 @@ export default function App() {
         editing={editing}
         projects={projects}
         categories={categories}
+        accounts={accounts}
         defaultDate={defaultDateForMonth(monthKey)}
         defaultProjectId={transactionProjectId ?? undefined}
         onClose={closeTransactionModal}
@@ -1107,8 +1192,10 @@ export default function App() {
         currency={currency}
         reminders={reminders}
         categories={categories}
+        accounts={accounts}
         categoryTransactionUsage={categoryTransactionUsage}
         categoryProjectUsage={categoryProjectUsage}
+        accountTransactionUsage={accountTransactionUsage}
         updater={updater}
         onClose={() => {
           setSettingsOpen(false)
@@ -1121,6 +1208,9 @@ export default function App() {
         onCreateCategory={handleCreateCategory}
         onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}
+        onCreateAccount={handleCreateAccount}
+        onRenameAccount={handleRenameAccount}
+        onDeleteAccount={handleDeleteAccount}
         onThemeChange={setTheme}
         onPaletteChange={setPalette}
         onFontSizeChange={setFontSize}

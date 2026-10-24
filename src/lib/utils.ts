@@ -1,4 +1,4 @@
-import { getAccount } from './data'
+import { getAccount } from './accounts'
 import {
   getCategoriesForType,
   getCategory,

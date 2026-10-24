@@ -1,6 +1,7 @@
 import { Pencil, Trash2 } from 'lucide-react'
 import { CategoryIcon } from './CategoryIcon'
-import { getAccount, getCategory } from '../lib/data'
+import { getAccount } from '../lib/accounts'
+import { getCategory } from '../lib/data'
 import { getParentCategory } from '../lib/categories'
 import {
   getProjectAmountCents,
