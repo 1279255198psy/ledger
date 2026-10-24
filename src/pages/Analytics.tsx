@@ -36,6 +36,7 @@ import {
   largestExpense,
   monthLabel,
   percentChange,
+  projectCoversMonth,
   projectMonthlySpend,
   shiftMonth,
   topWeekdaySpending,
@@ -175,11 +176,10 @@ export function Analytics({
       row,
     ]),
   )
-  const monthProjectCents = [...monthProjectRows.values()].reduce(
-    (sum, row) => sum + row.monthExpenseCents,
-    0,
-  )
   const projectReports = projects
+    // 项目账单只跟着项目自己的起止日期走：本月不在项目周期里的旧项目
+    // 即使还有流水，也不应混进本月的账单；跨月项目会在每个月出现。
+    .filter((project) => projectCoversMonth(project, monthKey))
     .map((project) => ({
       project,
       summary: getProjectSummary(transactions, project.id),
@@ -198,6 +198,10 @@ export function Analytics({
         right.summary.totalExpenseCents -
           left.summary.totalExpenseCents,
     )
+  const monthProjectCents = projectReports.reduce(
+    (sum, item) => sum + (item.monthRow?.monthExpenseCents ?? 0),
+    0,
+  )
 
   return (
     <div className="page-stack analytics-page">
@@ -403,7 +407,8 @@ export function Analytics({
               <p className="card-kicker">PROJECT LEDGER</p>
               <h2 id="project-report-heading">项目账单</h2>
               <p>
-                总额跨月保留，月度数字按交易发生日期归集；独立核算的项目不占生活预算，
+                只列出起止日期覆盖本月的项目，跨月项目会在涉及的每个月出现；
+                总额跨月保留，月度数字按交易发生日期归集。独立核算的项目不占生活预算，
                 计入日常的项目同时算在生活支出里。
               </p>
             </div>

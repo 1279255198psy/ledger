@@ -19,6 +19,7 @@ import type {
   MonthDatum,
   MonthPairDatum,
   MonthTotals,
+  Project,
   TransactionType,
 } from '../types'
 
@@ -285,6 +286,28 @@ export function projectMonthlySpend(
   const elapsed = daysElapsedInMonth(monthKey)
   if (elapsed <= 0) return 0
   return (expense / elapsed) * daysInMonthOfKey(monthKey)
+}
+
+/** Last day a project counts as running; an open-ended project never ends. */
+export function projectLastDate(project: Project): string {
+  if (project.endDate) return project.endDate
+  if (project.archivedAt) return project.archivedAt.slice(0, 10)
+  if (project.status === 'closed') return project.updatedAt.slice(0, 10)
+  return '9999-12-31'
+}
+
+export function projectCoversDate(project: Project, dateKey: string): boolean {
+  return dateKey >= project.startDate && dateKey <= projectLastDate(project)
+}
+
+/** Whether the project's start/end range overlaps any day of the month. */
+export function projectCoversMonth(
+  project: Project,
+  monthKey: string,
+): boolean {
+  const monthStart = `${monthKey}-01`
+  const monthEnd = `${monthKey}-${pad(daysInMonthOfKey(monthKey))}`
+  return project.startDate <= monthEnd && projectLastDate(project) >= monthStart
 }
 
 export function formatMoney(value: number, withSymbol = true): string {

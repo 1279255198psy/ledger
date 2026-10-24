@@ -70,8 +70,11 @@ export function BalanceSummary({
     [transactions, start, end],
   )
 
+  // 总结余是账本的当前余额：起始资金加上每一个月的结余，不能只取
+  // 选定区间。区间选择只改变下方「区间收入 / 支出 / 笔数」的统计。
+  const allTotals = getTotals(transactions)
   const totals = getTotals(filtered)
-  const total = openingBalance + totals.balance
+  const total = openingBalance + allTotals.balance
 
   let rangeLabel = '全部月份'
   if (mode === 'month') {
@@ -102,10 +105,10 @@ export function BalanceSummary({
           <p className="card-kicker">TOTAL BALANCE</p>
           <h2 id="balance-summary-heading">总结余</h2>
           <p className="card-sub">
-            {rangeLabel} · 起始资金加上这段时间的收入与支出
+            起始资金加上全部月份的收入与支出；下方切换区间统计
           </p>
         </div>
-        <div className="balance-range" role="group" aria-label="总结余统计范围">
+        <div className="balance-range" role="group" aria-label="区间统计范围">
           {RANGE_OPTIONS.map((option) => (
             <button
               key={option.id}
@@ -158,7 +161,7 @@ export function BalanceSummary({
 
       <div className="balance-body">
         <div className="balance-figure">
-          <span className="balance-figure-label">{rangeLabel}的总结余</span>
+          <span className="balance-figure-label">当前总结余</span>
           <strong className={total < 0 ? 'is-negative' : ''}>
             {total < 0 ? '−' : ''}
             {formatMoney(Math.abs(total))}
@@ -166,9 +169,9 @@ export function BalanceSummary({
           <p className="balance-formula">
             <span>起始资金 {formatMoney(openingBalance)}</span>
             <b aria-hidden="true">+</b>
-            <span>收入 {formatMoney(totals.income)}</span>
+            <span>累计收入 {formatMoney(allTotals.income)}</span>
             <b aria-hidden="true">−</b>
-            <span>支出 {formatMoney(totals.expense)}</span>
+            <span>累计支出 {formatMoney(allTotals.expense)}</span>
           </p>
           <button
             type="button"
@@ -181,6 +184,7 @@ export function BalanceSummary({
         </div>
 
         <div className="balance-breakdown">
+          <p className="balance-breakdown-label">区间统计 · {rangeLabel}</p>
           <div className="balance-cell">
             <span>起始资金</span>
             <strong>

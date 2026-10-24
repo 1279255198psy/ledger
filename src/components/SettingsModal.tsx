@@ -665,7 +665,7 @@ export function SettingsModal({
                 <div className="settings-heading">
                   <h3 id="opening-balance-heading">总结余起始资金</h3>
                   <p>
-                    总结余 = 起始资金 + 区间收入 − 区间支出。使用账页之前已有的钱可以记在这里；
+                    总结余 = 起始资金 + 全部月份的收入 − 支出。使用账页之前已有的钱可以记在这里；
                     不填就当作从零开始，只统计账本里的收支。
                   </p>
                 </div>
@@ -720,7 +720,7 @@ export function SettingsModal({
                     </label>
                   ) : (
                     <p className="opening-balance-note">
-                      起始资金记为 0，总结余只反映选定区间内的收支。
+                      起始资金记为 0，总结余只反映账本记录以来的收支。
                     </p>
                   )}
                   <button type="submit" className="button secondary">

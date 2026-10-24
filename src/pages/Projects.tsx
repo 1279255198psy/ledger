@@ -28,6 +28,8 @@ import {
   localDateKey,
   monthLabel,
   monthOfDateKey,
+  projectCoversDate,
+  projectLastDate,
   shiftMonth,
 } from '../lib/utils'
 import type {
@@ -122,17 +124,6 @@ function projectTone(id: string): string {
     total = (total + id.charCodeAt(index)) % 997
   }
   return PROJECT_TONES[total % PROJECT_TONES.length]
-}
-
-function projectLastDate(project: Project): string {
-  if (project.endDate) return project.endDate
-  if (project.archivedAt) return project.archivedAt.slice(0, 10)
-  if (project.status === 'closed') return project.updatedAt.slice(0, 10)
-  return '9999-12-31'
-}
-
-function projectCoversDate(project: Project, dateKey: string): boolean {
-  return dateKey >= project.startDate && dateKey <= projectLastDate(project)
 }
 
 function projectPhase(project: Project, today: string): ProjectPhase {
