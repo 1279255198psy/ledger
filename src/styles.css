@@ -5986,6 +5986,61 @@ a {
   gap: 7px;
 }
 
+.sync-priority {
+  background: var(--accent-soft);
+  border-color: var(--accent-mid);
+}
+
+.sync-priority-hint {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: calc(9.5px * var(--font-scale));
+  line-height: 1.6;
+}
+
+.sync-remember {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-secondary);
+  font-size: calc(10px * var(--font-scale));
+  cursor: pointer;
+}
+
+.sync-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+
+.sync-cancel-link {
+  align-self: flex-start;
+  padding: 0;
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  font-size: calc(10px * var(--font-scale));
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.sync-select {
+  height: 32px;
+  max-width: 190px;
+  padding: 0 9px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: calc(10.5px * var(--font-scale));
+}
+
+.sync-select:focus-visible {
+  border-color: var(--accent-mid);
+  outline: 2px solid var(--accent-soft);
+}
+
 .sync-notice {
   margin-top: 10px;
   color: var(--positive);

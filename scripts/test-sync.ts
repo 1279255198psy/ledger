@@ -129,6 +129,64 @@ function testConcurrentEditsConverge() {
   assert.ok(phone.conflicts.some((item) => item.kind === 'transaction'))
 }
 
+function testConnectionPriorityOverridesEditTime() {
+  const base = snapshot({ transactions: [transaction('a')] })
+  const local = snapshot({
+    transactions: [
+      transaction('a', { note: 'phone', updatedAt: '2026-10-21T00:00:00.000Z' }),
+    ],
+  })
+  const remote = snapshot({
+    transactions: [
+      transaction('a', { note: 'pc', updatedAt: '2026-10-23T00:00:00.000Z' }),
+    ],
+  })
+
+  // Without a priority the newer edit (the computer's) wins.
+  assert.equal(
+    mergeSnapshots(base, local, remote).snapshot.transactions[0].note,
+    'pc',
+  )
+  // "Phone first" wins even though its edit is older.
+  assert.equal(
+    mergeSnapshots(base, local, remote, { favor: 'local' }).snapshot
+      .transactions[0].note,
+    'phone',
+  )
+  assert.equal(
+    mergeSnapshots(base, local, remote, { favor: 'remote' }).snapshot
+      .transactions[0].note,
+    'pc',
+  )
+
+  // A delete on the favored side must not silently discard an edit elsewhere.
+  const deleted = snapshot()
+  const edited = snapshot({
+    transactions: [
+      transaction('a', { note: 'kept', updatedAt: '2026-10-25T00:00:00.000Z' }),
+    ],
+  })
+  const kept = mergeSnapshots(base, deleted, edited, { favor: 'local' })
+  assert.equal(kept.snapshot.transactions.length, 1)
+  assert.equal(kept.snapshot.transactions[0].note, 'kept')
+}
+
+function testOpeningBalanceFollowsPriority() {
+  const base = snapshot({ openingBalanceCents: 1000 })
+  const local = snapshot({ openingBalanceCents: 2000 })
+  const remote = snapshot({ openingBalanceCents: 3000 })
+  assert.equal(
+    mergeSnapshots(base, local, remote, { favor: 'local' }).snapshot
+      .openingBalanceCents,
+    2000,
+  )
+  assert.equal(
+    mergeSnapshots(base, local, remote, { favor: 'remote' }).snapshot
+      .openingBalanceCents,
+    3000,
+  )
+}
+
 function testEqualStampTieBreakConverges() {
   const base = snapshot({ transactions: [transaction('a')] })
   const local = snapshot({
@@ -264,6 +322,7 @@ async function testCrypto() {
     seq: 3,
     sentAt: now,
     mode: 'snapshot',
+    priority: 'phone',
     snapshot: snapshot({ transactions: [transaction('a')] }),
   }
   const envelope = await encryptPayload(payload, key)
@@ -281,6 +340,8 @@ async function main() {
   testDeletionPropagates()
   testEditBeatsDelete()
   testConcurrentEditsConverge()
+  testConnectionPriorityOverridesEditTime()
+  testOpeningBalanceFollowsPriority()
   testEqualStampTieBreakConverges()
   testIdempotent()
   testRepaymentMerge()

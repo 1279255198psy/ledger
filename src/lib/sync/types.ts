@@ -28,6 +28,17 @@ export interface LedgerDataSnapshot {
 export type SyncSender = 'desktop' | 'mobile'
 
 /**
+ * How a sync resolves a record both devices changed since the last shared
+ * base. `latest` compares the time the user edited the record (updatedAt), not
+ * the transaction date. `ask` is only a stored preference: the phone asks at
+ * connection time and never sends it over the wire.
+ */
+export type SyncPriority = 'ask' | 'latest' | 'phone' | 'desktop'
+
+/** The concrete rule carried in a payload. */
+export type SyncFavor = Exclude<SyncPriority, 'ask'>
+
+/**
  * `replace` is only used for the explicit "use this phone's data" choice on
  * the first sync. It tells the desktop to adopt the snapshot without merging.
  */
@@ -46,6 +57,8 @@ export interface SyncPayload {
   ack?: number
   sentAt: string
   mode: SyncMode
+  /** Mobile only: how both sides should resolve conflicting edits this round. */
+  priority?: SyncFavor
   snapshot: LedgerDataSnapshot
 }
 
@@ -122,6 +135,10 @@ export interface SyncUiState {
     localCount: number
     remoteCount: number
   } | null
+  /** The phone is waiting for "this connection: phone or computer first". */
+  pendingPriority: boolean
+  /** Stored preference; `ask` means prompt on every explicit connection. */
+  priority: SyncPriority
 }
 
 export interface SyncConfig {
@@ -135,4 +152,6 @@ export interface SyncConfig {
   /** Mobile only. */
   url: string | null
   auto: boolean
+  /** Mobile only: conflict rule; defaults to asking on each connection. */
+  priority?: SyncPriority
 }

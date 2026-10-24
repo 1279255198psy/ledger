@@ -19,7 +19,15 @@ import type {
   SyncConflictKind,
 } from './types'
 
-interface MergeOptions<T extends { id: string }> {
+export interface MergeOptions {
+  /**
+   * Who wins when both devices edited the same record. Unset means comparing
+   * the edit time; `local`/`remote` come from the user's connection choice.
+   */
+  favor?: 'local' | 'remote'
+}
+
+interface CollectionOptions<T extends { id: string }> extends MergeOptions {
   /** Used only to break ties; equal values fall back to a stable comparison. */
   stamp?: (item: T) => string
 }
@@ -91,7 +99,9 @@ function chooseBothChanged<T>(
   local: T,
   remote: T,
   stamp: ((item: T) => string) | undefined,
+  favor: MergeOptions['favor'],
 ): 'local' | 'remote' {
+  if (favor) return favor
   if (stamp) {
     const localStamp = stamp(local)
     const remoteStamp = stamp(remote)
@@ -117,7 +127,7 @@ function mergeCollection<T extends { id: string }>(
   localItems: T[],
   remoteItems: T[],
   kind: SyncConflictKind,
-  options: MergeOptions<T> = {},
+  options: CollectionOptions<T> = {},
 ): CollectionResult<T> {
   const base = baseItems ? keyed(baseItems) : null
   const local = keyed(localItems)
@@ -163,7 +173,12 @@ function mergeCollection<T extends { id: string }>(
       } else if (baseItem && sameValue(remoteItem, baseItem)) {
         chosen = localItem
       } else {
-        const side = chooseBothChanged(localItem, remoteItem, options.stamp)
+        const side = chooseBothChanged(
+          localItem,
+          remoteItem,
+          options.stamp,
+          options.favor,
+        )
         chosen = side === 'local' ? localItem : remoteItem
         conflicts.push({ kind, id, choice: side })
       }
@@ -214,6 +229,7 @@ function mergeLiabilities(
   baseItems: Liability[] | null,
   localItems: Liability[],
   remoteItems: Liability[],
+  favor: MergeOptions['favor'],
 ): CollectionResult<Liability> {
   const base = baseItems ? keyed(baseItems) : null
   const local = keyed(localItems)
@@ -239,7 +255,7 @@ function mergeLiabilities(
         localItem.repayments,
         remoteItem.repayments,
         'repayment',
-        { stamp: stampOf },
+        { stamp: stampOf, favor },
       )
       conflicts.push(...repayments.conflicts)
 
@@ -254,7 +270,7 @@ function mergeLiabilities(
       } else if (baseMain && sameValue(remoteMain, baseMain)) {
         main = localMain
       } else {
-        const side = chooseBothChanged(localItem, remoteItem, stampOf)
+        const side = chooseBothChanged(localItem, remoteItem, stampOf, favor)
         main = side === 'local' ? localMain : remoteMain
         conflicts.push({ kind: 'liability', id, choice: side })
       }
@@ -452,46 +468,52 @@ export function mergeSnapshots(
   base: LedgerDataSnapshot | null,
   local: LedgerDataSnapshot,
   remote: LedgerDataSnapshot,
+  options: MergeOptions = {},
 ): MergeResult {
   const stats = emptyStats()
   const conflicts: SyncConflict[] = []
+  const { favor } = options
 
   const transactions = mergeCollection<LedgerTransaction>(
     base?.transactions ?? null,
     local.transactions,
     remote.transactions,
     'transaction',
-    { stamp: stampOf },
+    { stamp: stampOf, favor },
   )
   const projects = mergeCollection<Project>(
     base?.projects ?? null,
     local.projects,
     remote.projects,
     'project',
-    { stamp: stampOf },
+    { stamp: stampOf, favor },
   )
   const liabilities = mergeLiabilities(
     base?.liabilities ?? null,
     local.liabilities,
     remote.liabilities,
+    favor,
   )
   const categories = mergeCollection<Category>(
     base?.categories ?? null,
     local.categories,
     remote.categories,
     'category',
+    { favor },
   )
   const budgets = mergeCollection<BudgetEntry>(
     base ? toBudgetEntries(base.budgets) : null,
     toBudgetEntries(local.budgets),
     toBudgetEntries(remote.budgets),
     'budget',
+    { favor },
   )
   const ranges = mergeCollection<RangeBudget>(
     base?.budgetRanges ?? null,
     local.budgetRanges,
     remote.budgetRanges,
     'range',
+    { favor },
   )
 
   for (const result of [
@@ -517,11 +539,12 @@ export function mergeSnapshots(
   } else if (baseOpening !== undefined && remoteOpening === baseOpening) {
     openingBalanceCents = localOpening
   } else {
-    openingBalanceCents = localOpening
+    const side = favor ?? 'local'
+    openingBalanceCents = side === 'local' ? localOpening : remoteOpening
     conflicts.push({
       kind: 'openingBalance',
       id: 'openingBalance',
-      choice: 'local',
+      choice: side,
     })
   }
 

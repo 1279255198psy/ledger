@@ -20,10 +20,13 @@ import {
   refreshDesktopStatus,
   resetPairing,
   resolveDirection,
+  resolvePriority,
   setSyncAuto,
+  setSyncPriority,
   syncNow,
 } from '../lib/sync/engine'
 import { formatSyncCode } from '../lib/sync/crypto'
+import type { SyncPriority } from '../lib/sync/types'
 
 const PHASE_COPY: Record<string, string> = {
   idle: '待命',
@@ -73,6 +76,7 @@ export function SyncSettingsSection() {
   const [address, setAddress] = useState(sync.url ?? '')
   const [code, setCode] = useState(sync.code ?? '')
   const [busy, setBusy] = useState(false)
+  const [rememberPriority, setRememberPriority] = useState(false)
   const [notice, setNotice] = useState<{ text: string; kind: 'ok' | 'bad' } | null>(
     null,
   )
@@ -82,6 +86,10 @@ export function SyncSettingsSection() {
       void refreshDesktopStatus().catch(() => undefined)
     }
   }, [sync.role, sync.enabled])
+
+  useEffect(() => {
+    if (sync.pendingPriority) setRememberPriority(false)
+  }, [sync.pendingPriority])
 
   // The sync engine may finish loading after this section first renders, and a
   // disconnected phone should still see the address it used before.
@@ -283,6 +291,10 @@ export function SyncSettingsSection() {
                   </button>
                 </div>
 
+                <p className="sync-note">
+                  电脑上的改动会自动发布；手机停留在账页界面时会在几秒内收到。
+                </p>
+
                 <p className="sync-meta">
                   最近同步：{formatTime(sync.lastSyncAt)}
                   {sync.lastPeerAt
@@ -299,6 +311,63 @@ export function SyncSettingsSection() {
         </>
       ) : (
         <>
+          {sync.pendingPriority ? (
+            <div className="sync-direction sync-priority">
+              <div className="sync-direction-head">
+                <strong>这次连接，冲突时以哪边为准？</strong>
+                <p>
+                  只会影响同一笔记录在两边都被改过的情况，未冲突的改动都会保留，
+                  不会整份覆盖。
+                </p>
+              </div>
+              <div className="sync-direction-actions">
+                <button
+                  type="button"
+                  className="button primary"
+                  onClick={() =>
+                    resolvePriority('latest', rememberPriority)
+                  }
+                >
+                  按最后改动时间
+                </button>
+                <button
+                  type="button"
+                  className="button ghost"
+                  onClick={() => resolvePriority('phone', rememberPriority)}
+                >
+                  手机优先
+                </button>
+                <button
+                  type="button"
+                  className="button ghost"
+                  onClick={() => resolvePriority('desktop', rememberPriority)}
+                >
+                  电脑优先
+                </button>
+              </div>
+              <p className="sync-priority-hint">
+                「按最后改动时间」比较的是最后一次编辑记录的时间，不是账目日期。
+              </p>
+              <label className="sync-remember">
+                <input
+                  type="checkbox"
+                  checked={rememberPriority}
+                  onChange={(event) =>
+                    setRememberPriority(event.target.checked)
+                  }
+                />
+                记住这次选择，以后不再询问
+              </label>
+              <button
+                type="button"
+                className="sync-cancel-link"
+                onClick={() => resolvePriority('cancel')}
+              >
+                取消连接
+              </button>
+            </div>
+          ) : null}
+
           {sync.pendingDirection ? (
             <div className="sync-direction">
               <div className="sync-direction-head">
@@ -373,8 +442,34 @@ export function SyncSettingsSection() {
                   </button>
                 </div>
                 <p className="sync-note">
-                  打开账页、回到前台或记账后会自动同步一次。需要时可以随时手动同步。
+                  打开账页、回到前台、记账后会自动同步；停留在账页时也会定期检查电脑上的改动。
                 </p>
+
+                <div className="sync-inline">
+                  <span className="sync-label">冲突时</span>
+                  <select
+                    className="sync-select"
+                    value={sync.priority}
+                    onChange={(event) =>
+                      setSyncPriority(event.target.value as SyncPriority)
+                    }
+                    aria-label="两边都改过同一笔记录时以哪边为准"
+                  >
+                    <option value="ask">每次连接时询问</option>
+                    <option value="latest">按最后改动时间</option>
+                    <option value="phone">手机优先</option>
+                    <option value="desktop">电脑优先</option>
+                  </select>
+                </div>
+                <p className="sync-note">
+                  「按最后改动时间」比较的是最后一次编辑记录的时间，不是账目日期；
+                  未冲突的改动始终都会保留。
+                </p>
+                {sync.priority === 'ask' ? (
+                  <p className="sync-note">
+                    如果不想每次连接都被询问，可以把「冲突时」改为「按最后改动时间」。
+                  </p>
+                ) : null}
 
                 <div className="sync-actions">
                   <button

@@ -18,7 +18,11 @@ import {
   normalizeSyncCode,
   parseSyncEnvelope,
 } from './crypto'
-import { mergeSnapshots, snapshotsEqual } from './merge'
+import {
+  mergeSnapshots,
+  snapshotsEqual,
+  type MergeOptions,
+} from './merge'
 import {
   fetchSyncBlob,
   fetchSyncInfo,
@@ -29,7 +33,9 @@ import {
 import type {
   LedgerDataSnapshot,
   SyncConfig,
+  SyncFavor,
   SyncPayload,
+  SyncPriority,
   SyncRole,
   SyncUiState,
 } from './types'
@@ -40,11 +46,18 @@ const META_KEY = 'zhangye.sync.meta.v1'
 const RELOAD_EVENT = 'zhangye:ledger-reloaded'
 
 const MOBILE_CHANGE_DELAY = 2000
+const DESKTOP_CHANGE_DELAY = 1500
+const MOBILE_POLL_INTERVAL = 8000
 const DESKTOP_STATUS_INTERVAL = 15000
 const REPLY_DELAY = 400
 
 type DirectionChoice = 'merge' | 'local' | 'remote'
-type SyncTrigger = 'startup' | 'manual' | 'resume' | 'change'
+type SyncTrigger = 'startup' | 'manual' | 'resume' | 'change' | 'poll'
+
+interface PriorityAnswer {
+  choice: SyncFavor
+  remember: boolean
+}
 
 interface SyncMeta {
   seq: number
@@ -86,12 +99,21 @@ let initialized = false
 let syncing = false
 let syncAgain = false
 let directionResolver: ((choice: DirectionChoice | 'cancel') => void) | null = null
+let priorityResolver: ((answer: PriorityAnswer | 'cancel') => void) | null = null
 let desktopUnlisten: (() => void) | null = null
 let desktopStatusTimer: number | null = null
 let changeUnsubscribe: (() => void) | null = null
 let mobileChangeTimer: number | null = null
+let mobilePollTimer: number | null = null
+let desktopChangeTimer: number | null = null
 let incomingChain: Promise<void> = Promise.resolve()
-let suppressChangeUntil = 0
+let applyingSyncedData = false
+/** One-off choice for the connection being made; overrides the stored default. */
+let sessionPriority: SyncFavor | null = null
+let quietSync = false
+let syncApplied = false
+/** Set while a modal is open, so a background poll cannot close an entry. */
+let syncSuspended = false
 
 const listeners = new Set<() => void>()
 
@@ -113,10 +135,26 @@ let ui: SyncUiState = {
   auto: true,
   hasBase: false,
   pendingDirection: null,
+  pendingPriority: false,
+  priority: 'ask',
 }
 
 export function getSyncState(): SyncUiState {
   return ui
+}
+
+/** Automatic syncs pause while the user is filling in a form. */
+export function setSyncSuspended(suspended: boolean): void {
+  const wasSuspended = syncSuspended
+  syncSuspended = suspended
+  if (wasSuspended && !suspended && config?.enabled) {
+    if (runtimeRole === 'desktop') {
+      // Finish a push that arrived while the desktop form was open.
+      void queueIncomingBlob()
+    } else if (config.auto) {
+      void runMobileSync('resume')
+    }
+  }
 }
 
 export function subscribeSync(listener: () => void): () => void {
@@ -184,7 +222,56 @@ function newConfig(role: SyncRole): SyncConfig {
     pairingId: null,
     url: null,
     auto: true,
+    priority: 'ask',
   }
+}
+
+function storedPriority(): SyncPriority {
+  return config?.priority ?? 'ask'
+}
+
+/** Auto syncs use the saved default; `ask` falls back to the edit-time rule. */
+function activePriority(): SyncFavor {
+  const stored = storedPriority()
+  return sessionPriority ?? (stored === 'ask' ? 'latest' : stored)
+}
+
+/**
+ * Maps "phone/desktop wins" onto this device's local/remote labels. `latest`
+ * leaves it to merge.ts, which compares each record's updatedAt.
+ */
+function favorOf(priority: SyncFavor): MergeOptions {
+  if (priority === 'latest') return {}
+  const localIsPhone = runtimeRole === 'mobile'
+  if (priority === 'phone') {
+    return { favor: localIsPhone ? 'local' : 'remote' }
+  }
+  return { favor: localIsPhone ? 'remote' : 'local' }
+}
+
+function emitPhase(patch: Partial<SyncUiState>): void {
+  if (!quietSync) emit(patch)
+}
+
+// Deriving the key is deliberately slow (PBKDF2). Cache per code so an
+// eight-second background poll costs one HTTP request, not two derivations.
+let keyCache: { code: string; key: CryptoKey } | null = null
+let tokenCache: { code: string; token: string } | null = null
+
+async function syncKey(): Promise<CryptoKey> {
+  const code = config!.code!
+  if (keyCache?.code === code) return keyCache.key
+  const key = await deriveSyncKey(code)
+  keyCache = { code, key }
+  return key
+}
+
+async function syncToken(): Promise<string> {
+  const code = config!.code!
+  if (tokenCache?.code === code) return tokenCache.token
+  const token = await deriveSyncToken(code)
+  tokenCache = { code, token }
+  return token
 }
 
 function invokeDesktop<T>(command: string, args?: Record<string, unknown>) {
@@ -217,6 +304,8 @@ export async function initSync(): Promise<void> {
     url: config?.url ?? null,
     auto: config?.auto ?? true,
     hasBase: base !== null,
+    priority: config?.priority ?? 'ask',
+    pendingPriority: false,
     lastSyncAt: meta.lastSyncAt,
     phase: syncSupported
       ? config?.enabled
@@ -287,6 +376,20 @@ function emitReload(): void {
   window.dispatchEvent(new CustomEvent(RELOAD_EVENT))
 }
 
+function applySyncedSnapshot(
+  snapshot: LedgerDataSnapshot,
+): LedgerDataSnapshot {
+  applyingSyncedData = true
+  try {
+    const applied = applyLedgerDataSnapshot(snapshot)
+    syncApplied = true
+    emitReload()
+    return applied
+  } finally {
+    applyingSyncedData = false
+  }
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
@@ -305,6 +408,31 @@ function applyServerStatus(status: DesktopServerStatus): void {
   })
 }
 
+function setupDesktopWatchers(): void {
+  if (!changeUnsubscribe) {
+    changeUnsubscribe = onLedgerChanged(() => {
+      if (!config?.enabled || runtimeRole !== 'desktop') return
+      if (applyingSyncedData) return
+      if (desktopChangeTimer !== null) window.clearTimeout(desktopChangeTimer)
+      desktopChangeTimer = window.setTimeout(() => {
+        desktopChangeTimer = null
+        void publishDesktopSnapshot().catch(() => undefined)
+      }, DESKTOP_CHANGE_DELAY)
+    })
+  }
+}
+
+function teardownDesktopWatchers(): void {
+  if (desktopChangeTimer !== null) {
+    window.clearTimeout(desktopChangeTimer)
+    desktopChangeTimer = null
+  }
+  if (changeUnsubscribe) {
+    changeUnsubscribe()
+    changeUnsubscribe = null
+  }
+}
+
 async function startDesktopServer(): Promise<void> {
   if (!config || config.role !== 'desktop') return
   if (!config.code) config.code = generateSyncCode()
@@ -313,7 +441,7 @@ async function startDesktopServer(): Promise<void> {
   config.url = null
   saveConfig()
 
-  const token = await deriveSyncToken(config.code)
+  const token = await syncToken()
   const status = await invokeDesktop<DesktopServerStatus>('sync_server_start', {
     token,
     pairingId: config.pairingId,
@@ -344,6 +472,7 @@ async function startDesktopServer(): Promise<void> {
       void refreshDesktopStatus().catch(() => undefined)
     }, DESKTOP_STATUS_INTERVAL)
   }
+  setupDesktopWatchers()
 
   // A phone may have pushed while this app was closed.
   await queueIncomingBlob().catch(() => undefined)
@@ -364,7 +493,7 @@ async function handleIncomingBlob(): Promise<void> {
   const read = await invokeDesktop<BlobRead | null>('sync_server_read_blob')
   if (!read?.contents) return
 
-  const key = await deriveSyncKey(config.code!)
+  const key = await syncKey()
   let envelope
   try {
     envelope = parseSyncEnvelope(read.contents)
@@ -383,18 +512,22 @@ async function handleIncomingBlob(): Promise<void> {
   if (payload.pairingId !== config.pairingId) return
   if (payload.sender !== 'mobile') return
   if (payload.seq <= meta.lastMobileSeq) return
+  // Leave the blob untouched while a form is open; closing it re-queues this.
+  if (syncSuspended) return
 
   emit({ phase: 'merging', message: '正在合并手机上的账目…', lastError: null })
   const current = readLedgerDataSnapshot()
+  const priority = payload.priority ?? 'latest'
   const merged =
     payload.mode === 'replace'
       ? { snapshot: payload.snapshot, conflicts: [] }
-      : mergeSnapshots(base, current, payload.snapshot)
+      : mergeSnapshots(base, current, payload.snapshot, favorOf(priority))
 
+  // Applying a merged snapshot fires the change watcher; never publish that
+  // echo back as if the user had edited something here.
   let applied = payload.snapshot
   if (!snapshotsEqual(merged.snapshot, current)) {
-    applied = applyLedgerDataSnapshot(merged.snapshot)
-    emitReload()
+    applied = applySyncedSnapshot(merged.snapshot)
   } else {
     applied = merged.snapshot
   }
@@ -415,6 +548,7 @@ async function handleIncomingBlob(): Promise<void> {
     ack: payload.seq,
     sentAt: new Date().toISOString(),
     mode: 'snapshot',
+    priority,
     snapshot: applied,
   }
   const envelopeOut = await encryptPayload(reply, key)
@@ -438,7 +572,9 @@ async function handleIncomingBlob(): Promise<void> {
 
   meta.lastMobileSeq = payload.seq
   persistMeta()
-  suppressChangeUntil = Date.now() + 3000
+  // Flush anything edited here while the reply was being encrypted, so the
+  // phone's next poll sees it even though this reply was already built.
+  void publishDesktopSnapshot().catch(() => undefined)
   emit({
     phase: 'success',
     message: '已与手机同步',
@@ -456,7 +592,7 @@ async function handleIncomingBlob(): Promise<void> {
 async function publishDesktopSnapshot(): Promise<void> {
   if (!config || config.role !== 'desktop' || !config.enabled) return
   const read = await invokeDesktop<BlobRead | null>('sync_server_read_blob')
-  const key = await deriveSyncKey(config.code!)
+  const key = await syncKey()
 
   if (read?.contents) {
     try {
@@ -484,7 +620,9 @@ async function publishDesktopSnapshot(): Promise<void> {
   }
 
   const current = readLedgerDataSnapshot()
-  if (!hasLedgerData(current)) return
+  // Before pairing, an empty book must not overwrite the phone's data. Once a
+  // base exists, an empty book is a real deletion and has to travel.
+  if (!hasLedgerData(current) && !base) return
 
   const nextSeq = meta.seq + 1
   const payload: SyncPayload = {
@@ -531,6 +669,12 @@ export async function disableSync(): Promise<void> {
     directionResolver = null
     resolver('cancel')
   }
+  if (priorityResolver) {
+    const resolver = priorityResolver
+    priorityResolver = null
+    resolver('cancel')
+  }
+  sessionPriority = null
   if (runtimeRole === 'desktop') {
     if (desktopStatusTimer !== null) {
       window.clearInterval(desktopStatusTimer)
@@ -540,6 +684,7 @@ export async function disableSync(): Promise<void> {
       desktopUnlisten()
       desktopUnlisten = null
     }
+    teardownDesktopWatchers()
     await invokeDesktop('sync_server_stop').catch(() => undefined)
   } else {
     teardownMobileWatchers()
@@ -558,6 +703,7 @@ export async function disableSync(): Promise<void> {
     message: '同步已关闭',
     lastError: null,
     pendingDirection: null,
+    pendingPriority: false,
   })
 }
 
@@ -565,6 +711,7 @@ export async function disableSync(): Promise<void> {
 export async function resetPairing(): Promise<void> {
   if (runtimeRole !== 'desktop' || !config) return
   const wasEnabled = config.enabled
+  teardownDesktopWatchers()
   if (desktopUnlisten) {
     desktopUnlisten()
     desktopUnlisten = null
@@ -644,44 +791,70 @@ export async function connectMobile(
     previous.pairingId !== info.pairingId ||
     previous.code !== code
 
-  config = {
-    role: 'mobile',
-    enabled: true,
-    deviceId: previous?.deviceId ?? generateDeviceId(),
-    code,
-    pairingId: info.pairingId,
-    url,
-    auto: previous?.auto ?? true,
+  // A paired phone with a shared base can ask how to resolve edits made on
+  // both sides. The first pairing has no base yet; its direction prompt below
+  // covers that case instead.
+  let remembered: SyncPriority | null = null
+  if (!pairingChanged && base && (previous?.priority ?? 'ask') === 'ask') {
+    const answer = await requestPriority()
+    if (answer === 'cancel') {
+      emit({
+        phase: 'disabled',
+        message: '已取消连接',
+        lastError: null,
+        pendingPriority: false,
+      })
+      throw new SyncCancelledError('已取消连接')
+    }
+    sessionPriority = answer.choice
+    if (answer.remember) remembered = answer.choice
   }
-  saveConfig()
 
-  if (pairingChanged) {
-    meta = defaultMeta()
-    persistMeta()
-    saveBase(null)
-  }
-
-  emit({
-    enabled: true,
-    code,
-    url,
-    message: `已找到「${info.name}」`,
-  })
-  setupMobileWatchers()
-  await runMobileSync('manual')
-  if (ui.phase === 'error') {
-    const message = ui.lastError ?? '连接电脑失败'
-    teardownMobileWatchers()
-    config.enabled = false
+  try {
+    config = {
+      role: 'mobile',
+      enabled: true,
+      deviceId: previous?.deviceId ?? generateDeviceId(),
+      code,
+      pairingId: info.pairingId,
+      url,
+      auto: previous?.auto ?? true,
+      priority: remembered ?? previous?.priority ?? 'ask',
+    }
     saveConfig()
-    emit({ enabled: false, phase: 'error', message, lastError: message })
-    throw new Error(message)
+
+    if (pairingChanged) {
+      meta = defaultMeta()
+      persistMeta()
+      saveBase(null)
+    }
+
+    emit({
+      enabled: true,
+      code,
+      url,
+      priority: config.priority ?? 'ask',
+      message: `已找到「${info.name}」`,
+    })
+    setupMobileWatchers()
+    await runMobileSync('manual')
+    if (ui.phase === 'error') {
+      const message = ui.lastError ?? '连接电脑失败'
+      teardownMobileWatchers()
+      config.enabled = false
+      saveConfig()
+      emit({ enabled: false, phase: 'error', message, lastError: message })
+      throw new Error(message)
+    }
+  } finally {
+    sessionPriority = null
   }
 }
 
 export async function disconnectMobile(): Promise<void> {
   if (runtimeRole !== 'mobile') return
   teardownMobileWatchers()
+  sessionPriority = null
   if (config) {
     config.enabled = false
     saveConfig()
@@ -692,6 +865,7 @@ export async function disconnectMobile(): Promise<void> {
     message: '已断开电脑',
     lastError: null,
     pendingDirection: null,
+    pendingPriority: false,
   })
 }
 
@@ -705,11 +879,45 @@ export async function setSyncAuto(auto: boolean): Promise<void> {
   }
 }
 
+/**
+ * Saves the conflict rule for future connections. `ask` restores the prompt
+ * shown whenever the phone connects.
+ */
+export function setSyncPriority(priority: SyncPriority): void {
+  if (!config || config.role !== 'mobile') return
+  config.priority = priority
+  saveConfig()
+  emit({ priority })
+}
+
 export function resolveDirection(choice: DirectionChoice): void {
   const resolver = directionResolver
   directionResolver = null
   emit({ pendingDirection: null, message: '' })
   resolver?.(choice)
+}
+
+export function resolvePriority(
+  choice: SyncFavor | 'cancel',
+  remember = false,
+): void {
+  const resolver = priorityResolver
+  priorityResolver = null
+  emit({ pendingPriority: false, message: '' })
+  if (!resolver) return
+  if (choice === 'cancel') resolver('cancel')
+  else resolver({ choice, remember })
+}
+
+function requestPriority(): Promise<PriorityAnswer | 'cancel'> {
+  return new Promise((resolve) => {
+    priorityResolver = resolve
+    emit({
+      pendingPriority: true,
+      phase: 'idle',
+      message: '请选择这次连接遇到冲突时以哪边为准',
+    })
+  })
 }
 
 function requestDirection(
@@ -730,17 +938,25 @@ function setupMobileWatchers(): void {
   if (!changeUnsubscribe) {
     changeUnsubscribe = onLedgerChanged(() => {
       if (!config?.enabled || !config.auto) return
-      if (Date.now() < suppressChangeUntil) return
+      if (applyingSyncedData) return
       if (mobileChangeTimer !== null) window.clearTimeout(mobileChangeTimer)
       mobileChangeTimer = window.setTimeout(() => {
         mobileChangeTimer = null
-        if (Date.now() < suppressChangeUntil) return
         void runMobileSync('change')
       }, MOBILE_CHANGE_DELAY)
     })
   }
   document.addEventListener('visibilitychange', handleVisible)
   window.addEventListener('focus', handleFocus)
+  if (mobilePollTimer === null) {
+    // The desktop cannot reach the phone, so while the phone is on screen it
+    // checks the shared blob regularly instead of waiting for a manual sync.
+    mobilePollTimer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible' || syncSuspended) return
+      if (!config?.enabled || !config.auto) return
+      void runMobileSync('poll')
+    }, MOBILE_POLL_INTERVAL)
+  }
 }
 
 function teardownMobileWatchers(): void {
@@ -750,6 +966,10 @@ function teardownMobileWatchers(): void {
     window.clearTimeout(mobileChangeTimer)
     mobileChangeTimer = null
   }
+  if (mobilePollTimer !== null) {
+    window.clearInterval(mobilePollTimer)
+    mobilePollTimer = null
+  }
   if (changeUnsubscribe) {
     changeUnsubscribe()
     changeUnsubscribe = null
@@ -758,12 +978,12 @@ function teardownMobileWatchers(): void {
 
 function handleVisible(): void {
   if (document.visibilityState !== 'visible') return
-  if (!config?.enabled || !config.auto) return
+  if (syncSuspended || !config?.enabled || !config.auto) return
   void runMobileSync('resume')
 }
 
 function handleFocus(): void {
-  if (!config?.enabled || !config.auto) return
+  if (syncSuspended || !config?.enabled || !config.auto) return
   void runMobileSync('resume')
 }
 
@@ -775,23 +995,42 @@ async function runMobileSync(trigger: SyncTrigger): Promise<void> {
     return
   }
   syncing = true
-  emit({
+  const quiet = trigger === 'poll'
+  quietSync = quiet
+  syncApplied = false
+  emitPhase({
     phase: 'connecting',
     message: '正在连接电脑…',
     lastError: null,
   })
   try {
     await performMobileSyncWithRetry()
-    suppressChangeUntil = Date.now() + 3000
-    emit({
-      phase: 'success',
-      message: '已与电脑同步',
-      lastError: null,
-      lastSyncAt: meta.lastSyncAt,
-      hasBase: base !== null,
-    })
+    if (!quiet) {
+      emit({
+        phase: 'success',
+        message: '已与电脑同步',
+        lastError: null,
+        lastSyncAt: meta.lastSyncAt,
+        hasBase: base !== null,
+      })
+    } else if (syncApplied) {
+      emit({
+        phase: 'success',
+        message: '已收到电脑上的改动',
+        lastError: null,
+        lastSyncAt: meta.lastSyncAt,
+        hasBase: base !== null,
+      })
+    } else {
+      emit({ lastSyncAt: meta.lastSyncAt })
+    }
   } catch (error) {
     if (error instanceof SyncCancelledError) {
+      return
+    }
+    if (quiet) {
+      // A silent poll should not turn a brief Wi-Fi hiccup into a red banner.
+      console.warn('后台同步失败', error)
       return
     }
     const message = describeError(error)
@@ -802,6 +1041,7 @@ async function runMobileSync(trigger: SyncTrigger): Promise<void> {
       pendingDirection: null,
     })
   } finally {
+    quietSync = false
     syncing = false
     if (syncAgain) {
       syncAgain = false
@@ -833,8 +1073,8 @@ interface PushResult {
 
 async function performMobileSync(): Promise<void> {
   const cfg = config!
-  const key = await deriveSyncKey(cfg.code!)
-  const token = await deriveSyncToken(cfg.code!)
+  const key = await syncKey()
+  const token = await syncToken()
 
   const remote = await fetchSyncBlob(cfg.url!, token)
   let remotePayload: SyncPayload | null = null
@@ -863,6 +1103,11 @@ async function performMobileSync(): Promise<void> {
 
   const local = readLedgerDataSnapshot()
 
+  // A poll that overlapped with a form being opened must not rewrite the books
+  // under it. Nothing has been recorded as applied yet, so the next poll can
+  // handle the same blob.
+  if (quietSync && syncSuspended) return
+
   if (!base) {
     await firstSync(local, remoteSnapshot, remotePayload, remoteEtag)
     return
@@ -887,16 +1132,20 @@ async function performMobileSync(): Promise<void> {
     persistMeta()
   }
 
-  emit({ phase: 'merging', message: '正在合并两边的账目…' })
+  emitPhase({ phase: 'merging', message: '正在合并两边的账目…' })
 
-  const merged = mergeSnapshots(base, local, remoteSnapshot)
+  const merged = mergeSnapshots(
+    base,
+    local,
+    remoteSnapshot,
+    favorOf(activePriority()),
+  )
   let applied = local
   if (!snapshotsEqual(merged.snapshot, local)) {
-    applied = applyLedgerDataSnapshot(merged.snapshot)
-    emitReload()
+    applied = applySyncedSnapshot(merged.snapshot)
   }
 
-  emit({ conflictCount: merged.conflicts.length })
+  emitPhase({ conflictCount: merged.conflicts.length })
 
   if (snapshotsEqual(applied, remoteSnapshot)) {
     // The desktop is already up to date; nothing to push.
@@ -919,25 +1168,22 @@ async function firstSync(
   remotePayload: SyncPayload | null,
   remoteEtag: string | null,
 ): Promise<void> {
-  const cfg = config!
-
   if (!remoteSnapshot) {
-    emit({ phase: 'pushing', message: '正在把账目写入电脑…' })
+    emitPhase({ phase: 'pushing', message: '正在把账目写入电脑…' })
     const pushed = await pushSnapshot(local, 'snapshot', remoteEtag)
     saveBase(local)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
-    await fetchReply(await deriveSyncKey(cfg.code!), await deriveSyncToken(cfg.code!), pushed.seq)
+    await fetchReply(await syncKey(), await syncToken(), pushed.seq)
     return
   }
 
   if (!hasLedgerData(local)) {
     // Nothing here yet: adopt the desktop's books as-is.
-    const applied = applyLedgerDataSnapshot(remoteSnapshot)
+    const applied = applySyncedSnapshot(remoteSnapshot)
     if (remotePayload?.sender === 'desktop') {
       meta.lastDesktopSeq = Math.max(meta.lastDesktopSeq, remotePayload.seq)
     }
-    emitReload()
     // Push the adopted snapshot back so the desktop records it as the shared
     // base. Without a base it cannot tell later deletions from additions.
     const pushed = await pushSnapshot(applied, 'snapshot', remoteEtag)
@@ -945,22 +1191,22 @@ async function firstSync(
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     await fetchReply(
-      await deriveSyncKey(cfg.code!),
-      await deriveSyncToken(cfg.code!),
+      await syncKey(),
+      await syncToken(),
       pushed.seq,
     )
     return
   }
 
   if (!hasLedgerData(remoteSnapshot)) {
-    emit({ phase: 'pushing', message: '正在把账目写入电脑…' })
+    emitPhase({ phase: 'pushing', message: '正在把账目写入电脑…' })
     const pushed = await pushSnapshot(local, 'snapshot', remoteEtag)
     saveBase(local)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     await fetchReply(
-      await deriveSyncKey(cfg.code!),
-      await deriveSyncToken(cfg.code!),
+      await syncKey(),
+      await syncToken(),
       pushed.seq,
     )
     return
@@ -970,50 +1216,53 @@ async function firstSync(
   if (choice === 'cancel') throw new SyncCancelledError('已取消同步')
 
   if (choice === 'remote') {
-    const applied = applyLedgerDataSnapshot(remoteSnapshot)
+    const applied = applySyncedSnapshot(remoteSnapshot)
     if (remotePayload?.sender === 'desktop') {
       meta.lastDesktopSeq = Math.max(meta.lastDesktopSeq, remotePayload.seq)
     }
-    emitReload()
     const pushed = await pushSnapshot(applied, 'snapshot', remoteEtag)
     saveBase(applied)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
-    await fetchReply(await deriveSyncKey(cfg.code!), await deriveSyncToken(cfg.code!), pushed.seq)
+    await fetchReply(await syncKey(), await syncToken(), pushed.seq)
     return
   }
 
   if (choice === 'local') {
     // The desktop drops its own books and adopts this phone's.
-    emit({ phase: 'pushing', message: '正在替换电脑上的账目…' })
-    const normalized = applyLedgerDataSnapshot(local)
+    emitPhase({ phase: 'pushing', message: '正在替换电脑上的账目…' })
+    const normalized = applySyncedSnapshot(local)
     const pushed = await pushSnapshot(normalized, 'replace', remoteEtag)
     saveBase(normalized)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     await fetchReply(
-      await deriveSyncKey(cfg.code!),
-      await deriveSyncToken(cfg.code!),
+      await syncKey(),
+      await syncToken(),
       pushed.seq,
     )
     return
   }
 
-  const merged = mergeSnapshots(null, local, remoteSnapshot)
+  const merged = mergeSnapshots(
+    null,
+    local,
+    remoteSnapshot,
+    favorOf(activePriority()),
+  )
   let applied = local
   if (!snapshotsEqual(merged.snapshot, local)) {
-    applied = applyLedgerDataSnapshot(merged.snapshot)
-    emitReload()
+    applied = applySyncedSnapshot(merged.snapshot)
   }
-  emit({ conflictCount: merged.conflicts.length })
-  emit({ phase: 'pushing', message: '正在把合并结果写入电脑…' })
+  emitPhase({ conflictCount: merged.conflicts.length })
+  emitPhase({ phase: 'pushing', message: '正在把合并结果写入电脑…' })
   const pushed = await pushSnapshot(applied, 'snapshot', remoteEtag)
   saveBase(applied)
   meta.lastSyncAt = new Date().toISOString()
   persistMeta()
   await fetchReply(
-    await deriveSyncKey(cfg.code!),
-    await deriveSyncToken(cfg.code!),
+    await syncKey(),
+    await syncToken(),
     pushed.seq,
   )
 }
@@ -1024,8 +1273,8 @@ async function pushSnapshot(
   etag: string | null,
 ): Promise<PushResult> {
   const cfg = config!
-  const key = await deriveSyncKey(cfg.code!)
-  const token = await deriveSyncToken(cfg.code!)
+  const key = await syncKey()
+  const token = await syncToken()
   const seq = meta.seq + 1
   const payload: SyncPayload = {
     v: 1,
@@ -1035,10 +1284,11 @@ async function pushSnapshot(
     seq,
     sentAt: new Date().toISOString(),
     mode,
+    priority: activePriority(),
     snapshot,
   }
   const envelope = await encryptPayload(payload, key)
-  emit({ phase: 'pushing', message: '正在写入电脑…' })
+  emitPhase({ phase: 'pushing', message: '正在写入电脑…' })
   const result = await pushSyncBlob(
     cfg.url!,
     token,
@@ -1080,12 +1330,17 @@ async function fetchReply(
     return
   }
   if (payload.sender !== 'desktop' || payload.ack !== pushedSeq) return
+  if (quietSync && syncSuspended) return
 
   const local = readLedgerDataSnapshot()
-  const merged = mergeSnapshots(base, local, payload.snapshot)
+  const merged = mergeSnapshots(
+    base,
+    local,
+    payload.snapshot,
+    favorOf(payload.priority ?? activePriority()),
+  )
   if (!snapshotsEqual(merged.snapshot, local)) {
-    applyLedgerDataSnapshot(merged.snapshot)
-    emitReload()
+    applySyncedSnapshot(merged.snapshot)
   }
   saveBase(payload.snapshot)
   meta.lastDesktopSeq = Math.max(meta.lastDesktopSeq, payload.seq)

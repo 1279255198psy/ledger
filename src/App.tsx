@@ -77,7 +77,11 @@ import {
 } from './lib/liabilities'
 import type { CategoryDraft } from './lib/categories'
 import { getCurrency, setActiveCurrency } from './lib/currency'
-import { getSyncState, initSync } from './lib/sync/engine'
+import {
+  getSyncState,
+  initSync,
+  setSyncSuspended,
+} from './lib/sync/engine'
 import { paletteThemeColor } from './lib/themes'
 import {
   currentMonthKey,
@@ -251,6 +255,11 @@ export default function App() {
   useEffect(() => {
     void initSync()
   }, [])
+
+  // Keep background syncs from closing an entry form the user is filling in.
+  useEffect(() => {
+    setSyncSuspended(transactionModalOpen || editing !== null)
+  }, [transactionModalOpen, editing])
 
   // Applying a snapshot from the other device rewrites storage outside React,
   // so reload every books-related state from disk.
