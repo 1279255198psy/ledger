@@ -18,6 +18,7 @@ import {
   RefreshCw,
   RotateCcw,
   ShieldCheck,
+  Smartphone,
   Sun,
   Tag,
   Tags,
@@ -30,6 +31,7 @@ import { Modal } from './Modal'
 import { CategorySettings } from './CategorySettings'
 import { BudgetSettings } from './BudgetSettings'
 import { ReminderSettingsSection } from './ReminderSettingsSection'
+import { SyncSettingsSection } from './SyncSettingsSection'
 import {
   GITHUB_RELEASES_URL,
   GITHUB_REPO_URL,
@@ -100,6 +102,7 @@ type SettingsPageId =
   | 'categories'
   | 'opening'
   | 'budget'
+  | 'sync'
   | 'data'
   | 'about'
 
@@ -146,6 +149,12 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
     label: '预算',
     detail: '按月、按日、按分类安排',
     icon: PiggyBank,
+  },
+  {
+    id: 'sync',
+    label: '双端同步',
+    detail: '在同一 Wi-Fi 下与手机互通账目',
+    icon: Smartphone,
   },
   {
     id: 'data',
@@ -675,6 +684,8 @@ export function SettingsModal({
                 />
               </section>
             ) : null}
+
+            {activePage === 'sync' ? <SyncSettingsSection /> : null}
 
             {activePage === 'data' ? (
               <section className="settings-section">

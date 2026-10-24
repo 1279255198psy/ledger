@@ -1,6 +1,6 @@
 [package]
 name = "zhangye"
-version = "3.2.1"
+version = "3.3.0"
 description = "账页 · 生活账簿"
 authors = ["账页"]
 edition = "2021"
@@ -23,6 +23,9 @@ tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
 chrono = "0.4"
+tiny_http = "0.12"
+sha2 = "0.10"
+if-addrs = "0.13"
 
 [profile.release]
 panic = "abort"

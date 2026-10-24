@@ -47,6 +47,7 @@ import {
   loadDesktopLedger,
   saveDesktopLedger,
 } from './desktop'
+import type { LedgerDataSnapshot } from './sync/types'
 
 const KEYS = {
   transactions: 'zhangye.transactions.v2',
@@ -116,6 +117,25 @@ let desktopHydrated = false
 let persistTimer: number | null = null
 let persistChain: Promise<void> = Promise.resolve()
 let flushHooksInstalled = false
+
+type LedgerChangeListener = () => void
+const ledgerChangeListeners = new Set<LedgerChangeListener>()
+
+/** Fires whenever books data is written locally (not for appearance settings). */
+export function onLedgerChanged(listener: LedgerChangeListener): () => void {
+  ledgerChangeListeners.add(listener)
+  return () => ledgerChangeListeners.delete(listener)
+}
+
+function notifyLedgerChanged(): void {
+  for (const listener of ledgerChangeListeners) {
+    try {
+      listener()
+    } catch (error) {
+      console.error('账本变化监听失败', error)
+    }
+  }
+}
 
 /**
  * Older ledgers have only top-level categories. Add the ready-made
@@ -458,6 +478,107 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
   }
 }
 
+/**
+ * The financial part of the ledger, used by the sync engine. Appearance,
+ * currency and reminder preferences deliberately stay out of it.
+ */
+export function readLedgerDataSnapshot(): LedgerDataSnapshot {
+  const categories = readStoredCategories()
+  const { transactions } = readStoredTransactions(categories)
+  return {
+    app: '账页',
+    syncVersion: 1,
+    updatedAt: new Date().toISOString(),
+    categories,
+    transactions,
+    projects: readStoredProjects(categories),
+    liabilities: readStoredLiabilities(),
+    budgets: readStoredBudgets(),
+    budgetRanges: readStoredBudgetRanges(),
+    openingBalanceCents: readOpeningBalanceCents(),
+  }
+}
+
+/**
+ * Writes a merged snapshot and rebuilds the storage mirror. Validation happens
+ * before the first write, so a malformed remote snapshot cannot half-apply.
+ */
+export function applyLedgerDataSnapshot(
+  snapshot: LedgerDataSnapshot,
+): LedgerDataSnapshot {
+  const categories = normalizeCategories(snapshot.categories)
+  if (!categories) {
+    throw new Error('同步数据中的分类无法识别')
+  }
+
+  const transactions = snapshot.transactions.map((item) =>
+    normalizeTransaction(item, categories),
+  )
+  if (transactions.some((item) => item === null)) {
+    throw new Error('同步数据中的流水无法识别')
+  }
+  const validTransactions = transactions as LedgerTransaction[]
+
+  const projects = snapshot.projects.filter((item) =>
+    isValidProject(item, categories),
+  )
+  if (projects.length !== snapshot.projects.length) {
+    throw new Error('同步数据中的项目无法识别')
+  }
+
+  const liabilities = snapshot.liabilities.filter(isValidLiability)
+  if (liabilities.length !== snapshot.liabilities.length) {
+    throw new Error('同步数据中的负债无法识别')
+  }
+
+  const budgets = normalizeBudgetBook(snapshot.budgets)
+  if (!budgets) {
+    throw new Error('同步数据中的预算无法识别')
+  }
+
+  const budgetRanges = normalizeRangeBudgets(snapshot.budgetRanges)
+  if (!budgetRanges) {
+    throw new Error('同步数据中的区间预算无法识别')
+  }
+
+  const openingBalanceCents = snapshot.openingBalanceCents
+  if (
+    typeof openingBalanceCents !== 'number' ||
+    !Number.isFinite(openingBalanceCents) ||
+    openingBalanceCents < 0
+  ) {
+    throw new Error('同步数据中的起始资金无法识别')
+  }
+
+  const updatedAt = new Date().toISOString()
+  safeSet(KEYS.categories, JSON.stringify(categories))
+  safeSet(KEYS.transactions, JSON.stringify(sortTransactions(validTransactions)))
+  safeSet(KEYS.seeded, 'true')
+  safeSet(KEYS.projects, JSON.stringify(projects))
+  safeSet(KEYS.liabilities, JSON.stringify(sortLiabilities(liabilities)))
+  safeSet(KEYS.budgets, JSON.stringify(budgets))
+  const currentBudget = resolveMonthBudget(budgets, currentMonthKey()).budget
+  safeSet(KEYS.budget, String(currentBudget.amountCents))
+  safeSet(KEYS.budgetRanges, JSON.stringify(budgetRanges))
+  safeSet(KEYS.openingBalance, String(Math.round(openingBalanceCents)))
+  safeSet(KEYS.updatedAt, updatedAt)
+  setActiveCategories(categories)
+  scheduleDesktopPersist()
+
+  return {
+    app: '账页',
+    syncVersion: 1,
+    updatedAt,
+    categories,
+    transactions: sortTransactions(validTransactions),
+    projects,
+    liabilities: sortLiabilities(liabilities),
+    budgets,
+    budgetRanges,
+    openingBalanceCents: Math.round(openingBalanceCents),
+  }
+}
+
 export function flushDesktopPersist(): Promise<void> {
   if (!isDesktopApp()) return Promise.resolve()
   const snapshot = readDesktopSnapshot()
@@ -542,6 +663,7 @@ export function loadCategories(): Category[] {
 export function saveCategories(categories: Category[]): void {
   safeSet(KEYS.categories, JSON.stringify(categories))
   scheduleDesktopPersist()
+  notifyLedgerChanged()
 }
 
 export function loadTransactions(): LedgerTransaction[] {
@@ -557,6 +679,7 @@ export function saveTransactions(transactions: LedgerTransaction[]): void {
   safeSet(KEYS.transactions, JSON.stringify(transactions))
   safeSet(KEYS.seeded, 'true')
   scheduleDesktopPersist()
+  notifyLedgerChanged()
 }
 
 export function loadProjects(): Project[] {
@@ -566,6 +689,7 @@ export function loadProjects(): Project[] {
 export function saveProjects(projects: Project[]): void {
   safeSet(KEYS.projects, JSON.stringify(projects))
   scheduleDesktopPersist()
+  notifyLedgerChanged()
 }
 
 export function loadLiabilities(): Liability[] {
@@ -575,6 +699,7 @@ export function loadLiabilities(): Liability[] {
 export function saveLiabilities(liabilities: Liability[]): void {
   safeSet(KEYS.liabilities, JSON.stringify(liabilities))
   scheduleDesktopPersist()
+  notifyLedgerChanged()
 }
 
 export function loadBudgets(): BudgetBook {
@@ -588,6 +713,7 @@ export function saveBudgets(budgets: BudgetBook): void {
   const current = resolveMonthBudget(budgets, currentMonthKey()).budget
   safeSet(KEYS.budget, String(current.amountCents))
   scheduleDesktopPersist()
+  notifyLedgerChanged()
 }
 
 export function loadBudgetRanges(): RangeBudget[] {
@@ -597,6 +723,7 @@ export function loadBudgetRanges(): RangeBudget[] {
 export function saveBudgetRanges(ranges: RangeBudget[]): void {
   safeSet(KEYS.budgetRanges, JSON.stringify(ranges))
   scheduleDesktopPersist()
+  notifyLedgerChanged()
 }
 
 export function loadOpeningBalance(): number {
@@ -606,6 +733,7 @@ export function loadOpeningBalance(): number {
 export function saveOpeningBalance(balance: number): void {
   safeSet(KEYS.openingBalance, String(Math.round(balance * 100)))
   scheduleDesktopPersist()
+  notifyLedgerChanged()
 }
 
 export function loadTheme(): Theme {

@@ -77,6 +77,7 @@ import {
 } from './lib/liabilities'
 import type { CategoryDraft } from './lib/categories'
 import { getCurrency, setActiveCurrency } from './lib/currency'
+import { getSyncState, initSync } from './lib/sync/engine'
 import { paletteThemeColor } from './lib/themes'
 import {
   currentMonthKey,
@@ -246,6 +247,31 @@ export default function App() {
   useEffect(() => {
     saveOpeningBalance(openingBalance)
   }, [openingBalance])
+
+  useEffect(() => {
+    void initSync()
+  }, [])
+
+  // Applying a snapshot from the other device rewrites storage outside React,
+  // so reload every books-related state from disk.
+  useEffect(() => {
+    const reload = () => {
+      const nextCategories = loadCategories()
+      setActiveCategories(nextCategories)
+      setCategories(nextCategories)
+      setTransactions(loadTransactions())
+      setProjects(loadProjects())
+      setLiabilities(loadLiabilities())
+      setBudgets(loadBudgets())
+      setBudgetRanges(loadBudgetRanges())
+      setOpeningBalance(loadOpeningBalance())
+      setEditing(null)
+      setTransactionModalOpen(false)
+      setTransactionProjectId(null)
+    }
+    window.addEventListener('zhangye:ledger-reloaded', reload)
+    return () => window.removeEventListener('zhangye:ledger-reloaded', reload)
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -803,6 +829,13 @@ export default function App() {
 
   const handleImportFile = async (file: File) => {
     try {
+      if (getSyncState().enabled) {
+        const confirmed = await confirmDesktopAction(
+          '导入会替换这台设备的账本，并同步到另一台设备。确定继续吗？',
+          '导入备份',
+        )
+        if (!confirmed) return
+      }
       const text = await file.text()
       const imported = parseBackup(text)
       if (imported.categories) commitCategories(imported.categories)
@@ -841,8 +874,11 @@ export default function App() {
   }
 
   const handleReset = async () => {
+    const syncHint = getSyncState().enabled
+      ? '同步已开启，这次改动也会同步到另一台设备。'
+      : ''
     const confirmed = await confirmDesktopAction(
-      '确定恢复示例账本吗？当前的全部流水和预算设置会被覆盖，此操作无法撤销。',
+      `确定恢复示例账本吗？当前的全部流水和预算设置会被覆盖，此操作无法撤销。${syncHint}`,
       '恢复示例账本',
     )
     if (!confirmed) return
@@ -861,8 +897,11 @@ export default function App() {
   }
 
   const handleClearLedger = async () => {
+    const syncHint = getSyncState().enabled
+      ? '同步已开启，另一台设备上的账目也会被清除。'
+      : ''
     const confirmed = await confirmDesktopAction(
-      '确定清除现有账本吗？全部流水、项目与负债会被删除，预算和起始资金会重置。分类与外观设置保留。此操作无法撤销，建议先导出备份。',
+      `确定清除现有账本吗？全部流水、项目与负债会被删除，预算和起始资金会重置。分类与外观设置保留。此操作无法撤销，建议先导出备份。${syncHint}`,
       '清除现有账本',
     )
     if (!confirmed) return

@@ -9,6 +9,8 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
 
+mod sync;
+
 static SAVE_LOCK: Mutex<()> = Mutex::new(());
 
 /// Mirrors `ReminderSettings` in the frontend.
@@ -352,6 +354,7 @@ pub fn run() {
                 settings: Mutex::new(ReminderSettings::default()),
                 last_fired: Mutex::new(String::new()),
             });
+            let _ = app.manage(sync::SyncServerState::new());
             setup_tray(app)?;
             // The window starts hidden so a login launch goes straight to the
             // tray without a flash. A normal launch shows it right away.
@@ -367,7 +370,13 @@ pub fn run() {
             write_export,
             sync_reminder_settings,
             send_test_notification,
-            reminder_permission_state
+            reminder_permission_state,
+            sync::sync_server_start,
+            sync::sync_server_stop,
+            sync::sync_server_status,
+            sync::sync_server_read_blob,
+            sync::sync_server_write_blob,
+            sync::sync_server_write_blob_if
         ])
         .build(tauri::generate_context!())
         .expect("账页启动失败");
