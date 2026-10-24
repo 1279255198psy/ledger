@@ -21,9 +21,21 @@ export interface ReminderActionResult {
 
 let channelReady = false
 
-async function loadMobilePlugin() {
-  const module = await import('@capacitor/local-notifications')
-  return module.LocalNotifications
+type MobileNotificationsModule = typeof import('@capacitor/local-notifications')
+
+let mobileModule: Promise<MobileNotificationsModule> | null = null
+
+/**
+ * Capacitor plugin objects are Proxies that turn *every* property access into a
+ * native plugin call — including `then`. Returning one from an `async` function
+ * (or otherwise awaiting it) makes the promise machinery call
+ * `LocalNotifications.then()`, which the native side rejects as unimplemented
+ * while the outer promise never settles. So only ever await the module and pull
+ * the plugin out of it as a plain property.
+ */
+function loadMobileModule(): Promise<MobileNotificationsModule> {
+  if (!mobileModule) mobileModule = import('@capacitor/local-notifications')
+  return mobileModule
 }
 
 function toPermission(display: string): ReminderPermission {
@@ -36,7 +48,7 @@ function toPermission(display: string): ReminderPermission {
 export async function getReminderPermission(): Promise<ReminderPermission> {
   if (isMobileApp()) {
     try {
-      const plugin = await loadMobilePlugin()
+      const { LocalNotifications: plugin } = await loadMobileModule()
       return toPermission((await plugin.checkPermissions()).display)
     } catch {
       return 'unsupported'
@@ -61,7 +73,7 @@ export async function getReminderPermission(): Promise<ReminderPermission> {
 }
 
 async function ensureMobilePermission(): Promise<ReminderPermission> {
-  const plugin = await loadMobilePlugin()
+  const { LocalNotifications: plugin } = await loadMobileModule()
   const current = toPermission((await plugin.checkPermissions()).display)
   if (current !== 'prompt') return current
   return toPermission((await plugin.requestPermissions()).display)
@@ -69,7 +81,7 @@ async function ensureMobilePermission(): Promise<ReminderPermission> {
 
 async function ensureChannel(): Promise<void> {
   if (channelReady) return
-  const plugin = await loadMobilePlugin()
+  const { LocalNotifications: plugin } = await loadMobileModule()
   await plugin.createChannel({
     id: 'reminders',
     name: '记账提醒',
@@ -84,7 +96,7 @@ async function ensureChannel(): Promise<void> {
 
 /** Cancels every reminder this app owns. */
 async function clearMobileReminders(): Promise<void> {
-  const plugin = await loadMobilePlugin()
+  const { LocalNotifications: plugin } = await loadMobileModule()
   await plugin.cancel({
     notifications: MOBILE_REMINDER_IDS.map((id) => ({ id })),
   })
@@ -104,7 +116,7 @@ async function applyMobile(settings: ReminderSettings): Promise<void> {
   await clearMobileReminders()
   const notifications = buildMobileSchedules(settings)
   if (notifications.length === 0) return
-  const plugin = await loadMobilePlugin()
+  const { LocalNotifications: plugin } = await loadMobileModule()
   // `isExactNotification: false` keeps Android from sending the user to the
   // "Alarms & reminders" permission screen here. Inexact alarms still survive
   // a closed app, and allowWhileIdle keeps them firing through Doze.
@@ -145,7 +157,7 @@ export async function sendTestReminder(): Promise<ReminderActionResult> {
         }
       }
       await ensureChannel()
-      const plugin = await loadMobilePlugin()
+      const { LocalNotifications: plugin } = await loadMobileModule()
       await plugin.schedule({
         notifications: [
           {
