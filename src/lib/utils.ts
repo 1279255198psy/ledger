@@ -162,6 +162,44 @@ export function getCategoryTotals(
     .sort((a, b) => b.value - a.value)
 }
 
+/**
+ * Spending inside one top-level category, split by the subcategory it was
+ * filed under. A transaction booked on the parent itself comes back with the
+ * parent's category and its own value, so the rows always add up to the
+ * top-level total. `share` here is relative to that top-level category.
+ */
+export function getSubcategoryTotals(
+  transactions: LedgerTransaction[],
+  rootId: string,
+  type: TransactionType = 'expense',
+): CategoryTotal[] {
+  const deltaOf = (item: LedgerTransaction) =>
+    type === 'expense' ? expenseDeltaCents(item) : item.amountCents
+  const filtered = transactions.filter(
+    (item) =>
+      item.type === type && getRootCategoryId(item.categoryId) === rootId,
+  )
+  const totalCents = filtered.reduce((sum, item) => sum + deltaOf(item), 0)
+  const grouped = new Map<string, number>()
+  for (const item of filtered) {
+    grouped.set(
+      item.categoryId,
+      (grouped.get(item.categoryId) ?? 0) + deltaOf(item),
+    )
+  }
+
+  return [...grouped.entries()]
+    // A subcategory refunded past what it spent nets negative; it still has
+    // to stay in the list so the rows keep adding up to the parent total.
+    .filter(([, valueCents]) => valueCents !== 0)
+    .map(([id, valueCents]) => ({
+      category: getCategory(id, type),
+      value: valueCents / 100,
+      share: totalCents > 0 ? valueCents / totalCents : 0,
+    }))
+    .sort((a, b) => b.value - a.value)
+}
+
 export function buildMonthSeries(
   transactions: LedgerTransaction[],
   endMonth: string,

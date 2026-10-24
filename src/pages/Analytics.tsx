@@ -336,7 +336,10 @@ export function Analytics({
               <p className="card-sub">{topCategoryText}。</p>
             </div>
           </div>
-          <CategoryBars items={categories} />
+          <CategoryBars
+            items={categories}
+            transactions={monthTransactions}
+          />
           <div className="category-total">
             <span>本月支出合计</span>
             <strong>{formatMoney(totals.expense)}</strong>
