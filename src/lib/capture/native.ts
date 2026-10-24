@@ -1,9 +1,16 @@
 import { registerPlugin } from '@capacitor/core'
 import { isAndroidApp } from '../platform'
-import type { CaptureAppInfo, CaptureEventRecord, CaptureStatus } from './types'
+import type {
+  CaptureAppInfo,
+  CaptureDiagnostics,
+  CaptureEventRecord,
+  CaptureStatus,
+} from './types'
 
 interface CaptureInboxPlugin {
   status(): Promise<CaptureStatus>
+  reconnect(): Promise<void>
+  diagnostics(): Promise<CaptureDiagnostics>
   openSettings(): Promise<void>
   listEvents(options?: { sinceId?: string }): Promise<{
     events: CaptureEventRecord[]
@@ -39,6 +46,17 @@ export async function getCaptureStatus(): Promise<CaptureStatus> {
 export async function openCaptureSettings(): Promise<void> {
   requireAndroid()
   await CaptureInbox.openSettings()
+}
+
+/** Asks the system to bind the listener again; fixes "granted but silent". */
+export async function reconnectCaptureListener(): Promise<void> {
+  requireAndroid()
+  await CaptureInbox.reconnect()
+}
+
+export async function getCaptureDiagnostics(): Promise<CaptureDiagnostics> {
+  requireAndroid()
+  return CaptureInbox.diagnostics()
 }
 
 export async function listCaptureEvents(

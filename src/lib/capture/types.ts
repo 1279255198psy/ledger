@@ -30,6 +30,33 @@ export interface CaptureStatus {
   keepDays: number
   /** Stored sample count. */
   count: number
+  /** Raw `enabled_notification_listeners` value from the system setting. */
+  enabledListeners: string
+}
+
+/** Per-package listener counters; distinguishes "nothing arrived" from "filtered". */
+export interface CaptureDiagnosticEntry {
+  packageName: string
+  label: string
+  /** Notifications seen from this package, before any filter. */
+  seen: number
+  /** Epoch milliseconds of the most recent one. */
+  lastSeen: number
+  /** Notifications that passed the filters and were stored. */
+  accepted: number
+  lastAccepted: number
+  /** Most recent notification text, truncated. */
+  lastText: string
+  /** Why the most recent one was rejected; empty when it was accepted. */
+  lastReason: string
+}
+
+export interface CaptureDiagnostics {
+  granted: boolean
+  connected: boolean
+  appPackage: string
+  enabledListeners: string
+  entries: CaptureDiagnosticEntry[]
 }
 
 export interface CaptureAppInfo {

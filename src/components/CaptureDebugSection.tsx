@@ -13,10 +13,12 @@ import {
 import {
   captureSupported,
   clearCaptureEvents,
+  getCaptureDiagnostics,
   getCaptureStatus,
   listCaptureCandidateApps,
   listCaptureEvents,
   openCaptureSettings,
+  reconnectCaptureListener,
   setCaptureConfig,
 } from '../lib/capture/native'
 import {
@@ -26,6 +28,7 @@ import {
 } from '../lib/capture/prefs'
 import type {
   CaptureAppInfo,
+  CaptureDiagnostics,
   CaptureEventRecord,
   CaptureStatus,
 } from '../lib/capture/types'
@@ -89,6 +92,7 @@ async function copyText(value: string): Promise<boolean> {
 export function CaptureDebugSection() {
   const supported = captureSupported()
   const [status, setStatus] = useState<CaptureStatus | null>(null)
+  const [diagnostics, setDiagnostics] = useState<CaptureDiagnostics | null>(null)
   const [apps, setApps] = useState<CaptureAppInfo[]>([])
   const [events, setEvents] = useState<CaptureEventRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -104,12 +108,14 @@ export function CaptureDebugSection() {
   const loadLive = useCallback(async () => {
     if (!supported) return
     try {
-      const [nextStatus, nextEvents] = await Promise.all([
+      const [nextStatus, nextEvents, nextDiagnostics] = await Promise.all([
         getCaptureStatus(),
         listCaptureEvents(),
+        getCaptureDiagnostics(),
       ])
       setStatus(nextStatus)
       setEvents(nextEvents)
+      setDiagnostics(nextDiagnostics)
       setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取捕获状态失败')
@@ -194,6 +200,18 @@ export function CaptureDebugSection() {
       setNotice('已打开系统设置：找到「账页」，允许通知使用权，然后返回本页')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '无法打开系统设置')
+    }
+  }
+
+  /** Some ROMs keep the permission but never rebind the listener on their own. */
+  const handleReconnect = async () => {
+    setNotice('')
+    try {
+      await reconnectCaptureListener()
+      await loadLive()
+      setNotice('已请求系统重新连接监听服务，几秒后再看诊断状态')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '重新连接失败')
     }
   }
 
@@ -307,6 +325,83 @@ export function CaptureDebugSection() {
 
       {error ? <p className="capture-message is-error">{error}</p> : null}
       {notice ? <p className="capture-message">{notice}</p> : null}
+
+      <div className="capture-block">
+        <div className="capture-head">
+          <p className="capture-label">监听诊断</p>
+          <div className="capture-actions">
+            <button
+              type="button"
+              className="button ghost"
+              onClick={() => void handleReconnect()}
+            >
+              <RefreshCw size={13} />
+              重新连接
+            </button>
+          </div>
+        </div>
+        <p className="capture-note">
+          这里统计监听服务从每个 App 实际收到的通知条数，用来区分「一条都没收到」和「收到了但被规则过滤」。没勾选的应用如果发来像付款的通知，也会列在这里，可以直接加入监听。
+        </p>
+        {granted && !status?.connected ? (
+          <p className="capture-message is-error">
+            通知使用权已开启，但系统还没把监听服务连上。先点「重新连接」；仍然不行，就到系统设置里把账页的通知使用权关掉再打开。
+          </p>
+        ) : null}
+        <div className="capture-diag">
+          {(diagnostics?.entries ?? []).map((entry) => {
+            const watched = status?.packages.includes(entry.packageName) ?? false
+            return (
+            <div key={entry.packageName} className="capture-diag-row">
+              <div className="capture-diag-head">
+                <strong>{entry.label}</strong>
+                <small>{entry.packageName}</small>
+                {!watched ? (
+                  <button
+                    type="button"
+                    className="button ghost capture-diag-add"
+                    disabled={busy}
+                    onClick={() =>
+                      void applyPackages([
+                        ...(status?.packages ?? []),
+                        entry.packageName,
+                      ])
+                    }
+                  >
+                    加入监听
+                  </button>
+                ) : null}
+              </div>
+              {entry.seen === 0 ? (
+                <p className="capture-diag-text is-warn">
+                  监听服务还没收到这个 App 的任何通知。
+                </p>
+              ) : (
+                <>
+                  <p className="capture-diag-text">
+                    收到 {entry.seen} 条 · 进入样本 {entry.accepted} 条 · 最近{' '}
+                    {formatClock(entry.lastSeen)}
+                  </p>
+                  {entry.lastReason ? (
+                    <p className="capture-diag-text is-warn">
+                      最近一条被过滤：{entry.lastReason}
+                    </p>
+                  ) : null}
+                  {entry.lastText ? (
+                    <p className="capture-diag-sample">{entry.lastText}</p>
+                  ) : null}
+                </>
+              )}
+            </div>
+            )
+          })}
+        </div>
+        {diagnostics && diagnostics.entries.every((entry) => entry.seen === 0) ? (
+          <p className="capture-note">
+            所有 App 都是 0 条时，问题在监听服务本身，不在解析规则：确认系统「通知使用权」里开着账页，并把账页加入电池优化白名单、允许自启动（小米、华为、OPPO、vivo 等机型需要）。
+          </p>
+        ) : null}
+      </div>
 
       <div className="capture-block">
         <p className="capture-label">监听的应用</p>
