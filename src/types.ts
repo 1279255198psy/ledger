@@ -222,10 +222,17 @@ export interface LedgerTransaction {
   note: string
   /** 支出专用；旧数据可能没有标记。 */
   spendingNature?: SpendingNature
+  /**
+   * 退款仍然存成正金额，汇总时按负号计入所属分类，所以它冲减原类目而不是
+   * 变成一笔收入。只对 type === 'expense' 有意义。
+   */
+  kind?: TransactionKind
   allocations: AllocationLine[]
   createdAt: string
   updatedAt?: string
 }
+
+export type TransactionKind = 'refund'
 
 export interface ProjectDraft {
   name: string
@@ -405,5 +412,21 @@ export interface TransactionDraft {
   date: string
   note: string
   spendingNature?: SpendingNature
+  kind?: TransactionKind
   allocations?: AllocationLine[]
+}
+
+/**
+ * Partial values used to prefill a new entry, currently from a captured
+ * payment notification. Missing fields keep the form's normal defaults.
+ */
+export interface TransactionDraftSeed {
+  type?: TransactionType
+  amountCents?: number
+  categoryId?: string
+  accountId?: string
+  date?: string
+  note?: string
+  spendingNature?: SpendingNature
+  kind?: TransactionKind
 }

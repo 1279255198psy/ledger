@@ -1,4 +1,5 @@
 import { getCategory, getRootCategoryId } from './categories'
+import { balanceDeltaCents, expenseDeltaCents } from './refunds'
 import {
   currentMonthKey,
   daysInMonthOfKey,
@@ -201,26 +202,29 @@ function totalsInRange(
       continue
     }
 
-    totals.expenseCents += transaction.amountCents
+    // A refund carries the same nature as the purchase it reverses, so every
+    // bucket here shrinks instead of growing.
+    const delta = expenseDeltaCents(transaction)
+    totals.expenseCents += delta
     if (isFoodCategory(transaction.categoryId)) {
-      totals.foodCents += transaction.amountCents
+      totals.foodCents += delta
     }
     if (
       transaction.spendingNature === 'essential' ||
       transaction.spendingNature === 'flexible'
     ) {
       if (transaction.spendingNature === 'essential') {
-        totals.essentialCents += transaction.amountCents
+        totals.essentialCents += delta
       } else {
-        totals.flexibleCents += transaction.amountCents
+        totals.flexibleCents += delta
       }
     } else {
-      totals.unmarkedCents += transaction.amountCents
+      totals.unmarkedCents += delta
       totals.unmarkedCount += 1
       if (resolveSpendingNature(transaction) === 'essential') {
-        totals.essentialCents += transaction.amountCents
+        totals.essentialCents += delta
       } else {
-        totals.flexibleCents += transaction.amountCents
+        totals.flexibleCents += delta
       }
     }
   }
@@ -235,10 +239,7 @@ function assetsAtEnd(
   let balance = openingBalanceCents
   for (const transaction of transactions) {
     if (transaction.date > endDate) continue
-    balance +=
-      transaction.type === 'income'
-        ? transaction.amountCents
-        : -transaction.amountCents
+    balance += balanceDeltaCents(transaction)
   }
   return balance
 }

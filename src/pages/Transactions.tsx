@@ -12,12 +12,15 @@ import {
 } from 'lucide-react'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { EmptyLedger } from '../components/EmptyLedger'
+import { PendingCaptureCard } from '../components/PendingCaptureCard'
 import { SelectMenu } from '../components/SelectMenu'
 import { TransactionRow } from '../components/TransactionRow'
+import type { PendingCapture } from '../lib/capture/types'
 import {
   getCategory,
   getCategoryPathName,
 } from '../lib/categories'
+import { expenseDeltaCents } from '../lib/refunds'
 import {
   formatDayHeading,
   formatMoney,
@@ -40,9 +43,12 @@ interface TransactionsProps {
   categories: Category[]
   accounts: Account[]
   monthKey: string
+  pendingCaptures: PendingCapture[]
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
   onDelete: (id: string) => void
+  onAnnotateCapture: (item: PendingCapture) => void
+  onIgnoreCapture: (id: string) => void
   onLoadSample: () => void
 }
 
@@ -86,9 +92,12 @@ export function Transactions({
   categories,
   accounts,
   monthKey,
+  pendingCaptures,
   onAdd,
   onEdit,
   onDelete,
+  onAnnotateCapture,
+  onIgnoreCapture,
   onLoadSample,
 }: TransactionsProps) {
   const [query, setQuery] = useState('')
@@ -390,6 +399,11 @@ export function Transactions({
   if (transactions.length === 0) {
     return (
       <div className="page-stack transactions-page">
+        <PendingCaptureCard
+          items={pendingCaptures}
+          onAnnotate={onAnnotateCapture}
+          onIgnore={onIgnoreCapture}
+        />
         <EmptyLedger onAdd={onAdd} onLoadSample={onLoadSample} />
       </div>
     )
@@ -397,6 +411,12 @@ export function Transactions({
 
   return (
     <div className="page-stack transactions-page">
+      <PendingCaptureCard
+        items={pendingCaptures}
+        onAnnotate={onAnnotateCapture}
+        onIgnore={onIgnoreCapture}
+      />
+
       <section className="card ledger-summary" aria-label="本月流水摘要">
         <div className="summary-cell">
           <span>本月收入</span>
@@ -575,7 +595,7 @@ export function Transactions({
           {grouped.map(([date, items]) => {
             const dayExpense = items
               .filter((item) => item.type === 'expense')
-              .reduce((sum, item) => sum + item.amountCents, 0) / 100
+              .reduce((sum, item) => sum + expenseDeltaCents(item), 0) / 100
             const dayIncome = items
               .filter((item) => item.type === 'income')
               .reduce((sum, item) => sum + item.amountCents, 0) / 100

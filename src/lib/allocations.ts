@@ -10,6 +10,7 @@ import type {
   TransactionScope,
 } from '../types'
 import { getRootCategoryId } from './categories'
+import { allocationDeltaCents } from './refunds'
 
 function makeId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -258,7 +259,7 @@ export function toPostings(
       targetType: line.targetType,
       projectId: line.projectId,
       categoryId: transaction.categoryId,
-      signedCents: line.amountCents,
+      signedCents: allocationDeltaCents(transaction, line),
       countsAsDaily:
         line.targetType === 'daily' ||
         (line.targetType === 'project' &&

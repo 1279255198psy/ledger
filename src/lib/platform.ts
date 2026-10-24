@@ -31,3 +31,17 @@ export function isMobileApp(): boolean {
     capacitorWindow.webkit?.messageHandlers?.bridge !== undefined
   )
 }
+
+/** True only inside the Android shell; notification capture does not exist on iOS. */
+export function isAndroidApp(): boolean {
+  if (!isMobileApp()) return false
+  if (typeof window !== 'undefined') {
+    const capacitor = (window as unknown as CapacitorWindow).Capacitor
+    if (capacitor && typeof capacitor.getPlatform === 'function') {
+      return capacitor.getPlatform() === 'android'
+    }
+  }
+  return (
+    typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
+  )
+}

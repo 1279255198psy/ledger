@@ -105,7 +105,10 @@ export function isValidTransaction(
       item.spendingNature === 'essential' ||
       item.spendingNature === 'flexible') &&
     typeof item.createdAt === 'string' &&
-    (item.updatedAt === undefined || typeof item.updatedAt === 'string')
+    (item.updatedAt === undefined || typeof item.updatedAt === 'string') &&
+    // Only a payment can be refunded, so the flag never rides on income.
+    (item.kind === undefined ||
+      (item.kind === 'refund' && item.type === 'expense'))
   )
 }
 

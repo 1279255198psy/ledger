@@ -46,6 +46,8 @@ import type {
   Project,
   SpendingNature,
   TransactionDraft,
+  TransactionDraftSeed,
+  TransactionKind,
   TransactionScope,
   TransactionType,
 } from '../types'
@@ -58,6 +60,10 @@ interface TransactionModalProps {
   accounts: Account[]
   defaultDate: string
   defaultProjectId?: string
+  /** Prefills a new entry, e.g. from a captured payment notification. */
+  initialDraft?: TransactionDraftSeed | null
+  /** One-line explanation shown above the form. */
+  captureHint?: string
   onClose: () => void
   onSave: (draft: TransactionDraft) => void
   onDelete: (id: string) => void
@@ -262,12 +268,15 @@ export function TransactionModal({
   accounts,
   defaultDate,
   defaultProjectId,
+  initialDraft,
+  captureHint,
   onClose,
   onSave,
   onDelete,
   onCreateCategory,
 }: TransactionModalProps) {
   const [type, setType] = useState<TransactionType>('expense')
+  const [kind, setKind] = useState<TransactionKind | undefined>(undefined)
   const [amount, setAmount] = useState('')
   const [categoryId, setCategoryId] = useState('food')
   const [accountId, setAccountId] = useState('wechat')
@@ -289,6 +298,9 @@ export function TransactionModal({
     type === 'expense' ? 'shapes' : 'ellipsis',
   )
   const [creatorError, setCreatorError] = useState('')
+  // A capture already fills the amount, so the keyboard would only cover the
+  // category picker the user actually came here to fill in.
+  const seededEntry = Boolean(initialDraft)
   // Only the big categories show at first; the chevron reveals subcategories.
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(
     new Set(),
@@ -446,15 +458,19 @@ export function TransactionModal({
     [splitRows, splitMode, totalCents, selectableProjects],
   )
 
-  const firstExpenseCategoryId =
+  const firstCategoryIdFor = (nextType: TransactionType): string =>
     allCategories.find(
-      (category) => category.type === 'expense' && !category.parentId,
-    )?.id ?? allCategories.find((category) => category.type === 'expense')?.id ?? ''
+      (category) => category.type === nextType && !category.parentId,
+    )?.id ??
+    allCategories.find((category) => category.type === nextType)?.id ??
+    ''
+  const firstExpenseCategoryId = firstCategoryIdFor('expense')
 
   useEffect(() => {
     if (!open) return
     if (editing) {
       setType(editing.type)
+      setKind(editing.kind)
       setAmount(String(editing.amountCents / 100))
       setCategoryId(editing.categoryId)
       setAccountId(editing.accountId)
@@ -483,14 +499,43 @@ export function TransactionModal({
             (project) => project.id === defaultProjectId,
           )
         : undefined
-      setType('expense')
-      setAmount('')
-      setCategoryId(firstExpenseCategoryId)
-      setExpandedCategoryIds(new Set())
-      setAccountId(getDefaultAccountId(accounts))
-      setDate(defaultDate)
-      setNote('')
-      setSpendingNature('')
+      const seed = initialDraft
+      const seededType = seed?.type ?? 'expense'
+      const seededCategoryIds = new Set(
+        allCategories
+          .filter((category) => category.type === seededType)
+          .map((category) => category.id),
+      )
+      // A seeded entry starts with no category on purpose: the notification
+      // knows the amount, not how the user wants to classify it.
+      const seedCategoryId =
+        seed?.categoryId && seededCategoryIds.has(seed.categoryId)
+          ? seed.categoryId
+          : ''
+      const seedParentId = seedCategoryId
+        ? allCategories.find((category) => category.id === seedCategoryId)
+            ?.parentId
+        : undefined
+      const seededAccountId =
+        seed?.accountId && accounts.some((item) => item.id === seed.accountId)
+          ? seed.accountId
+          : getDefaultAccountId(accounts)
+
+      setType(seededType)
+      setKind(seededType === 'expense' ? seed?.kind : undefined)
+      setAmount(
+        seed?.amountCents && seed.amountCents > 0
+          ? centsToInput(seed.amountCents)
+          : '',
+      )
+      setCategoryId(seed ? seedCategoryId : firstExpenseCategoryId)
+      setExpandedCategoryIds(
+        seedParentId ? new Set([seedParentId]) : new Set(),
+      )
+      setAccountId(seededAccountId)
+      setDate(seed?.date || defaultDate)
+      setNote(seed?.note ?? '')
+      setSpendingNature(seed?.spendingNature ?? '')
       setScope(preferredProject ? 'project' : 'daily')
       setProjectId(
         preferredProject?.id ?? selectableProjects[0]?.id ?? '',
@@ -508,6 +553,7 @@ export function TransactionModal({
     editing,
     defaultDate,
     defaultProjectId,
+    initialDraft,
     selectableProjects,
     firstExpenseCategoryId,
     accounts,
@@ -515,6 +561,8 @@ export function TransactionModal({
 
   const handleTypeChange = (nextType: TransactionType) => {
     setType(nextType)
+    // 退款是支出的反向记录；改成收入后它就不再是退款了。
+    if (nextType !== 'expense') setKind(undefined)
     setError('')
     if (nextType === 'income') setSpendingNature('')
     setExpandedCategoryIds(new Set())
@@ -649,7 +697,11 @@ export function TransactionModal({
       return
     }
     if (type === 'expense' && !spendingNature) {
-      setError('请标记这笔支出属于「刚需」还是「弹性」')
+      setError(
+        kind === 'refund'
+          ? '请标记原消费属于「刚需」还是「弹性」'
+          : '请标记这笔支出属于「刚需」还是「弹性」',
+      )
       return
     }
 
@@ -691,6 +743,7 @@ export function TransactionModal({
       ...(type === 'expense' && spendingNature
         ? { spendingNature }
         : {}),
+      ...(type === 'expense' && kind === 'refund' ? { kind } : {}),
       allocations,
     })
   }
@@ -715,9 +768,21 @@ export function TransactionModal({
       <form onSubmit={handleSubmit}>
         <header className="modal-header">
           <div>
-            <p className="eyebrow">{editing ? '编辑流水' : '新的一笔'}</p>
+            <p className="eyebrow">
+              {editing
+                ? kind === 'refund'
+                  ? '编辑退款'
+                  : '编辑流水'
+                : initialDraft
+                  ? '来自付款通知'
+                  : '新的一笔'}
+            </p>
             <h2 id="transaction-modal-title">
-              {editing ? '修改这笔记录' : '记下此刻的花销'}
+              {editing
+                ? '修改这笔记录'
+                : initialDraft
+                  ? '补充这笔记录'
+                  : '记下此刻的花销'}
             </h2>
           </div>
           <button
@@ -731,6 +796,18 @@ export function TransactionModal({
         </header>
 
         <div className="modal-body">
+          {captureHint ? (
+            <p className="capture-hint" role="note">
+              {captureHint}
+            </p>
+          ) : null}
+
+          {kind === 'refund' ? (
+            <p className="capture-hint" role="note">
+              这是一笔退款：选回原来的分类，它会从该分类的支出里扣回，不计入收入。
+            </p>
+          ) : null}
+
           <div className="type-switch" role="group" aria-label="类型">
             <button
               type="button"
@@ -754,12 +831,16 @@ export function TransactionModal({
 
           <label className="amount-field">
             <span className="field-label">
-              {type === 'expense' ? '这次花了多少' : '这次收入多少'}
+              {type === 'income'
+                ? '这次收入多少'
+                : kind === 'refund'
+                  ? '这笔退了多少'
+                  : '这次花了多少'}
             </span>
             <span className={`amount-input-wrap type-${type}`}>
               <span className="currency-mark">{activeCurrencySymbol()}</span>
               <input
-                data-autofocus
+                data-autofocus={seededEntry ? undefined : true}
                 type="text"
                 inputMode="decimal"
                 value={amount}
@@ -776,7 +857,11 @@ export function TransactionModal({
 
           {amount && Number(amount) > 0 ? (
             <p className="amount-preview" aria-live="polite">
-              {type === 'expense' ? '记录支出 ' : '记录收入 '}
+              {type === 'income'
+                ? '记录收入 '
+                : kind === 'refund'
+                  ? '冲减支出 '
+                  : '记录支出 '}
               <strong>{formatMoney(Number(amount))}</strong>
             </p>
           ) : null}
@@ -943,7 +1028,7 @@ export function TransactionModal({
               点大分类右侧的小箭头，展开后可以把这笔记到更细的小分类。
             </p>
             <div className="category-tree-picker">
-              {categoryTree.map(({ parent, children }) => {
+              {categoryTree.map(({ parent, children }, index) => {
                 const expanded = expandedCategoryIds.has(parent.id)
                 return (
                   <div
@@ -960,6 +1045,9 @@ export function TransactionModal({
                         }`}
                         onClick={() => setCategoryId(parent.id)}
                         aria-pressed={categoryId === parent.id}
+                        data-autofocus={
+                          seededEntry && index === 0 ? true : undefined
+                        }
                       >
                         <CategoryIcon category={parent} size={19} />
                         <span>{parent.name}</span>

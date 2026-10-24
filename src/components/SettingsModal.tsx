@@ -12,6 +12,7 @@ import {
   ExternalLink,
   FileSpreadsheet,
   Github,
+  Inbox,
   Info,
   Moon,
   Palette as PaletteIcon,
@@ -33,12 +34,14 @@ import { AccountSettings } from './AccountSettings'
 import { CategorySettings } from './CategorySettings'
 import { BudgetSettings } from './BudgetSettings'
 import { ReminderSettingsSection } from './ReminderSettingsSection'
+import { CaptureDebugSection } from './CaptureDebugSection'
 import { SyncSettingsSection } from './SyncSettingsSection'
 import {
   GITHUB_RELEASES_URL,
   GITHUB_REPO_URL,
 } from '../lib/github'
 import { openExternalUrl } from '../lib/links'
+import { isAndroidApp } from '../lib/platform'
 import { CURRENCIES, getCurrency } from '../lib/currency'
 import { FONT_SIZES } from '../lib/fontSize'
 import { PALETTES } from '../lib/themes'
@@ -107,6 +110,7 @@ type SettingsPageId =
   | 'appearance'
   | 'currency'
   | 'reminders'
+  | 'capture'
   | 'categories'
   | 'accounts'
   | 'opening'
@@ -140,6 +144,12 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
     label: '记账提醒',
     detail: '定时提醒，别漏掉当天的账',
     icon: BellRing,
+  },
+  {
+    id: 'capture',
+    label: '自动记账',
+    detail: '从付款通知自动生成待标注支出',
+    icon: Inbox,
   },
   {
     id: 'categories',
@@ -238,11 +248,17 @@ export function SettingsModal({
   const [openingError, setOpeningError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Notification capture only exists in the Android shell, so the page is
+  // hidden everywhere else instead of showing a dead end.
+  const settingsPages = isAndroidApp()
+    ? SETTINGS_PAGES
+    : SETTINGS_PAGES.filter((item) => item.id !== 'capture')
+
   // On phones the nav is a list that opens one page at a time; on desktop the
   // nav stays beside the content and the first page is always visible.
   const activePage: SettingsPageId = page ?? 'appearance'
   const activeMeta =
-    SETTINGS_PAGES.find((item) => item.id === activePage) ?? SETTINGS_PAGES[0]
+    settingsPages.find((item) => item.id === activePage) ?? settingsPages[0]
 
   useEffect(() => {
     if (!open) return
@@ -355,7 +371,7 @@ export function SettingsModal({
 
       <div className={`settings-shell${page ? ' is-page-open' : ''}`}>
         <nav className="settings-nav" aria-label="设置分类">
-          {SETTINGS_PAGES.map((item) => {
+          {settingsPages.map((item) => {
             const Icon = item.icon
             const active = activePage === item.id
             return (
@@ -374,7 +390,7 @@ export function SettingsModal({
         </nav>
 
         <div className="settings-menu" role="list" aria-label="设置">
-          {SETTINGS_PAGES.map((item) => {
+          {settingsPages.map((item) => {
             const Icon = item.icon
             return (
               <button
@@ -578,6 +594,8 @@ export function SettingsModal({
                 onNotify={onNotify}
               />
             ) : null}
+
+            {activePage === 'capture' ? <CaptureDebugSection /> : null}
 
             {activePage === 'categories' ? (
               <section className="settings-section">

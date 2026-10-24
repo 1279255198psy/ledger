@@ -6,6 +6,11 @@ import {
   getRootCategoryId,
 } from './categories'
 import { toPostings } from './allocations'
+import {
+  expenseDeltaCents,
+  isRefund,
+  transactionKindLabel,
+} from './refunds'
 import { activeCurrencySymbol } from './currency'
 import type {
   CategoryTotal,
@@ -119,7 +124,8 @@ export function getTotals(transactions: LedgerTransaction[]): MonthTotals {
   let expenseCents = 0
   for (const item of transactions) {
     if (item.type === 'income') incomeCents += item.amountCents
-    else expenseCents += item.amountCents
+    // Refunds subtract here, so they never inflate income.
+    else expenseCents += expenseDeltaCents(item)
   }
   return {
     income: incomeCents / 100,
@@ -133,19 +139,21 @@ export function getCategoryTotals(
   type: TransactionType = 'expense',
 ): CategoryTotal[] {
   const filtered = transactions.filter((item) => item.type === type)
-  const totalCents = filtered.reduce(
-    (sum, item) => sum + item.amountCents,
-    0,
-  )
+  const deltaOf = (item: LedgerTransaction) =>
+    type === 'expense' ? expenseDeltaCents(item) : item.amountCents
+  const totalCents = filtered.reduce((sum, item) => sum + deltaOf(item), 0)
   // Subcategory spending rolls up into its top-level category so charts and
   // monthly totals stay at the level people budget at.
   const grouped = new Map<string, number>()
   for (const item of filtered) {
     const rootId = getRootCategoryId(item.categoryId)
-    grouped.set(rootId, (grouped.get(rootId) ?? 0) + item.amountCents)
+    grouped.set(rootId, (grouped.get(rootId) ?? 0) + deltaOf(item))
   }
 
   return [...grouped.entries()]
+    // A category refunded past what it spent nets negative; a chart cannot
+    // show that, and the money is off the books for the month anyway.
+    .filter(([, valueCents]) => type !== 'expense' || valueCents > 0)
     .map(([id, valueCents]) => ({
       category: getCategory(id, type),
       value: valueCents / 100,
@@ -166,7 +174,12 @@ export function buildMonthSeries(
     const value =
       getMonthTransactions(transactions, key)
         .filter((item) => item.type === type)
-        .reduce((sum, item) => sum + item.amountCents, 0) / 100
+        .reduce(
+          (sum, item) =>
+            sum +
+            (type === 'expense' ? expenseDeltaCents(item) : item.amountCents),
+          0,
+        ) / 100
     months.push({ key, label: monthShortLabel(key), value })
   }
   return months
@@ -282,7 +295,10 @@ export function getDaysLeft(monthKey: string): number {
 export function largestExpense(
   transactions: LedgerTransaction[],
 ): LedgerTransaction | null {
-  const expenses = transactions.filter((item) => item.type === 'expense')
+  // A refund is never the month's biggest purchase, even if its amount is.
+  const expenses = transactions.filter(
+    (item) => item.type === 'expense' && !isRefund(item),
+  )
   if (expenses.length === 0) return null
   return expenses.reduce((max, item) =>
     item.amountCents > max.amountCents ? item : max,
@@ -295,7 +311,7 @@ export function topWeekdaySpending(
   const values = new Array<number>(7).fill(0)
   for (const item of transactions) {
     if (item.type !== 'expense') continue
-    values[dateFromKey(item.date).getDay()] += item.amountCents / 100
+    values[dateFromKey(item.date).getDay()] += expenseDeltaCents(item) / 100
   }
   const max = Math.max(...values)
   if (max <= 0) return null
@@ -332,7 +348,7 @@ export function transactionsToCsv(
   const header = ['日期', '类型', '分类', '账户', '金额', '备注']
   const rows = transactions.map((item) => [
     item.date,
-    item.type === 'expense' ? '支出' : '收入',
+    transactionKindLabel(item),
     categoryPathNameById(item.categoryId, item.type),
     getAccount(item.accountId).name,
     (item.amountCents / 100).toFixed(2),

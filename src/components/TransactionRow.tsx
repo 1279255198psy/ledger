@@ -8,6 +8,7 @@ import {
   getProjectIds,
   getScope,
 } from '../lib/allocations'
+import { isRefund, transactionKindLabel } from '../lib/refunds'
 import { formatMoney, formatShortDate } from '../lib/utils'
 import type { LedgerTransaction, Project } from '../types'
 
@@ -37,6 +38,7 @@ export function TransactionRow({
     : category.name
   const account = getAccount(transaction.accountId)
   const isIncome = transaction.type === 'income'
+  const refund = isRefund(transaction)
   const amountCents =
     projectId !== undefined
       ? getProjectAmountCents(transaction, projectId)
@@ -84,7 +86,9 @@ export function TransactionRow({
             ·
           </span>
           <span>
-            {showDate ? formatShortDate(transaction.date) : category.type === 'expense' ? '支出' : '收入'}
+            {showDate
+              ? formatShortDate(transaction.date)
+              : transactionKindLabel(transaction)}
           </span>
           {!isIncome && transaction.spendingNature ? (
             <>
@@ -112,10 +116,12 @@ export function TransactionRow({
       </div>
 
       <span
-        className={`transaction-amount${isIncome ? ' is-income' : ''}`}
-        aria-label={`${isIncome ? '收入' : '支出'} ${amount}`}
+        className={`transaction-amount${isIncome ? ' is-income' : ''}${
+          refund ? ' is-refund' : ''
+        }`}
+        aria-label={`${transactionKindLabel(transaction)} ${amount}`}
       >
-        {isIncome ? '+' : '−'}
+        {isIncome || refund ? '+' : '−'}
         {amount}
       </span>
 

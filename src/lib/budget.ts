@@ -573,9 +573,10 @@ function buildCategoryStatuses(
       spentCents,
       remainingCents: budgetCents - spentCents,
       // A zero cap with spending is already fully used, not zero progress.
+      // Refunds can push a category below zero; a progress bar cannot show that.
       ratio:
         budgetCents > 0
-          ? spentCents / budgetCents
+          ? Math.max(spentCents / budgetCents, 0)
           : spentCents > 0
             ? 1
             : 0,
@@ -619,7 +620,10 @@ export function getMonthBudgetMetrics(
     amountCents: budget.amountCents,
     spentCents,
     remainingCents,
-    ratio: budget.amountCents > 0 ? spentCents / budget.amountCents : 0,
+    ratio:
+      budget.amountCents > 0
+        ? Math.max(spentCents / budget.amountCents, 0)
+        : 0,
     source: resolved.source,
     sourceMonth: resolved.sourceMonth,
     daily: buildMonthDailyStatus(budget, monthKey, spentByDate),
@@ -679,7 +683,10 @@ export function getRangeBudgetMetrics(
     amountCents: range.amountCents,
     spentCents,
     remainingCents,
-    ratio: range.amountCents > 0 ? spentCents / range.amountCents : 0,
+    ratio:
+      range.amountCents > 0
+        ? Math.max(spentCents / range.amountCents, 0)
+        : 0,
     active,
     elapsedDays,
     daysLeft,

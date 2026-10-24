@@ -13,6 +13,8 @@ import { SettingsModal } from './components/SettingsModal'
 import { UpdateDialog } from './components/UpdateDialog'
 import { useUpdater } from './hooks/useUpdater'
 import { useReminderScheduler } from './hooks/useReminderScheduler'
+import { useCaptureInbox } from './hooks/useCaptureInbox'
+import type { PendingCapture } from './lib/capture/types'
 import { Overview } from './pages/Overview'
 import { Transactions } from './pages/Transactions'
 import { Projects } from './pages/Projects'
@@ -116,6 +118,7 @@ import type {
   RepaymentDraft,
   Theme,
   TransactionDraft,
+  TransactionDraftSeed,
   View,
 } from './types'
 
@@ -174,6 +177,55 @@ export default function App() {
   >(null)
   const [toast, setToast] = useState<ToastState | null>(null)
   const updater = useUpdater()
+
+  // Automatic bookkeeping: notifications become local pending items. They do
+  // not enter the synced snapshot until the user annotates and saves one.
+  const [annotatingCapture, setAnnotatingCapture] =
+    useState<PendingCapture | null>(null)
+  const captureInbox = useCaptureInbox(accounts, (count) => {
+    setToast({
+      id: Date.now(),
+      message: `收到 ${count} 笔待标注记录`,
+      kind: 'success',
+    })
+  })
+  const pendingCaptures = useMemo(
+    () => captureInbox.items.filter((item) => item.status === 'pending'),
+    [captureInbox.items],
+  )
+  const pendingCaptureTotalCents = useMemo(
+    () =>
+      pendingCaptures.reduce(
+        (sum, item) =>
+          item.direction === 'expense' ? sum + (item.amountCents ?? 0) : sum,
+        0,
+      ),
+    [pendingCaptures],
+  )
+  const captureSeed = useMemo<TransactionDraftSeed | null>(() => {
+    if (!annotatingCapture) return null
+    return {
+      type: annotatingCapture.direction === 'income' ? 'income' : 'expense',
+      amountCents: annotatingCapture.amountCents ?? undefined,
+      categoryId: '',
+      accountId: annotatingCapture.accountId || undefined,
+      date: annotatingCapture.date,
+      note: annotatingCapture.merchant,
+      // A refund is filed as an expense against the original category, which
+      // is what "冲减" needs; it must never land in the income column.
+      kind:
+        annotatingCapture.direction === 'refund' ? 'refund' : undefined,
+    }
+  }, [annotatingCapture])
+  const captureHint = annotatingCapture
+    ? `来自${
+        annotatingCapture.sources[0]?.appLabel ?? '付款通知'
+      }${
+        annotatingCapture.confidence === 'low'
+          ? '，部分信息识别不确定，请核对'
+          : ''
+      }。补上分类和支出性质后保存。`
+    : undefined
 
   const latestMonth = currentMonthKey()
   // Projects set to 计入日常 share one daily bucket with everyday spending;
@@ -591,25 +643,41 @@ export default function App() {
   const openAdd = () => {
     setEditing(null)
     setTransactionProjectId(null)
+    setAnnotatingCapture(null)
     setTransactionModalOpen(true)
   }
 
   const openAddForProject = (projectId: string) => {
     setEditing(null)
     setTransactionProjectId(projectId)
+    setAnnotatingCapture(null)
     setTransactionModalOpen(true)
   }
 
   const openEdit = (transaction: LedgerTransaction) => {
     setEditing(transaction)
     setTransactionProjectId(null)
+    setAnnotatingCapture(null)
     setTransactionModalOpen(true)
+  }
+
+  const openCaptureAnnotation = (item: PendingCapture) => {
+    setEditing(null)
+    setTransactionProjectId(null)
+    setAnnotatingCapture(item)
+    setTransactionModalOpen(true)
+  }
+
+  const handleIgnoreCapture = (id: string) => {
+    captureInbox.ignore(id)
+    showToast('这笔待标注已忽略')
   }
 
   const closeTransactionModal = () => {
     setTransactionModalOpen(false)
     setEditing(null)
     setTransactionProjectId(null)
+    setAnnotatingCapture(null)
   }
 
   const handleSaveTransaction = (draft: TransactionDraft) => {
@@ -625,6 +693,7 @@ export default function App() {
       note: draft.note,
       spendingNature:
         draft.type === 'expense' ? draft.spendingNature : undefined,
+      kind: draft.type === 'expense' ? draft.kind : undefined,
       allocations,
     }
 
@@ -647,10 +716,21 @@ export default function App() {
         createdAt: new Date().toISOString(),
       }
       setTransactions((current) => sortTransactions([created, ...current]))
+      if (annotatingCapture) {
+        // Link the saved entry back to the notification, then drop it from
+        // the pending queue.
+        captureInbox.accept(
+          annotatingCapture.id,
+          created.id,
+          draft.accountId,
+        )
+      }
       showToast(
-        draft.type === 'expense'
-          ? `已记下支出 ${formatMoney(draft.amountCents / 100)}`
-          : `已记下收入 ${formatMoney(draft.amountCents / 100)}`,
+        draft.type === 'income'
+          ? `已记下收入 ${formatMoney(draft.amountCents / 100)}`
+          : draft.kind === 'refund'
+            ? `已记下退款 ${formatMoney(draft.amountCents / 100)}，冲减该分类支出`
+            : `已记下支出 ${formatMoney(draft.amountCents / 100)}`,
       )
     }
     if (targetMonth !== monthKey && targetMonth <= latestMonth) {
@@ -1049,6 +1129,9 @@ export default function App() {
             budgetMetrics={budgetMetrics}
             rangeMetrics={monthRangeMetrics}
             openingBalance={openingBalance}
+            pendingCaptureCount={pendingCaptures.length}
+            pendingCaptureTotalCents={pendingCaptureTotalCents}
+            onOpenPendingCaptures={() => handleChangeView('transactions')}
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={handleDeleteTransaction}
@@ -1076,9 +1159,12 @@ export default function App() {
             categories={categories}
             accounts={accounts}
             monthKey={monthKey}
+            pendingCaptures={pendingCaptures}
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={handleDeleteTransaction}
+            onAnnotateCapture={openCaptureAnnotation}
+            onIgnoreCapture={handleIgnoreCapture}
             onLoadSample={handleLoadSample}
           />
         ) : null}
@@ -1171,6 +1257,8 @@ export default function App() {
         accounts={accounts}
         defaultDate={defaultDateForMonth(monthKey)}
         defaultProjectId={transactionProjectId ?? undefined}
+        initialDraft={captureSeed}
+        captureHint={captureHint}
         onClose={closeTransactionModal}
         onSave={handleSaveTransaction}
         onDelete={handleDeleteTransaction}

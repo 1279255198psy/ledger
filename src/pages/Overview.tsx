@@ -3,6 +3,7 @@ import {
   ArrowDownLeft,
   ArrowRight,
   ArrowUpRight,
+  BellRing,
   CalendarRange,
   CircleDollarSign,
   PencilLine,
@@ -20,6 +21,7 @@ import { ExpenseTrendChart } from '../components/charts/ExpenseTrendChart'
 import { TransactionRow } from '../components/TransactionRow'
 import { getCountedProjectIds, getMonthSpendCents } from '../lib/allocations'
 import { getBudgetWarnings } from '../lib/budget'
+import { expenseDeltaCents } from '../lib/refunds'
 import {
   buildMonthSeries,
   daysElapsedInMonth,
@@ -50,6 +52,9 @@ interface OverviewProps {
   budgetMetrics: MonthBudgetMetrics
   rangeMetrics: RangeBudgetMetrics[]
   openingBalance: number
+  pendingCaptureCount: number
+  pendingCaptureTotalCents: number
+  onOpenPendingCaptures: () => void
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
   onDelete: (id: string) => void
@@ -58,6 +63,33 @@ interface OverviewProps {
   onOpenRangeBudget: () => void
   onOpenOpeningBalance: () => void
   onLoadSample: () => void
+}
+
+function PendingCaptureBanner({
+  count,
+  totalCents,
+  onOpen,
+}: {
+  count: number
+  totalCents: number
+  onOpen: () => void
+}) {
+  if (count <= 0) return null
+  return (
+    <button type="button" className="pending-banner" onClick={onOpen}>
+      <span className="pending-banner-icon" aria-hidden="true">
+        <BellRing size={16} />
+      </span>
+      <span className="pending-banner-copy">
+        <strong>{count} 笔待标注</strong>
+        <small>
+          来自付款通知
+          {totalCents > 0 ? ` · 约 ${formatMoney(totalCents / 100)}` : ''}
+        </small>
+      </span>
+      <ArrowRight size={16} aria-hidden="true" />
+    </button>
+  )
 }
 
 function HeroBalance({ value }: { value: number }) {
@@ -83,6 +115,9 @@ export function Overview({
   budgetMetrics,
   rangeMetrics,
   openingBalance,
+  pendingCaptureCount,
+  pendingCaptureTotalCents,
+  onOpenPendingCaptures,
   onAdd,
   onEdit,
   onDelete,
@@ -95,6 +130,11 @@ export function Overview({
   if (transactions.length === 0) {
     return (
       <div className="page-stack overview-page">
+        <PendingCaptureBanner
+          count={pendingCaptureCount}
+          totalCents={pendingCaptureTotalCents}
+          onOpen={onOpenPendingCaptures}
+        />
         <BalanceSummary
           transactions={transactions}
           monthKey={monthKey}
@@ -131,7 +171,7 @@ export function Overview({
       (item) =>
         item.type === 'expense' && Number(item.date.slice(8, 10)) <= cutoff,
     )
-    .reduce((sum, item) => sum + item.amountCents / 100, 0)
+    .reduce((sum, item) => sum + expenseDeltaCents(item) / 100, 0)
   const expenseChange = percentChange(totals.expense, previousComparableExpense)
   const comparisonLabel = isCurrentMonth(monthKey) ? '较上月同期' : '较上月'
   const elapsed = Math.max(daysElapsedInMonth(monthKey), 1)
@@ -167,6 +207,12 @@ export function Overview({
 
   return (
     <div className="page-stack overview-page">
+      <PendingCaptureBanner
+        count={pendingCaptureCount}
+        totalCents={pendingCaptureTotalCents}
+        onOpen={onOpenPendingCaptures}
+      />
+
       <div className="overview-hero-grid">
         <section className="hero-card" aria-labelledby="balance-heading">
           <div className="hero-orb hero-orb--one" aria-hidden="true" />
