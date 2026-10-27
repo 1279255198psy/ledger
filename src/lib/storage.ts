@@ -547,16 +547,26 @@ export function readLedgerDataSnapshot(): LedgerDataSnapshot {
   }
 }
 
+interface ValidateSnapshotOptions {
+  /** Sets a fresh updatedAt. Restore/apply writes should use this. */
+  touchUpdatedAt?: boolean
+  /** Prefix for validation errors, e.g. 同步数据 / 备份. */
+  sourceLabel?: string
+}
+
 /**
- * Writes a merged snapshot and rebuilds the storage mirror. Validation happens
- * before the first write, so a malformed remote snapshot cannot half-apply.
+ * Validates and normalizes a financial snapshot without touching storage.
+ * Sync applies it, the backup preview checks it, and restore reuses it so a
+ * malformed file is rejected before any current data is replaced.
  */
-export function applyLedgerDataSnapshot(
+export function validateLedgerDataSnapshot(
   snapshot: LedgerDataSnapshot,
+  options: ValidateSnapshotOptions = {},
 ): LedgerDataSnapshot {
+  const source = options.sourceLabel ?? '同步数据'
   const categories = normalizeCategories(snapshot.categories)
   if (!categories) {
-    throw new Error('同步数据中的分类无法识别')
+    throw new Error(`${source}中的分类无法识别`)
   }
 
   // Older snapshots did not carry accounts; keep the local cards in that case.
@@ -564,14 +574,14 @@ export function applyLedgerDataSnapshot(
     ? normalizeAccounts(snapshot.accounts)
     : readStoredAccounts()
   if (!accounts) {
-    throw new Error('同步数据中的账户无法识别')
+    throw new Error(`${source}中的账户无法识别`)
   }
 
   const transactions = snapshot.transactions.map((item) =>
     normalizeTransaction(item, categories),
   )
   if (transactions.some((item) => item === null)) {
-    throw new Error('同步数据中的流水无法识别')
+    throw new Error(`${source}中的流水无法识别`)
   }
   const validTransactions = transactions as LedgerTransaction[]
 
@@ -579,22 +589,22 @@ export function applyLedgerDataSnapshot(
     isValidProject(item, categories),
   )
   if (projects.length !== snapshot.projects.length) {
-    throw new Error('同步数据中的项目无法识别')
+    throw new Error(`${source}中的项目无法识别`)
   }
 
   const liabilities = snapshot.liabilities.filter(isValidLiability)
   if (liabilities.length !== snapshot.liabilities.length) {
-    throw new Error('同步数据中的负债无法识别')
+    throw new Error(`${source}中的负债无法识别`)
   }
 
   const budgets = normalizeBudgetBook(snapshot.budgets)
   if (!budgets) {
-    throw new Error('同步数据中的预算无法识别')
+    throw new Error(`${source}中的预算无法识别`)
   }
 
   const budgetRanges = normalizeRangeBudgets(snapshot.budgetRanges)
   if (!budgetRanges) {
-    throw new Error('同步数据中的区间预算无法识别')
+    throw new Error(`${source}中的区间预算无法识别`)
   }
 
   const openingBalanceCents = snapshot.openingBalanceCents
@@ -603,30 +613,16 @@ export function applyLedgerDataSnapshot(
     !Number.isFinite(openingBalanceCents) ||
     openingBalanceCents < 0
   ) {
-    throw new Error('同步数据中的起始资金无法识别')
+    throw new Error(`${source}中的起始资金无法识别`)
   }
-
-  const updatedAt = new Date().toISOString()
-  safeSet(KEYS.categories, JSON.stringify(categories))
-  safeSet(KEYS.accounts, JSON.stringify(accounts))
-  bulkWrite('transactions', JSON.stringify(sortTransactions(validTransactions)))
-  safeSet(KEYS.seeded, 'true')
-  safeSet(KEYS.projects, JSON.stringify(projects))
-  safeSet(KEYS.liabilities, JSON.stringify(sortLiabilities(liabilities)))
-  safeSet(KEYS.budgets, JSON.stringify(budgets))
-  const currentBudget = resolveMonthBudget(budgets, currentMonthKey()).budget
-  safeSet(KEYS.budget, String(currentBudget.amountCents))
-  safeSet(KEYS.budgetRanges, JSON.stringify(budgetRanges))
-  safeSet(KEYS.openingBalance, String(Math.round(openingBalanceCents)))
-  safeSet(KEYS.updatedAt, updatedAt)
-  setActiveCategories(categories)
-  setActiveAccounts(accounts)
-  scheduleDesktopPersist()
 
   return {
     app: '账页',
     syncVersion: 1,
-    updatedAt,
+    updatedAt:
+      options.touchUpdatedAt || !snapshot.updatedAt
+        ? new Date().toISOString()
+        : snapshot.updatedAt,
     categories,
     accounts,
     transactions: sortTransactions(validTransactions),
@@ -636,6 +632,47 @@ export function applyLedgerDataSnapshot(
     budgetRanges,
     openingBalanceCents: Math.round(openingBalanceCents),
   }
+}
+
+/**
+ * Writes a merged snapshot and rebuilds the storage mirror. Validation happens
+ * before the first write, so a malformed remote snapshot cannot half-apply.
+ */
+export function applyLedgerDataSnapshot(
+  snapshot: LedgerDataSnapshot,
+): LedgerDataSnapshot {
+  const normalized = validateLedgerDataSnapshot(snapshot, {
+    touchUpdatedAt: true,
+  })
+  const accounts = normalized.accounts ?? loadAccounts()
+
+  safeSet(KEYS.categories, JSON.stringify(normalized.categories))
+  safeSet(KEYS.accounts, JSON.stringify(accounts))
+  bulkWrite(
+    'transactions',
+    JSON.stringify(sortTransactions(normalized.transactions)),
+  )
+  safeSet(KEYS.seeded, 'true')
+  safeSet(KEYS.projects, JSON.stringify(normalized.projects))
+  safeSet(KEYS.liabilities, JSON.stringify(normalized.liabilities))
+  safeSet(KEYS.budgets, JSON.stringify(normalized.budgets))
+  const currentBudget = resolveMonthBudget(
+    normalized.budgets,
+    currentMonthKey(),
+  ).budget
+  safeSet(KEYS.budget, String(currentBudget.amountCents))
+  safeSet(KEYS.budgetRanges, JSON.stringify(normalized.budgetRanges))
+  safeSet(
+    KEYS.openingBalance,
+    String(Math.round(normalized.openingBalanceCents)),
+  )
+  safeSet(KEYS.updatedAt, normalized.updatedAt)
+  setActiveCategories(normalized.categories)
+  setActiveAccounts(accounts)
+  scheduleDesktopPersist()
+  notifyLedgerChanged()
+
+  return normalized
 }
 
 export function flushDesktopPersist(): Promise<void> {

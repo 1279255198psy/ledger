@@ -98,7 +98,7 @@ export function TopBar({
         </button>
         <button type="button" className="button primary add-button" onClick={onAdd}>
           <Plus size={17} />
-          记一笔
+          <span className="add-button-label">记一笔</span>
         </button>
       </div>
     </header>

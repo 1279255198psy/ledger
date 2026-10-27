@@ -5898,6 +5898,186 @@ a {
   margin-top: 3px;
 }
 
+.backup-section {
+  margin-top: 16px;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+}
+
+.backup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.backup-head h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+}
+
+.backup-head p {
+  max-width: 48ch;
+  margin: 5px 0 0;
+  color: var(--ink-faint);
+  font-size: calc(9.5px * var(--font-scale));
+  line-height: 1.55;
+}
+
+.backup-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.backup-section .button.small {
+  height: 30px;
+  gap: 5px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: calc(10.5px * var(--font-scale));
+}
+
+.backup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.backup-item {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.backup-item.is-checked {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.backup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px 9px 12px;
+}
+
+.backup-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.backup-info strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-secondary);
+  font-size: calc(10.5px * var(--font-scale));
+  font-weight: 600;
+}
+
+.backup-info small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-faint);
+  font-size: calc(9px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+
+.backup-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--positive);
+  font-size: calc(9px * var(--font-scale));
+  font-weight: 550;
+}
+
+.backup-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+}
+
+.backup-section .icon-button.danger {
+  width: 30px;
+  height: 30px;
+  color: var(--ink-faint);
+  background: transparent;
+  border-color: transparent;
+  border-radius: 8px;
+}
+
+.backup-section .icon-button.danger:hover:not(:disabled) {
+  color: var(--negative);
+  background: color-mix(in srgb, var(--negative) 9%, transparent);
+}
+
+.backup-preview {
+  padding: 8px 12px 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.backup-preview p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: calc(9px * var(--font-scale));
+  line-height: 1.55;
+}
+
+.backup-preview p + p {
+  margin-top: 2px;
+}
+
+.backup-empty {
+  margin: 10px 0 0;
+  padding: 14px 12px;
+  color: var(--ink-faint);
+  background: var(--surface-soft);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font-size: calc(9.5px * var(--font-scale));
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .backup-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .backup-head-actions {
+    width: 100%;
+  }
+
+  .backup-head-actions .button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .backup-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .backup-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .privacy-note {
   display: flex;
   align-items: center;
@@ -6915,33 +7095,6 @@ a {
     font-weight: 600;
   }
 
-  .mobile-fab {
-    position: fixed;
-    right: 20px;
-    bottom: calc(81px + env(safe-area-inset-bottom));
-    z-index: 41;
-    display: grid;
-    width: 50px;
-    height: 50px;
-    place-items: center;
-    color: var(--on-accent);
-    background: var(--accent);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 50%;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
-    font-size: calc(22px * var(--font-scale));
-    transition: transform 150ms ease, background 150ms ease;
-  }
-
-  .mobile-fab:hover {
-    background: var(--accent-hover);
-    transform: translateY(-2px);
-  }
-
-  .topbar .add-button {
-    display: none;
-  }
-
   .toast {
     right: 16px;
     bottom: calc(85px + env(safe-area-inset-bottom));
@@ -7014,6 +7167,18 @@ a {
   }
 
   .this-month-link {
+    display: none;
+  }
+
+  .topbar .add-button {
+    width: 42px;
+    height: 40px;
+    flex: 0 0 42px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .topbar .add-button .add-button-label {
     display: none;
   }
 

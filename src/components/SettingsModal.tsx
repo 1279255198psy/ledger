@@ -39,6 +39,7 @@ import { GuideSection } from './GuideSection'
 import { CaptureDebugSection } from './CaptureDebugSection'
 import { SyncSettingsSection } from './SyncSettingsSection'
 import { StorageUsageSection } from './StorageUsageSection'
+import { BackupSection } from './BackupSection'
 import {
   GITHUB_RELEASES_URL,
   GITHUB_REPO_URL,
@@ -847,6 +848,7 @@ export function SettingsModal({
                     </span>
                   </button>
                 </div>
+                <BackupSection onNotify={onNotify} />
                 <StorageUsageSection />
                 <p className="privacy-note">
                   <ShieldCheck size={15} />

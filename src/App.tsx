@@ -15,6 +15,7 @@ import { useUpdater } from './hooks/useUpdater'
 import { useReminderScheduler } from './hooks/useReminderScheduler'
 import { useCaptureInbox } from './hooks/useCaptureInbox'
 import { onStorageError } from './lib/storageEvents'
+import { createBackup, maybeCreateAutoBackup } from './lib/backup'
 import type { PendingCapture } from './lib/capture/types'
 import { Overview } from './pages/Overview'
 import { Transactions } from './pages/Transactions'
@@ -335,6 +336,23 @@ export default function App() {
 
   useEffect(() => {
     void initSync()
+  }, [])
+
+  // One automatic snapshot per day, checked at launch and whenever the app
+  // comes back to the foreground. A failed backup never blocks bookkeeping.
+  useEffect(() => {
+    const check = () => {
+      void maybeCreateAutoBackup().catch((error) => {
+        console.error('自动备份失败', error)
+      })
+    }
+    check()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') check()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () =>
+      document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [])
 
   // Keep background syncs from closing an entry form the user is filling in.
@@ -1017,6 +1035,18 @@ export default function App() {
     }
   }
 
+  /** Best-effort snapshot taken just before a destructive operation. */
+  const backupBefore = async (
+    reason: 'before-import' | 'before-reset' | 'before-clear',
+  ) => {
+    try {
+      await createBackup(reason)
+    } catch (error) {
+      console.error('自动备份失败', error)
+      showToast('自动备份失败，继续操作前建议先导出备份', 'error')
+    }
+  }
+
   const handleImportFile = async (file: File) => {
     try {
       if (getSyncState().enabled) {
@@ -1028,6 +1058,7 @@ export default function App() {
       }
       const text = await file.text()
       const imported = parseBackup(text)
+      await backupBefore('before-import')
       if (imported.categories) commitCategories(imported.categories)
       if (imported.accounts) commitAccounts(imported.accounts)
       setTransactions(sortTransactions(imported.transactions))
@@ -1070,7 +1101,8 @@ export default function App() {
     setView('overview')
   }
 
-  const handleLoadSample = () => {
+  const handleLoadSample = async () => {
+    await backupBefore('before-reset')
     applySampleLedger()
     showToast('示例账本已载入')
   }
@@ -1084,6 +1116,7 @@ export default function App() {
       '恢复示例账本',
     )
     if (!confirmed) return
+    await backupBefore('before-reset')
     applySampleLedger()
     setSettingsOpen(false)
     showToast('示例账本已恢复')
@@ -1098,6 +1131,7 @@ export default function App() {
       '清除现有账本',
     )
     if (!confirmed) return
+    await backupBefore('before-clear')
     setTransactions([])
     setProjects([])
     setLiabilities([])
@@ -1271,15 +1305,6 @@ export default function App() {
       </main>
 
       <MobileNav view={view} onChangeView={handleChangeView} />
-
-      <button
-        type="button"
-        className="mobile-fab"
-        onClick={openAdd}
-        aria-label="记一笔"
-      >
-        <span>＋</span>
-      </button>
 
       <TransactionModal
         open={transactionModalOpen}

@@ -35,7 +35,7 @@
 
 ```text
 release/
-  账页-Setup-3.5.0.exe        Windows 安装包
+  账页-Setup-3.5.1.exe        Windows 安装包
 ```
 
 只提供安装版，不再提供便携版。安装版才能使用应用内自动更新，也能避免安装版与便携版混用造成两份数据。
@@ -97,8 +97,8 @@ PowerShell 中对应使用 `$env:TAURI_SIGNING_PRIVATE_KEY = "..."` 和 `$env:TA
 
 ```text
 src-tauri/target/release/bundle/nsis/
-  账页_3.5.0_x64-setup.exe
-  账页_3.5.0_x64-setup.exe.sig
+  账页_3.5.1_x64-setup.exe
+  账页_3.5.1_x64-setup.exe.sig
 ```
 
 `.sig` 是更新签名文件，必须与安装包一起上传到 GitHub Release，否则应用内更新会被拒绝。可将安装包复制到根目录的 `release/` 中分发。

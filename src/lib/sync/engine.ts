@@ -216,6 +216,15 @@ function saveBase(snapshot: LedgerDataSnapshot | null): void {
   emit({ hasBase: snapshot !== null })
 }
 
+/**
+ * A restore replaces the whole ledger outside the sync flow. Treating the
+ * restored snapshot as the new merge base keeps the deliberate rollback from
+ * being read as a batch of deletions the next time sync runs.
+ */
+export function noteLocalRestore(snapshot: LedgerDataSnapshot): void {
+  saveBase(snapshot)
+}
+
 function newConfig(role: SyncRole): SyncConfig {
   return {
     role,

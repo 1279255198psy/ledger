@@ -1,6 +1,7 @@
-use chrono::{Datelike, Local, NaiveTime};
+use chrono::{Datelike, Local, NaiveTime, TimeZone};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -131,6 +132,214 @@ fn save_ledger(app: tauri::AppHandle, data: Value) -> Result<(), String> {
 fn write_export(path: String, contents: String) -> Result<(), String> {
     let target = PathBuf::from(path);
     fs::write(&target, contents.as_bytes()).map_err(|error| format!("写入导出文件失败：{error}"))
+}
+
+/// Rolling local snapshots kept beside the ledger. Names carry the timestamp
+/// and reason so listing the folder never has to parse a whole ledger.
+const MAX_BACKUPS: usize = 30;
+const DAILY_KEEP_DAYS: usize = 14;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackupMeta {
+    name: String,
+    created_at_ms: i64,
+    reason: String,
+    bytes: u64,
+}
+
+fn backup_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("无法定位应用数据目录：{error}"))?;
+    let dir = data_dir.join("backups");
+    fs::create_dir_all(&dir).map_err(|error| format!("无法创建备份目录：{error}"))?;
+    Ok(dir)
+}
+
+fn is_safe_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 80
+        && id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+}
+
+fn is_safe_backup_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 160
+        && name.ends_with(".json")
+        && !name.contains("..")
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "-_.".contains(character))
+}
+
+fn parse_backup_name(name: &str) -> Option<(i64, String)> {
+    let stem = name.strip_suffix(".json")?;
+    let mut parts = stem.split("__");
+    let created_at_ms = parts.next()?.parse::<i64>().ok()?;
+    let reason = parts.next()?.to_string();
+    // The id segment must exist, but listing does not need to inspect it.
+    parts.next()?;
+    Some((created_at_ms, reason))
+}
+
+fn scan_backups(dir: &Path) -> Vec<(BackupMeta, PathBuf)> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+
+    let mut items = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some((created_at_ms, reason)) = parse_backup_name(&name) else {
+            continue;
+        };
+        let bytes = entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+        items.push((
+            BackupMeta {
+                name,
+                created_at_ms,
+                reason,
+                bytes,
+            },
+            path,
+        ));
+    }
+
+    items.sort_by(|left, right| right.0.created_at_ms.cmp(&left.0.created_at_ms));
+    items
+}
+
+fn prune_backups(dir: &Path) {
+    let items = scan_backups(dir);
+    let mut keep = HashSet::new();
+
+    for (meta, _) in items.iter().take(MAX_BACKUPS) {
+        keep.insert(meta.name.clone());
+    }
+
+    let mut days = HashSet::new();
+    for (meta, _) in &items {
+        if days.len() >= DAILY_KEEP_DAYS {
+            break;
+        }
+        let day = Local
+            .timestamp_millis_opt(meta.created_at_ms)
+            .single()
+            .map(|value| value.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| meta.created_at_ms.to_string());
+        if days.insert(day) {
+            keep.insert(meta.name.clone());
+        }
+    }
+
+    for (meta, path) in items {
+        if !keep.contains(&meta.name) {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+#[tauri::command]
+fn save_ledger_backup(app: tauri::AppHandle, record: Value) -> Result<BackupMeta, String> {
+    let id = record
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "备份缺少 id".to_string())?;
+    if !is_safe_id(id) {
+        return Err("备份 id 不合法".to_string());
+    }
+
+    let created_at = record
+        .get("createdAt")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "备份缺少创建时间".to_string())?;
+    let created_at_ms = chrono::DateTime::parse_from_rfc3339(created_at)
+        .map(|value| value.timestamp_millis())
+        .unwrap_or_else(|_| Local::now().timestamp_millis());
+
+    let reason = record
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or("manual");
+    let reason: String = reason
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric() || *character == '-')
+        .take(32)
+        .collect();
+    let reason = if reason.is_empty() {
+        "manual".to_string()
+    } else {
+        reason
+    };
+
+    let dir = backup_dir(&app)?;
+    let name = format!("{created_at_ms}__{reason}__{id}.json");
+    let target = dir.join(&name);
+    let temp = dir.join(format!(".{name}.tmp"));
+    let contents =
+        serde_json::to_vec_pretty(&record).map_err(|error| format!("序列化备份失败：{error}"))?;
+
+    fs::write(&temp, &contents).map_err(|error| format!("写入备份失败：{error}"))?;
+    fs::rename(&temp, &target).map_err(|error| {
+        let _ = fs::remove_file(&temp);
+        format!("保存备份失败：{error}")
+    })?;
+
+    prune_backups(&dir);
+
+    Ok(BackupMeta {
+        name,
+        created_at_ms,
+        reason,
+        bytes: contents.len() as u64,
+    })
+}
+
+#[tauri::command]
+fn list_ledger_backups(app: tauri::AppHandle) -> Result<Vec<BackupMeta>, String> {
+    let dir = backup_dir(&app)?;
+    Ok(scan_backups(&dir)
+        .into_iter()
+        .map(|(meta, _)| meta)
+        .collect())
+}
+
+#[tauri::command]
+fn read_ledger_backup(app: tauri::AppHandle, name: String) -> Result<Option<Value>, String> {
+    if !is_safe_backup_name(&name) {
+        return Err("备份名称不合法".to_string());
+    }
+    let path = backup_dir(&app)?.join(name);
+    let raw = match fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("读取备份失败：{error}")),
+    };
+
+    let value = serde_json::from_str::<Value>(&raw)
+        .map_err(|error| format!("备份文件已损坏：{error}"))?;
+    Ok(Some(value))
+}
+
+#[tauri::command]
+fn delete_ledger_backup(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    if !is_safe_backup_name(&name) {
+        return Err("备份名称不合法".to_string());
+    }
+    let path = backup_dir(&app)?.join(name);
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("删除备份失败：{error}")),
+    }
 }
 
 /// Windows keeps shortcut and taskbar icons in a cache keyed by file path.
@@ -368,6 +577,10 @@ pub fn run() {
             load_ledger,
             save_ledger,
             write_export,
+            save_ledger_backup,
+            list_ledger_backups,
+            read_ledger_backup,
+            delete_ledger_backup,
             sync_reminder_settings,
             send_test_notification,
             reminder_permission_state,
