@@ -35,7 +35,7 @@
 
 ```text
 release/
-  账页-Setup-3.4.4.exe        Windows 安装包
+  账页-Setup-3.5.0.exe        Windows 安装包
 ```
 
 只提供安装版，不再提供便携版。安装版才能使用应用内自动更新，也能避免安装版与便携版混用造成两份数据。
@@ -97,8 +97,8 @@ PowerShell 中对应使用 `$env:TAURI_SIGNING_PRIVATE_KEY = "..."` 和 `$env:TA
 
 ```text
 src-tauri/target/release/bundle/nsis/
-  账页_3.4.4_x64-setup.exe
-  账页_3.4.4_x64-setup.exe.sig
+  账页_3.5.0_x64-setup.exe
+  账页_3.5.0_x64-setup.exe.sig
 ```
 
 `.sig` 是更新签名文件，必须与安装包一起上传到 GitHub Release，否则应用内更新会被拒绝。可将安装包复制到根目录的 `release/` 中分发。
@@ -156,6 +156,7 @@ npm run release -- 1.2.3   # 也可以在命令行直接指定
 - `ledger.json.bak`：每次保存前保留的上一版文件，用于文件损坏时恢复。
 - `sync-blob.bin`：开启双端同步后保存的加密账本副本，仅用于与手机交换数据，内容无法直接阅读；删除它只会让下一次手机连接重新建立同步基准。
 - WebView 本地缓存同时保留一份镜像；若程序在写入完成前退出，下次启动会选择较新的数据。
+- 浏览器版与手机版的流水、同步基线和通知队列存放在 IndexedDB，不再受 localStorage 约 5 MB 的限制；设置与偏好仍留在 localStorage。升级时会把旧的 localStorage 数据自动迁移并清理，设置在「数据管理」里可以看到当前占用和增长估算。
 
 如果此前使用过浏览器版，会有一份旧数据留在浏览器中。可在浏览器版设置里导出 JSON，再在桌面版中导入。
 

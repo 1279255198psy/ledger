@@ -53,10 +53,13 @@ import {
   loadDesktopLedger,
   saveDesktopLedger,
 } from './desktop'
+import { bulkRead, bulkWrite } from './bulkStore'
+import { reportStorageError } from './storageEvents'
 import type { LedgerDataSnapshot } from './sync/types'
 
 const KEYS = {
-  transactions: 'zhangye.transactions.v2',
+  // Transactions moved to the bulk store (IndexedDB); this key only remains
+  // here for the v1 -> v2 migration.
   transactionsV1: 'zhangye.transactions.v1',
   categories: 'zhangye.categories.v1',
   categoryPresets: 'zhangye.categoryPresets.v1',
@@ -90,8 +93,18 @@ function safeGet(key: string): string | null {
 function safeSet(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value)
+  } catch (error) {
+    // The app still works in-memory when storage is unavailable, but the user
+    // has to know that the latest change did not reach the disk.
+    reportStorageError(error)
+  }
+}
+
+function safeRemove(key: string): void {
+  try {
+    window.localStorage.removeItem(key)
   } catch {
-    // The app still works in-memory when storage is unavailable.
+    // A stale key is harmless compared with the cost of failing the write.
   }
 }
 
@@ -191,7 +204,7 @@ function readStoredAccounts(): Account[] {
 function readStoredTransactions(
   categories: Category[] = getActiveCategories(),
 ): TransactionReadResult {
-  const rawV2 = safeGet(KEYS.transactions)
+  const rawV2 = bulkRead('transactions')
   if (rawV2 !== null) {
     try {
       const parsed: unknown = JSON.parse(rawV2)
@@ -203,6 +216,8 @@ function readStoredTransactions(
           (item): item is LedgerTransaction => item !== null,
         )
         if (valid.length === normalized.length) {
+          // The current mirror is readable, so the shape-migrated copy can go.
+          safeRemove(KEYS.transactionsV1)
           return { transactions: valid, migrated: false }
         }
       }
@@ -215,6 +230,7 @@ function readStoredTransactions(
 
   const rawV1 = safeGet(KEYS.transactionsV1)
   if (rawV1 !== null) {
+    // This path only runs when no current mirror exists.
     try {
       const parsed: unknown = JSON.parse(rawV1)
       if (Array.isArray(parsed)) {
@@ -294,6 +310,7 @@ function readLegacyBudgetCents(): number | null {
     if (Number.isFinite(yuan) && yuan > 0) {
       const cents = Math.round(yuan * 100)
       safeSet(KEYS.budget, String(cents))
+      safeRemove(KEYS.budgetV1)
       return cents
     }
   }
@@ -390,10 +407,7 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
       (item): item is LedgerTransaction => item !== null,
     )
     if (valid.length === normalized.length) {
-      safeSet(
-        KEYS.transactions,
-        JSON.stringify(sortTransactions(valid)),
-      )
+      bulkWrite('transactions', JSON.stringify(sortTransactions(valid)))
     }
   }
 
@@ -595,7 +609,7 @@ export function applyLedgerDataSnapshot(
   const updatedAt = new Date().toISOString()
   safeSet(KEYS.categories, JSON.stringify(categories))
   safeSet(KEYS.accounts, JSON.stringify(accounts))
-  safeSet(KEYS.transactions, JSON.stringify(sortTransactions(validTransactions)))
+  bulkWrite('transactions', JSON.stringify(sortTransactions(validTransactions)))
   safeSet(KEYS.seeded, 'true')
   safeSet(KEYS.projects, JSON.stringify(projects))
   safeSet(KEYS.liabilities, JSON.stringify(sortLiabilities(liabilities)))
@@ -672,7 +686,7 @@ export async function hydrateDesktopStorage(): Promise<void> {
     const stored = await loadDesktopLedger()
     if (!stored) {
       if (
-        safeGet(KEYS.transactions) !== null ||
+        bulkRead('transactions') !== null ||
         safeGet(KEYS.transactionsV1) !== null ||
         safeGet(KEYS.seeded) !== null
       ) {
@@ -727,14 +741,15 @@ export function saveCategories(categories: Category[]): void {
 export function loadTransactions(): LedgerTransaction[] {
   const { transactions, migrated } = readStoredTransactions()
   if (migrated) {
-    safeSet(KEYS.transactions, JSON.stringify(transactions))
+    bulkWrite('transactions', JSON.stringify(transactions))
+    safeRemove(KEYS.transactionsV1)
   }
   safeSet(KEYS.seeded, 'true')
   return sortTransactions(transactions)
 }
 
 export function saveTransactions(transactions: LedgerTransaction[]): void {
-  safeSet(KEYS.transactions, JSON.stringify(transactions))
+  bulkWrite('transactions', JSON.stringify(transactions))
   safeSet(KEYS.seeded, 'true')
   scheduleDesktopPersist()
   notifyLedgerChanged()

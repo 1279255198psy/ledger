@@ -1,6 +1,7 @@
 import type { Account } from '../../types'
+import { bulkRead, bulkWrite } from '../bulkStore'
 import { localDateKey } from '../utils'
-import { captureEventText, parseCaptureEvent } from './parse'
+import { parseCaptureEvent } from './parse'
 import type {
   CaptureConfidence,
   CaptureEventRecord,
@@ -9,11 +10,14 @@ import type {
   PendingCapture,
 } from './types'
 
-const STORAGE_KEY = 'zhangye.captureInbox.v1'
 /** Card tail → account id, learned when the user annotates a bank notice. */
 const TAIL_KEY = 'zhangye.captureAccountTails.v1'
-const KEEP_DAYS = 30
+/** Resolved items keep only a short trail; they no longer affect bookkeeping. */
+const KEEP_DAYS = 7
 const MAX_PENDING = 200
+/** The inbox is device-only, so it gets a byte budget as well as a count cap. */
+const MAX_INBOX_BYTES = 256 * 1024
+const MAX_EVIDENCE_CHARS = 500
 /** WeChat and a bank often both announce the same payment seconds apart. */
 const MERGE_WINDOW_MS = 2 * 60 * 1000
 
@@ -28,17 +32,14 @@ export function emptyInboxState(): CaptureInboxState {
 
 export function loadInboxState(): CaptureInboxState {
   if (typeof window === 'undefined') return emptyInboxState()
-  let raw: string | null = null
-  try {
-    raw = window.localStorage.getItem(STORAGE_KEY)
-  } catch {
-    return emptyInboxState()
-  }
+  const raw = bulkRead('captureInbox')
   if (!raw) return emptyInboxState()
   try {
     const parsed = JSON.parse(raw) as Partial<CaptureInboxState> | null
     if (!parsed || !Array.isArray(parsed.items)) return emptyInboxState()
-    const items = parsed.items.filter(isPendingCapture)
+    const items = parsed.items
+      .filter(isPendingCapture)
+      .map(normalizeStoredItem)
     const seenEventIds = Array.isArray(parsed.seenEventIds)
       ? parsed.seenEventIds.filter((id): id is string => typeof id === 'string')
       : []
@@ -58,12 +59,9 @@ export function loadInboxState(): CaptureInboxState {
 
 export function saveInboxState(state: CaptureInboxState): void {
   if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // A full disk must not stop the ledger from working; the native queue
-    // still holds the raw notifications until the next successful write.
-  }
+  // IndexedDB carries the inbox now; the bulk store falls back to
+  // localStorage by itself when needed.
+  bulkWrite('captureInbox', JSON.stringify(state))
 }
 
 function isPendingCapture(value: unknown): value is PendingCapture {
@@ -78,6 +76,48 @@ function isPendingCapture(value: unknown): value is PendingCapture {
       item.status === 'ignored') &&
     Array.isArray(item.sources)
   )
+}
+
+function truncateText(value: string): string {
+  if (!value) return ''
+  return value.length > MAX_EVIDENCE_CHARS
+    ? value.slice(0, MAX_EVIDENCE_CHARS)
+    : value
+}
+
+/**
+ * Older builds stored the whole notice twice (`rawText` plus each source).
+ * Drop the duplicate and clamp the evidence when an inbox is read back.
+ */
+function normalizeStoredItem(item: PendingCapture): PendingCapture {
+  const clean = { ...item } as PendingCapture & { rawText?: string }
+  if ('rawText' in clean) delete clean.rawText
+  return stripEvidence({
+    ...clean,
+    sources: clean.sources.map((source) => ({
+      ...source,
+      title: truncateText(source.title),
+      text: truncateText(source.text),
+    })),
+  })
+}
+
+/** Resolved items no longer need the full notice text; the title remains. */
+function stripEvidence(item: PendingCapture): PendingCapture {
+  if (item.status === 'pending') return item
+  if (item.sources.every((source) => source.text === '')) return item
+  return {
+    ...item,
+    sources: item.sources.map((source) => ({ ...source, text: '' })),
+  }
+}
+
+function inboxBytes(items: PendingCapture[]): number {
+  const raw = JSON.stringify(items)
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(raw).length
+  }
+  return raw.length * 2
 }
 
 /** Turns one raw notification into a pending item, keeping whatever it has. */
@@ -101,8 +141,8 @@ export function buildPendingCapture(
   const source: CaptureSourceEvidence = {
     packageName: event.packageName,
     appLabel: event.appLabel || event.packageName,
-    title: event.title,
-    text: event.bigText || event.text,
+    title: truncateText(event.title),
+    text: truncateText(event.bigText || event.text),
     postedAt: occurredAt,
   }
 
@@ -119,7 +159,6 @@ export function buildPendingCapture(
     cardTail: parsed.cardTail,
     confidence: confidenceFor(parsed, account.id),
     issues,
-    rawText: captureEventText(event),
     sources: [source],
     createdAt: now,
     updatedAt: now,
@@ -214,7 +253,6 @@ export function mergePendingCapture(
         ? existing.confidence
         : next.confidence,
     issues: mergeIssues(existing, next),
-    rawText: `${existing.rawText}\n---\n${next.rawText}`,
     sources: [...existing.sources, ...next.sources],
     occurredAt: Math.min(existing.occurredAt, next.occurredAt),
     updatedAt: new Date().toISOString(),
@@ -311,24 +349,43 @@ export function sortItems(items: PendingCapture[]): PendingCapture[] {
 
 export function pruneInbox(items: PendingCapture[]): PendingCapture[] {
   const cutoff = Date.now() - KEEP_DAYS * 24 * 60 * 60 * 1000
-  const kept = items.filter((item) => {
-    if (item.status === 'pending') return true
-    const stamp = Date.parse(item.updatedAt)
-    return Number.isFinite(stamp) && stamp >= cutoff
-  })
+  const kept = items
+    .filter((item) => {
+      if (item.status === 'pending') return true
+      const stamp = Date.parse(item.updatedAt)
+      return Number.isFinite(stamp) && stamp >= cutoff
+    })
+    .map(stripEvidence)
 
   const pending = kept.filter((item) => item.status === 'pending')
-  if (pending.length <= MAX_PENDING) return sortItems(kept)
-  const keepIds = new Set(
-    pending
-      .slice()
-      .sort((left, right) => right.occurredAt - left.occurredAt)
-      .slice(0, MAX_PENDING)
-      .map((item) => item.id),
-  )
-  return sortItems(
-    kept.filter((item) => item.status !== 'pending' || keepIds.has(item.id)),
-  )
+  let result = kept
+  if (pending.length > MAX_PENDING) {
+    const keepIds = new Set(
+      pending
+        .slice()
+        .sort((left, right) => right.occurredAt - left.occurredAt)
+        .slice(0, MAX_PENDING)
+        .map((item) => item.id),
+    )
+    result = kept.filter(
+      (item) => item.status !== 'pending' || keepIds.has(item.id),
+    )
+  }
+
+  result = sortItems(result)
+  if (inboxBytes(result) <= MAX_INBOX_BYTES) return result
+
+  // Drop the oldest handled items first; pending ones are the user's work and
+  // stay even if an unusually long notice pushes the inbox over budget.
+  const trimmed = [...result]
+  for (
+    let index = trimmed.length - 1;
+    index >= 0 && inboxBytes(trimmed) > MAX_INBOX_BYTES;
+    index -= 1
+  ) {
+    if (trimmed[index].status !== 'pending') trimmed.splice(index, 1)
+  }
+  return trimmed
 }
 
 function updateItem(
@@ -354,13 +411,13 @@ export function markCaptureAccepted(
   const target = state.items.find((item) => item.id === id)
   const items = state.items.map((item) =>
     item.id === id
-      ? {
+      ? stripEvidence({
           ...item,
           status: 'accepted' as const,
           linkedTransactionId: transactionId,
           acceptedAt: now,
           updatedAt: now,
-        }
+        })
       : item,
   )
   saveInboxState({ ...state, items, updatedAt: now })
@@ -371,9 +428,11 @@ export function markCaptureAccepted(
 }
 
 export function markCaptureIgnored(id: string): PendingCapture[] {
-  return updateItem(id, (item) => ({
-    ...item,
-    status: 'ignored',
-    ignoredAt: new Date().toISOString(),
-  }))
+  return updateItem(id, (item) =>
+    stripEvidence({
+      ...item,
+      status: 'ignored',
+      ignoredAt: new Date().toISOString(),
+    }),
+  )
 }

@@ -8,5 +8,6 @@ src-tauri/gen/schemas/
 *.local
 *.key
 *.pem
+zhangye-backup-*.json
 .env
 .env.*

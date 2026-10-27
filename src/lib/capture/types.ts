@@ -107,7 +107,6 @@ export interface PendingCapture {
   confidence: CaptureConfidence
   /** Human-readable reasons the parse is incomplete. */
   issues: string[]
-  rawText: string
   sources: CaptureSourceEvidence[]
   linkedTransactionId?: string
   acceptedAt?: string

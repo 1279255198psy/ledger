@@ -5,6 +5,7 @@ import {
   onLedgerChanged,
   readLedgerDataSnapshot,
 } from '../storage'
+import { bulkRead, bulkRemove, bulkWrite } from '../bulkStore'
 import {
   decryptPayload,
   deriveSyncKey,
@@ -41,7 +42,6 @@ import type {
 } from './types'
 
 const CONFIG_KEY = 'zhangye.sync.config.v1'
-const BASE_KEY = 'zhangye.sync.base.v1'
 const META_KEY = 'zhangye.sync.meta.v1'
 const RELOAD_EVENT = 'zhangye:ledger-reloaded'
 
@@ -190,14 +190,6 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-function removeKey(key: string): void {
-  try {
-    window.localStorage.removeItem(key)
-  } catch {
-    // Ignore unavailable storage.
-  }
-}
-
 function saveConfig(): void {
   if (config) writeJson(CONFIG_KEY, config)
 }
@@ -206,10 +198,21 @@ function persistMeta(): void {
   writeJson(META_KEY, meta)
 }
 
+/** The merge base is a full snapshot, so it lives with the other bulk data. */
+function readBase(): LedgerDataSnapshot | null {
+  const raw = bulkRead('syncBase')
+  if (raw === null) return null
+  try {
+    return JSON.parse(raw) as LedgerDataSnapshot
+  } catch {
+    return null
+  }
+}
+
 function saveBase(snapshot: LedgerDataSnapshot | null): void {
   base = snapshot
-  if (snapshot) writeJson(BASE_KEY, snapshot)
-  else removeKey(BASE_KEY)
+  if (snapshot) bulkWrite('syncBase', JSON.stringify(snapshot))
+  else void bulkRemove('syncBase')
   emit({ hasBase: snapshot !== null })
 }
 
@@ -294,7 +297,7 @@ export async function initSync(): Promise<void> {
     }
   }
   meta = { ...defaultMeta(), ...(readJson<SyncMeta>(META_KEY) ?? {}) }
-  base = readJson<LedgerDataSnapshot>(BASE_KEY)
+  base = readBase()
 
   emit({
     ready: true,

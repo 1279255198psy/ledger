@@ -14,6 +14,7 @@ import { UpdateDialog } from './components/UpdateDialog'
 import { useUpdater } from './hooks/useUpdater'
 import { useReminderScheduler } from './hooks/useReminderScheduler'
 import { useCaptureInbox } from './hooks/useCaptureInbox'
+import { onStorageError } from './lib/storageEvents'
 import type { PendingCapture } from './lib/capture/types'
 import { Overview } from './pages/Overview'
 import { Transactions } from './pages/Transactions'
@@ -398,6 +399,16 @@ export default function App() {
     const timer = window.setTimeout(() => setToast(null), 3200)
     return () => window.clearTimeout(timer)
   }, [toast])
+
+  // A full storage area used to fail silently; surface it before the user
+  // loses an entry they believed was saved.
+  useEffect(
+    () =>
+      onStorageError((message) => {
+        setToast({ id: Date.now(), message, kind: 'error' })
+      }),
+    [],
+  )
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

@@ -38,6 +38,7 @@ import { ReminderSettingsSection } from './ReminderSettingsSection'
 import { GuideSection } from './GuideSection'
 import { CaptureDebugSection } from './CaptureDebugSection'
 import { SyncSettingsSection } from './SyncSettingsSection'
+import { StorageUsageSection } from './StorageUsageSection'
 import {
   GITHUB_RELEASES_URL,
   GITHUB_REPO_URL,
@@ -846,6 +847,7 @@ export function SettingsModal({
                     </span>
                   </button>
                 </div>
+                <StorageUsageSection />
                 <p className="privacy-note">
                   <ShieldCheck size={15} />
                   账页没有账号系统，也不会把数据传到任何服务器。
