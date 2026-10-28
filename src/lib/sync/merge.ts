@@ -12,6 +12,8 @@ import type {
   MonthBudget,
   Project,
   RangeBudget,
+  RecurringPending,
+  RecurringRule,
 } from '../../types'
 import type {
   LedgerDataSnapshot,
@@ -223,6 +225,81 @@ function mergeCollection<T extends { id: string }>(
   return { items, conflicts, stats }
 }
 
+/**
+ * Everything about a rule that the user controls. The generated-through cursor
+ * moves on its own as each device catches up, so it must not count as an edit.
+ */
+function recurringDefinition(rule: RecurringRule): string {
+  const {
+    generatedThrough: _generatedThrough,
+    updatedAt: _updatedAt,
+    ...rest
+  } = rule
+  return stableStringify(rest)
+}
+
+function laterDate(
+  left: string | undefined,
+  right: string | undefined,
+): string | undefined {
+  if (!left) return right
+  if (!right) return left
+  return left >= right ? left : right
+}
+
+/**
+ * Two devices catch up independently, so their cursors can differ even though
+ * the rule itself is identical. Merge the cursor quietly instead of reporting a
+ * conflict the user did not cause.
+ */
+function mergeRecurringRules(
+  baseItems: RecurringRule[] | null,
+  localItems: RecurringRule[],
+  remoteItems: RecurringRule[],
+  favor: MergeOptions['favor'],
+): CollectionResult<RecurringRule> {
+  const result = mergeCollection<RecurringRule>(
+    baseItems,
+    localItems,
+    remoteItems,
+    'recurringRule',
+    { stamp: stampOf, favor },
+  )
+  if (!baseItems) return result
+
+  const local = keyed(localItems)
+  const remote = keyed(remoteItems)
+  const quietIds = new Set<string>()
+
+  for (let index = 0; index < result.items.length; index += 1) {
+    const item = result.items[index]
+    const localItem = local.get(item.id)
+    const remoteItem = remote.get(item.id)
+    if (
+      !localItem ||
+      !remoteItem ||
+      recurringDefinition(localItem) !== recurringDefinition(remoteItem)
+    ) {
+      continue
+    }
+    quietIds.add(item.id)
+    const through = laterDate(
+      localItem.generatedThrough,
+      remoteItem.generatedThrough,
+    )
+    if (through && through !== item.generatedThrough) {
+      result.items[index] = { ...item, generatedThrough: through }
+    }
+  }
+
+  if (quietIds.size > 0) {
+    result.conflicts = result.conflicts.filter(
+      (conflict) => !quietIds.has(conflict.id),
+    )
+  }
+  return result
+}
+
 function stripRepayments(liability: Liability): Liability {
   return { ...liability, repayments: [] }
 }
@@ -364,7 +441,14 @@ function repairReferences(
     }
   }
 
-  // Categories directly referenced by transactions and project caps.
+  // Templates are validated against the category list when their rule is
+  // loaded, so a category deleted on one device must be rescued here too.
+  const templates = [
+    ...(snapshot.recurringRules ?? []).map((rule) => rule.template),
+    ...(snapshot.recurringPending ?? []).map((item) => item.template),
+  ]
+
+  // Categories directly referenced by transactions, rules and project caps.
   for (const transaction of snapshot.transactions) {
     if (categoryById.has(transaction.categoryId)) continue
     const rescued = findCategory(transaction.categoryId)
@@ -393,6 +477,19 @@ function repairReferences(
       transaction.categoryId = fallback.id
       transaction.updatedAt = new Date().toISOString()
       conflicts.push({ kind: 'reference', id: transaction.id, choice: 'local' })
+    }
+  }
+
+  for (const template of templates) {
+    if (categoryById.has(template.categoryId)) continue
+    const rescued = findCategory(template.categoryId)
+    if (rescued) {
+      addCategory(rescued)
+      conflicts.push({
+        kind: 'reference',
+        id: template.categoryId,
+        choice: 'remote',
+      })
     }
   }
 
@@ -446,8 +543,12 @@ function repairReferences(
     }
     return undefined
   }
-  for (const transaction of snapshot.transactions) {
-    for (const allocation of transaction.allocations) {
+  const allocationSets = [
+    ...snapshot.transactions.map((transaction) => transaction.allocations),
+    ...templates.map((template) => template.allocations),
+  ]
+  for (const allocations of allocationSets) {
+    for (const allocation of allocations) {
       if (allocation.targetType !== 'project' || !allocation.projectId) {
         continue
       }
@@ -526,6 +627,32 @@ export function mergeSnapshots(
     'range',
     { favor },
   )
+  // A peer on an older build sends no recurring fields. Adopting the local
+  // lists for that side keeps the rules instead of reading the silence as a
+  // deletion of every rule.
+  const localRules = local.recurringRules ?? []
+  const remoteRules = remote.recurringRules ?? localRules
+  const recurringRules = mergeRecurringRules(
+    base?.recurringRules ?? null,
+    localRules,
+    remoteRules,
+    favor,
+  )
+  const localPending = local.recurringPending ?? []
+  const remotePending = remote.recurringPending ?? localPending
+  const recurringPending = mergeCollection<RecurringPending>(
+    base?.recurringPending ?? null,
+    localPending,
+    remotePending,
+    'recurringPending',
+    { stamp: stampOf, favor },
+  )
+  const recurringRuleIds = new Set(
+    recurringRules.items.map((rule) => rule.id),
+  )
+  const validPending = recurringPending.items.filter((item) =>
+    recurringRuleIds.has(item.ruleId),
+  )
 
   for (const result of [
     transactions,
@@ -535,6 +662,8 @@ export function mergeSnapshots(
     accounts,
     budgets,
     ranges,
+    recurringRules,
+    recurringPending,
   ]) {
     addStats(stats, result.stats)
     conflicts.push(...result.conflicts)
@@ -571,6 +700,8 @@ export function mergeSnapshots(
     liabilities: sortLiabilities(liabilities.items),
     budgets: fromBudgetEntries(budgets.items),
     budgetRanges: ranges.items,
+    recurringRules: recurringRules.items,
+    recurringPending: validPending,
     openingBalanceCents,
   }
 

@@ -230,6 +230,12 @@ export interface LedgerTransaction {
   allocations: AllocationLine[]
   createdAt: string
   updatedAt?: string
+  /** 由周期规则生成时，记录来源规则。 */
+  recurringRuleId?: string
+  /** 这一笔对应的周期日期（YYYY-MM-DD）。 */
+  recurringPeriod?: string
+  /** 「只改这次」后与规则脱离，规则不再覆盖它。 */
+  recurringDetached?: boolean
 }
 
 export type TransactionKind = 'refund'
@@ -404,6 +410,70 @@ export interface ProjectMonthRow {
   cumulativeIncomeCents: number
 }
 
+/** 周期频率。日期类规则在到期的月份里会裁剪到当月最后一天。 */
+export type RecurringFrequency =
+  | { kind: 'monthly'; day: number }
+  | { kind: 'weekly'; weekday: number }
+  | { kind: 'yearly'; month: number; day: number }
+  | { kind: 'interval'; days: number }
+
+/** 到期后直接入账，还是先进入待确认队列。 */
+export type RecurringMode = 'auto' | 'confirm'
+
+export type RecurringEditScope = 'once' | 'future' | 'stop'
+
+export interface RecurringTemplate {
+  type: TransactionType
+  amountCents: number
+  categoryId: string
+  accountId: string
+  note: string
+  spendingNature?: SpendingNature
+  allocations: AllocationLine[]
+}
+
+/**
+ * 用户自己定的固定账：房租、工资、会员费。规则随账本同步，生成流水时使用
+ * 确定性 id，因此多次启动或双端同时补齐都不会重复。
+ */
+export interface RecurringRule {
+  id: string
+  schemaVersion: 1
+  enabled: boolean
+  template: RecurringTemplate
+  frequency: RecurringFrequency
+  /** YYYY-MM-DD，首次到期日不会早于它。 */
+  startDate: string
+  /** YYYY-MM-DD，含当天；不填表示一直重复。 */
+  endDate?: string
+  mode: RecurringMode
+  /** 已处理到哪一期；只由补齐逻辑推进，不算用户编辑。 */
+  generatedThrough?: string
+  stoppedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** 到期后等待用户确认的一期，确认前不计入余额和预算。 */
+export interface RecurringPending {
+  /** rp:<ruleId>:<date>，确定性 id 用来跨端去重。 */
+  id: string
+  ruleId: string
+  /** YYYY-MM-DD */
+  date: string
+  /** 生成时的模板快照，之后改规则不会改写已经生成的一期。 */
+  template: RecurringTemplate
+  createdAt: string
+}
+
+/** 新建或编辑规则时，表单里收集的周期设置。 */
+export interface RecurringDraft {
+  frequency: RecurringFrequency
+  startDate: string
+  endDate?: string
+  mode: RecurringMode
+}
+
 export interface TransactionDraft {
   type: TransactionType
   amountCents: number
@@ -414,6 +484,10 @@ export interface TransactionDraft {
   spendingNature?: SpendingNature
   kind?: TransactionKind
   allocations?: AllocationLine[]
+  /** 新建时一并创建周期规则。 */
+  recurring?: RecurringDraft
+  /** 编辑某一期周期流水时的修改范围。 */
+  recurringEditScope?: RecurringEditScope
 }
 
 /**

@@ -6,6 +6,8 @@ import type {
   Liability,
   Project,
   RangeBudget,
+  RecurringPending,
+  RecurringRule,
 } from '../../types'
 
 /**
@@ -24,6 +26,9 @@ export interface LedgerDataSnapshot {
   liabilities: Liability[]
   budgets: BudgetBook
   budgetRanges: RangeBudget[]
+  /** Absent in snapshots created before recurring entries existed. */
+  recurringRules?: RecurringRule[]
+  recurringPending?: RecurringPending[]
   openingBalanceCents: number
 }
 
@@ -83,6 +88,8 @@ export type SyncConflictKind =
   | 'account'
   | 'budget'
   | 'range'
+  | 'recurringRule'
+  | 'recurringPending'
   | 'openingBalance'
   | 'reference'
 

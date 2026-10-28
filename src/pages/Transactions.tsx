@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  Repeat2,
   RotateCcw,
   Search,
   SlidersHorizontal,
@@ -14,6 +15,7 @@ import {
 import { CategoryIcon } from '../components/CategoryIcon'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { PendingCaptureCard } from '../components/PendingCaptureCard'
+import { RecurringPendingCard } from '../components/RecurringPendingCard'
 import { SelectMenu } from '../components/SelectMenu'
 import { TransactionRow } from '../components/TransactionRow'
 import type { PendingCapture } from '../lib/capture/types'
@@ -37,6 +39,8 @@ import type {
   Category,
   LedgerTransaction,
   Project,
+  RecurringPending,
+  RecurringRule,
   TransactionType,
 } from '../types'
 
@@ -47,12 +51,60 @@ interface TransactionsProps {
   accounts: Account[]
   monthKey: string
   pendingCaptures: PendingCapture[]
+  recurringRules: RecurringRule[]
+  recurringPending: RecurringPending[]
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
   onDelete: (id: string) => void
   onAnnotateCapture: (item: PendingCapture) => void
   onIgnoreCapture: (id: string) => void
+  onOpenRules: () => void
+  onNewRule: () => void
+  onConfirmRecurring: (item: RecurringPending) => void
+  onSkipRecurring: (item: RecurringPending) => void
   onLoadSample: () => void
+}
+
+function RecurringBar({
+  activeCount,
+  pausedCount,
+  pendingCount,
+  onOpenRules,
+  onNewRule,
+}: {
+  activeCount: number
+  pausedCount: number
+  pendingCount: number
+  onOpenRules: () => void
+  onNewRule: () => void
+}) {
+  return (
+    <section className="card recurring-bar" aria-label="周期记账规则">
+      <div className="recurring-bar-copy">
+        <p className="eyebrow">
+          <Repeat2 size={12} aria-hidden /> 周期记账
+        </p>
+        <strong>
+          {activeCount > 0 ? `${activeCount} 条规则进行中` : '还没有周期规则'}
+          {pausedCount > 0 ? ` · ${pausedCount} 条已暂停` : ''}
+        </strong>
+        <span>
+          {pendingCount > 0
+            ? `${pendingCount} 期已经到期，等你确认`
+            : '房租、工资、会员费到期会自动出现'}
+        </span>
+      </div>
+      <div className="recurring-bar-actions">
+        <button type="button" className="button ghost" onClick={onOpenRules}>
+          管理规则
+        </button>
+        <button type="button" className="button secondary" onClick={onNewRule}>
+          <Plus size={14} />
+          新建规则
+        </button>
+      </div>
+    </section>
+  )
 }
 
 type TypeFilter = 'all' | TransactionType
@@ -108,13 +160,23 @@ export function Transactions({
   accounts,
   monthKey,
   pendingCaptures,
+  recurringRules,
+  recurringPending,
   onAdd,
   onEdit,
   onDelete,
   onAnnotateCapture,
   onIgnoreCapture,
+  onOpenRules,
+  onNewRule,
+  onConfirmRecurring,
+  onSkipRecurring,
   onLoadSample,
 }: TransactionsProps) {
+  const activeRuleCount = recurringRules.filter(
+    (rule) => rule.enabled,
+  ).length
+  const pausedRuleCount = recurringRules.length - activeRuleCount
   const [query, setQuery] = useState('')
   const [rangeStart, setRangeStart] = useState('')
   const [rangeEnd, setRangeEnd] = useState('')
@@ -495,6 +557,19 @@ export function Transactions({
           onAnnotate={onAnnotateCapture}
           onIgnore={onIgnoreCapture}
         />
+        <RecurringPendingCard
+          items={recurringPending}
+          categories={categories}
+          onConfirm={onConfirmRecurring}
+          onSkip={onSkipRecurring}
+        />
+        <RecurringBar
+          activeCount={activeRuleCount}
+          pausedCount={pausedRuleCount}
+          pendingCount={recurringPending.length}
+          onOpenRules={onOpenRules}
+          onNewRule={onNewRule}
+        />
         <EmptyLedger onAdd={onAdd} onLoadSample={onLoadSample} />
       </div>
     )
@@ -506,6 +581,19 @@ export function Transactions({
         items={pendingCaptures}
         onAnnotate={onAnnotateCapture}
         onIgnore={onIgnoreCapture}
+      />
+      <RecurringPendingCard
+        items={recurringPending}
+        categories={categories}
+        onConfirm={onConfirmRecurring}
+        onSkip={onSkipRecurring}
+      />
+      <RecurringBar
+        activeCount={activeRuleCount}
+        pausedCount={pausedRuleCount}
+        pendingCount={recurringPending.length}
+        onOpenRules={onOpenRules}
+        onNewRule={onNewRule}
       />
 
       <section

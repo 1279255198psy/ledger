@@ -12,6 +12,8 @@ import type {
   Palette,
   Project,
   RangeBudget,
+  RecurringPending,
+  RecurringRule,
   ReminderSettings,
   Theme,
 } from '../types'
@@ -55,6 +57,10 @@ import {
 } from './desktop'
 import { bulkRead, bulkWrite } from './bulkStore'
 import { reportStorageError } from './storageEvents'
+import {
+  normalizeRecurringPendings,
+  normalizeRecurringRules,
+} from './recurring'
 import type { LedgerDataSnapshot } from './sync/types'
 
 const KEYS = {
@@ -70,6 +76,8 @@ const KEYS = {
   budgetV1: 'zhangye.budget.v1',
   budgets: 'zhangye.budgets.v3',
   budgetRanges: 'zhangye.budgetRanges.v1',
+  recurringRules: 'zhangye.recurringRules.v1',
+  recurringPending: 'zhangye.recurringPending.v1',
   openingBalance: 'zhangye.openingBalanceCents.v1',
   theme: 'zhangye.theme.v1',
   palette: 'zhangye.palette.v1',
@@ -120,6 +128,9 @@ interface DesktopLedgerSnapshot {
   budgetCents: number
   budgets: BudgetBook
   budgetRanges: RangeBudget[]
+  /** Absent in files written before recurring entries existed. */
+  recurringRules?: RecurringRule[]
+  recurringPending?: RecurringPending[]
   openingBalanceCents: number
   theme: Theme
   palette: Palette
@@ -355,6 +366,31 @@ function readStoredBudgetRanges(): RangeBudget[] {
   }
 }
 
+function readStoredRecurringRules(
+  categories: Category[] = getActiveCategories(),
+): RecurringRule[] {
+  const raw = safeGet(KEYS.recurringRules)
+  if (raw === null) return []
+  try {
+    return normalizeRecurringRules(JSON.parse(raw), categories) ?? []
+  } catch {
+    // Rules are recoverable user settings; never block the ledger on them.
+    return []
+  }
+}
+
+function readStoredRecurringPending(
+  categories: Category[] = getActiveCategories(),
+): RecurringPending[] {
+  const raw = safeGet(KEYS.recurringPending)
+  if (raw === null) return []
+  try {
+    return normalizeRecurringPendings(JSON.parse(raw), categories) ?? []
+  } catch {
+    return []
+  }
+}
+
 function readStoredReminders(): ReminderSettings {
   const raw = safeGet(KEYS.reminders)
   if (raw === null) return { ...DEFAULT_REMINDERS }
@@ -453,6 +489,26 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
     }
   }
 
+  if (Array.isArray(snapshot.recurringRules)) {
+    const rules = normalizeRecurringRules(snapshot.recurringRules, categories)
+    if (rules) {
+      safeSet(KEYS.recurringRules, JSON.stringify(rules))
+    }
+  }
+  if (Array.isArray(snapshot.recurringPending)) {
+    const ruleIds = new Set(
+      readStoredRecurringRules(categories).map((rule) => rule.id),
+    )
+    const pending = normalizeRecurringPendings(
+      snapshot.recurringPending,
+      categories,
+      ruleIds,
+    )
+    if (pending) {
+      safeSet(KEYS.recurringPending, JSON.stringify(pending))
+    }
+  }
+
   if (
     typeof snapshot.openingBalanceCents === 'number' &&
     Number.isFinite(snapshot.openingBalanceCents) &&
@@ -514,6 +570,8 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     budgetCents: currentBudgetCents,
     budgets,
     budgetRanges: readStoredBudgetRanges(),
+    recurringRules: readStoredRecurringRules(categories),
+    recurringPending: readStoredRecurringPending(categories),
     openingBalanceCents: readOpeningBalanceCents(),
     theme: storedTheme === 'dark' ? 'dark' : 'light',
     palette: normalizePalette(storedPalette),
@@ -543,6 +601,8 @@ export function readLedgerDataSnapshot(): LedgerDataSnapshot {
     liabilities: readStoredLiabilities(),
     budgets: readStoredBudgets(),
     budgetRanges: readStoredBudgetRanges(),
+    recurringRules: readStoredRecurringRules(categories),
+    recurringPending: readStoredRecurringPending(categories),
     openingBalanceCents: readOpeningBalanceCents(),
   }
 }
@@ -607,6 +667,29 @@ export function validateLedgerDataSnapshot(
     throw new Error(`${source}中的区间预算无法识别`)
   }
 
+  // Snapshots from builds before recurring entries existed carry no rules.
+  // Keeping the local rules (rather than deleting them) mirrors how accounts
+  // are handled and avoids silently stopping the user's rent entry.
+  const recurringRules =
+    snapshot.recurringRules === undefined
+      ? readStoredRecurringRules(categories)
+      : normalizeRecurringRules(snapshot.recurringRules, categories)
+  if (!recurringRules) {
+    throw new Error(`${source}中的周期规则无法识别`)
+  }
+  const ruleIds = new Set(recurringRules.map((rule) => rule.id))
+  const recurringPending =
+    snapshot.recurringPending === undefined
+      ? readStoredRecurringPending(categories)
+      : normalizeRecurringPendings(
+          snapshot.recurringPending,
+          categories,
+          ruleIds,
+        )
+  if (!recurringPending) {
+    throw new Error(`${source}中的周期待确认无法识别`)
+  }
+
   const openingBalanceCents = snapshot.openingBalanceCents
   if (
     typeof openingBalanceCents !== 'number' ||
@@ -630,6 +713,10 @@ export function validateLedgerDataSnapshot(
     liabilities: sortLiabilities(liabilities),
     budgets,
     budgetRanges,
+    recurringRules,
+    recurringPending: recurringPending.filter((item) =>
+      ruleIds.has(item.ruleId),
+    ),
     openingBalanceCents: Math.round(openingBalanceCents),
   }
 }
@@ -662,6 +749,14 @@ export function applyLedgerDataSnapshot(
   ).budget
   safeSet(KEYS.budget, String(currentBudget.amountCents))
   safeSet(KEYS.budgetRanges, JSON.stringify(normalized.budgetRanges))
+  safeSet(
+    KEYS.recurringRules,
+    JSON.stringify(normalized.recurringRules ?? []),
+  )
+  safeSet(
+    KEYS.recurringPending,
+    JSON.stringify(normalized.recurringPending ?? []),
+  )
   safeSet(
     KEYS.openingBalance,
     String(Math.round(normalized.openingBalanceCents)),
@@ -836,6 +931,26 @@ export function saveBudgetRanges(ranges: RangeBudget[]): void {
   notifyLedgerChanged()
 }
 
+export function loadRecurringRules(): RecurringRule[] {
+  return readStoredRecurringRules(getActiveCategories())
+}
+
+export function saveRecurringRules(rules: RecurringRule[]): void {
+  safeSet(KEYS.recurringRules, JSON.stringify(rules))
+  scheduleDesktopPersist()
+  notifyLedgerChanged()
+}
+
+export function loadRecurringPending(): RecurringPending[] {
+  return readStoredRecurringPending(getActiveCategories())
+}
+
+export function saveRecurringPending(pending: RecurringPending[]): void {
+  safeSet(KEYS.recurringPending, JSON.stringify(pending))
+  scheduleDesktopPersist()
+  notifyLedgerChanged()
+}
+
 export function loadOpeningBalance(): number {
   return readOpeningBalanceCents() / 100
 }
@@ -979,6 +1094,10 @@ export interface ImportedBackup {
   categories: Category[] | null
   /** null when the backup predates account export and the local cards stay. */
   accounts: Account[] | null
+  /** null when the backup predates recurring entries and local rules stay. */
+  recurringRules: RecurringRule[] | null
+  /** null when the backup predates recurring entries and local pending stays. */
+  recurringPending: RecurringPending[] | null
 }
 
 export class ImportError extends Error {}
@@ -1111,6 +1230,44 @@ export function parseBackup(text: string): ImportedBackup {
     budgetRanges = normalizedRanges
   }
 
+  let recurringRules: RecurringRule[] | null = null
+  if (record.recurringRules !== undefined) {
+    const normalizedRules = normalizeRecurringRules(
+      record.recurringRules,
+      categories,
+    )
+    const rawRules = Array.isArray(record.recurringRules)
+      ? record.recurringRules.length
+      : -1
+    if (
+      !normalizedRules ||
+      rawRules < 0 ||
+      normalizedRules.length !== rawRules
+    ) {
+      throw new ImportError(
+        '周期规则数据格式不兼容，请使用账页导出的备份文件',
+      )
+    }
+    recurringRules = normalizedRules
+  }
+
+  let recurringPending: RecurringPending[] | null = null
+  if (record.recurringPending !== undefined) {
+    const effectiveRules = recurringRules ?? loadRecurringRules()
+    const ruleIds = new Set(effectiveRules.map((rule) => rule.id))
+    const normalizedPending = normalizeRecurringPendings(
+      record.recurringPending,
+      categories,
+      ruleIds,
+    )
+    if (!normalizedPending) {
+      throw new ImportError(
+        '周期待确认数据格式不兼容，请使用账页导出的备份文件',
+      )
+    }
+    recurringPending = normalizedPending
+  }
+
   let openingBalance: number | null = null
   if (
     typeof record.openingBalanceCents === 'number' &&
@@ -1135,6 +1292,8 @@ export function parseBackup(text: string): ImportedBackup {
     liabilities,
     categories: hasCategoryData ? categories : null,
     accounts,
+    recurringRules,
+    recurringPending,
   }
 }
 

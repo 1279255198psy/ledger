@@ -108,7 +108,16 @@ export function isValidTransaction(
     (item.updatedAt === undefined || typeof item.updatedAt === 'string') &&
     // Only a payment can be refunded, so the flag never rides on income.
     (item.kind === undefined ||
-      (item.kind === 'refund' && item.type === 'expense'))
+      (item.kind === 'refund' && item.type === 'expense')) &&
+    (item.recurringRuleId === undefined ||
+      (typeof item.recurringRuleId === 'string' &&
+        item.recurringRuleId.length > 0 &&
+        item.recurringRuleId.length <= 120)) &&
+    (item.recurringPeriod === undefined ||
+      (typeof item.recurringPeriod === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(item.recurringPeriod))) &&
+    (item.recurringDetached === undefined ||
+      typeof item.recurringDetached === 'boolean')
   )
 }
 

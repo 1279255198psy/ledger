@@ -19,6 +19,7 @@ import { activeCurrencySymbol } from '../lib/currency'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { OnboardingCard } from '../components/OnboardingCard'
 import { ExpenseTrendChart } from '../components/charts/ExpenseTrendChart'
+import { RecurringPendingCard } from '../components/RecurringPendingCard'
 import { TransactionRow } from '../components/TransactionRow'
 import { getCountedProjectIds, getMonthSpendCents } from '../lib/allocations'
 import { getBudgetWarnings } from '../lib/budget'
@@ -39,22 +40,28 @@ import {
   shiftMonth,
 } from '../lib/utils'
 import type {
+  Category,
   LedgerTransaction,
   MonthBudgetMetrics,
   Project,
   RangeBudgetMetrics,
+  RecurringPending,
   View,
 } from '../types'
 
 interface OverviewProps {
   transactions: LedgerTransaction[]
   projects: Project[]
+  categories: Category[]
   monthKey: string
   budgetMetrics: MonthBudgetMetrics
   rangeMetrics: RangeBudgetMetrics[]
   openingBalance: number
   pendingCaptureCount: number
   pendingCaptureTotalCents: number
+  recurringPending: RecurringPending[]
+  onConfirmRecurring: (item: RecurringPending) => void
+  onSkipRecurring: (item: RecurringPending) => void
   onOpenPendingCaptures: () => void
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
@@ -117,12 +124,16 @@ function HeroBalance({ value }: { value: number }) {
 export function Overview({
   transactions,
   projects,
+  categories: allCategories,
   monthKey,
   budgetMetrics,
   rangeMetrics,
   openingBalance,
   pendingCaptureCount,
   pendingCaptureTotalCents,
+  recurringPending,
+  onConfirmRecurring,
+  onSkipRecurring,
   onOpenPendingCaptures,
   onAdd,
   onEdit,
@@ -145,6 +156,14 @@ export function Overview({
           count={pendingCaptureCount}
           totalCents={pendingCaptureTotalCents}
           onOpen={onOpenPendingCaptures}
+        />
+        <RecurringPendingCard
+          items={recurringPending}
+          categories={allCategories}
+          compact
+          onConfirm={onConfirmRecurring}
+          onSkip={onSkipRecurring}
+          onOpenAll={() => onChangeView('transactions')}
         />
         <BalanceSummary
           transactions={transactions}
@@ -222,6 +241,14 @@ export function Overview({
         count={pendingCaptureCount}
         totalCents={pendingCaptureTotalCents}
         onOpen={onOpenPendingCaptures}
+      />
+      <RecurringPendingCard
+        items={recurringPending}
+        categories={allCategories}
+        compact
+        onConfirm={onConfirmRecurring}
+        onSkip={onSkipRecurring}
+        onOpenAll={() => onChangeView('transactions')}
       />
 
       {showOnboarding ? (

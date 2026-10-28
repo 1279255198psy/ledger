@@ -9,6 +9,7 @@ import {
 import { TopBar } from './components/TopBar'
 import { MobileNav } from './components/MobileNav'
 import { TransactionModal } from './components/TransactionModal'
+import { RecurringRulesModal } from './components/RecurringRulesModal'
 import { SettingsModal } from './components/SettingsModal'
 import { UpdateDialog } from './components/UpdateDialog'
 import { useUpdater } from './hooks/useUpdater'
@@ -51,6 +52,8 @@ import {
   loadOpeningBalance,
   loadPalette,
   loadProjects,
+  loadRecurringPending,
+  loadRecurringRules,
   loadReminders,
   loadTheme,
   loadTransactions,
@@ -66,6 +69,8 @@ import {
   saveOpeningBalance,
   savePalette,
   saveProjects,
+  saveRecurringPending,
+  saveRecurringRules,
   saveReminders,
   saveTheme,
   saveTransactions,
@@ -87,6 +92,15 @@ import {
 } from './lib/liabilities'
 import type { CategoryDraft } from './lib/categories'
 import { getCurrency, setActiveCurrency } from './lib/currency'
+import {
+  addDays,
+  firstOccurrenceOnOrAfter,
+  newRecurringRuleId,
+  nextDueDate,
+  planRecurringCatchUp,
+  reanchorFrequency,
+  recurringTransactionId,
+} from './lib/recurring'
 import {
   getSyncState,
   initSync,
@@ -118,6 +132,9 @@ import type {
   Project,
   ProjectDraft,
   RangeBudget,
+  RecurringPending,
+  RecurringRule,
+  RecurringTemplate,
   ReminderSettings,
   RepaymentDraft,
   Theme,
@@ -147,6 +164,23 @@ function resolveDraftAllocations(
   return [makeDailyAllocation(draft.amountCents)]
 }
 
+function templateFromDraft(draft: TransactionDraft): RecurringTemplate {
+  return {
+    type: draft.type,
+    amountCents: draft.amountCents,
+    categoryId: draft.categoryId,
+    accountId: draft.accountId,
+    note: draft.note,
+    ...(draft.type === 'expense' && draft.spendingNature
+      ? { spendingNature: draft.spendingNature }
+      : {}),
+    allocations:
+      draft.allocations && draft.allocations.length > 0
+        ? draft.allocations
+        : [makeDailyAllocation(draft.amountCents)],
+  }
+}
+
 export default function App() {
   const [view, setView] = useState<View>('overview')
   const [monthKey, setMonthKey] = useState(() => currentMonthKey())
@@ -160,6 +194,11 @@ export default function App() {
   const [budgets, setBudgets] = useState<BudgetBook>(loadBudgets)
   const [budgetRanges, setBudgetRanges] =
     useState<RangeBudget[]>(loadBudgetRanges)
+  const [recurringRules, setRecurringRules] =
+    useState<RecurringRule[]>(loadRecurringRules)
+  const [recurringPending, setRecurringPending] =
+    useState<RecurringPending[]>(loadRecurringPending)
+  const [todayKey, setTodayKey] = useState(localDateKey)
   const [openingBalance, setOpeningBalance] = useState(loadOpeningBalance)
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [palette, setPalette] = useState<Palette>(loadPalette)
@@ -175,6 +214,11 @@ export default function App() {
   const [transactionProjectId, setTransactionProjectId] = useState<
     string | null
   >(null)
+  const [rulesModalOpen, setRulesModalOpen] = useState(false)
+  const [ruleForm, setRuleForm] = useState<RecurringRule | 'new' | null>(null)
+  const [pendingRecurring, setPendingRecurring] =
+    useState<RecurringPending | null>(null)
+  const [returnToRules, setReturnToRules] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsFocus, setSettingsFocus] = useState<
     | 'opening-balance'
@@ -331,6 +375,76 @@ export default function App() {
   }, [budgetRanges])
 
   useEffect(() => {
+    saveRecurringRules(recurringRules)
+  }, [recurringRules])
+
+  useEffect(() => {
+    saveRecurringPending(recurringPending)
+  }, [recurringPending])
+
+  // Re-check the calendar twice an hour and whenever the app returns to the
+  // foreground, so a ledger left open overnight still catches up at midnight.
+  useEffect(() => {
+    const refresh = () => setTodayKey(localDateKey())
+    const timer = window.setInterval(refresh, 30 * 60 * 1000)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
+
+  // The only place recurring entries enter the ledger. Deterministic ids make
+  // repeated runs (StrictMode, two devices, a sync in between) idempotent.
+  useEffect(() => {
+    const plan = planRecurringCatchUp({
+      rules: recurringRules,
+      transactions,
+      pending: recurringPending,
+      categories,
+      accounts,
+      projects,
+      today: todayKey,
+    })
+    if (!plan.changed) return
+
+    setRecurringRules(plan.rules)
+    if (plan.newTransactions.length > 0) {
+      setTransactions((current) => {
+        const ids = new Set(current.map((item) => item.id))
+        const added = plan.newTransactions.filter(
+          (item) => !ids.has(item.id),
+        )
+        return added.length === 0
+          ? current
+          : sortTransactions([...added, ...current])
+      })
+    }
+    if (plan.newPendings.length > 0) {
+      setRecurringPending((current) => {
+        const ids = new Set(current.map((item) => item.id))
+        const added = plan.newPendings.filter(
+          (item) => !ids.has(item.id),
+        )
+        return added.length === 0 ? current : [...added, ...current]
+      })
+    }
+  }, [
+    todayKey,
+    recurringRules,
+    recurringPending,
+    transactions,
+    categories,
+    accounts,
+    projects,
+  ])
+
+  useEffect(() => {
     saveOpeningBalance(openingBalance)
   }, [openingBalance])
 
@@ -373,10 +487,14 @@ export default function App() {
       setLiabilities(loadLiabilities())
       setBudgets(loadBudgets())
       setBudgetRanges(loadBudgetRanges())
+      setRecurringRules(loadRecurringRules())
+      setRecurringPending(loadRecurringPending())
       setOpeningBalance(loadOpeningBalance())
       setEditing(null)
       setTransactionModalOpen(false)
       setTransactionProjectId(null)
+      setRuleForm(null)
+      setPendingRecurring(null)
     }
     window.addEventListener('zhangye:ledger-reloaded', reload)
     return () => window.removeEventListener('zhangye:ledger-reloaded', reload)
@@ -683,6 +801,9 @@ export default function App() {
     setEditing(null)
     setTransactionProjectId(null)
     setAnnotatingCapture(null)
+    setRuleForm(null)
+    setPendingRecurring(null)
+    setReturnToRules(false)
     setTransactionModalOpen(true)
   }
 
@@ -690,6 +811,9 @@ export default function App() {
     setEditing(null)
     setTransactionProjectId(projectId)
     setAnnotatingCapture(null)
+    setRuleForm(null)
+    setPendingRecurring(null)
+    setReturnToRules(false)
     setTransactionModalOpen(true)
   }
 
@@ -697,6 +821,9 @@ export default function App() {
     setEditing(transaction)
     setTransactionProjectId(null)
     setAnnotatingCapture(null)
+    setRuleForm(null)
+    setPendingRecurring(null)
+    setReturnToRules(false)
     setTransactionModalOpen(true)
   }
 
@@ -704,6 +831,31 @@ export default function App() {
     setEditing(null)
     setTransactionProjectId(null)
     setAnnotatingCapture(item)
+    setRuleForm(null)
+    setPendingRecurring(null)
+    setReturnToRules(false)
+    setTransactionModalOpen(true)
+  }
+
+  const openRuleForm = (rule: RecurringRule | 'new') => {
+    setEditing(null)
+    setTransactionProjectId(null)
+    setAnnotatingCapture(null)
+    setPendingRecurring(null)
+    setReturnToRules(rulesModalOpen)
+    setRulesModalOpen(false)
+    setRuleForm(rule)
+    setTransactionModalOpen(true)
+  }
+
+  const openRecurringPending = (item: RecurringPending) => {
+    setEditing(null)
+    setTransactionProjectId(null)
+    setAnnotatingCapture(null)
+    setRuleForm(null)
+    setReturnToRules(false)
+    setRulesModalOpen(false)
+    setPendingRecurring(item)
     setTransactionModalOpen(true)
   }
 
@@ -717,9 +869,195 @@ export default function App() {
     setEditing(null)
     setTransactionProjectId(null)
     setAnnotatingCapture(null)
+    setRuleForm(null)
+    setPendingRecurring(null)
+    if (returnToRules) {
+      setRulesModalOpen(true)
+      setReturnToRules(false)
+    }
+  }
+
+  const handleSaveRecurringRule = (draft: TransactionDraft) => {
+    const recurring = draft.recurring
+    if (!recurring) {
+      showToast('请先填写周期设置', 'error')
+      return
+    }
+    const now = new Date().toISOString()
+    const template = templateFromDraft(draft)
+
+    if (ruleForm && ruleForm !== 'new') {
+      const existing = ruleForm
+      const scheduleChanged =
+        existing.startDate !== recurring.startDate ||
+        JSON.stringify(existing.frequency) !==
+          JSON.stringify(recurring.frequency)
+      // A schedule edit should not back-fill periods the user did not see.
+      // Keep the cursor if it already sits past yesterday (today's period was
+      // already generated or skipped), otherwise skip the paused gap.
+      const yesterday = addDays(localDateKey(), -1)
+      const through =
+        existing.generatedThrough && existing.generatedThrough > yesterday
+          ? existing.generatedThrough
+          : yesterday
+      setRecurringRules((current) =>
+        current.map((rule) => {
+          if (rule.id !== existing.id) return rule
+          const next: RecurringRule = {
+            ...rule,
+            template,
+            frequency: recurring.frequency,
+            startDate: recurring.startDate,
+            mode: recurring.mode,
+            updatedAt: now,
+          }
+          if (recurring.endDate) next.endDate = recurring.endDate
+          else delete next.endDate
+          if (scheduleChanged) next.generatedThrough = through
+          return next
+        }),
+      )
+      showToast('周期规则已更新')
+    } else {
+      const rule: RecurringRule = {
+        id: newRecurringRuleId(),
+        schemaVersion: 1,
+        enabled: true,
+        template,
+        frequency: recurring.frequency,
+        startDate: recurring.startDate,
+        ...(recurring.endDate ? { endDate: recurring.endDate } : {}),
+        mode: recurring.mode,
+        createdAt: now,
+        updatedAt: now,
+      }
+      setRecurringRules((current) => [...current, rule])
+      showToast(
+        recurring.mode === 'confirm'
+          ? '周期规则已创建，到期的账会先等你确认'
+          : '周期规则已创建，到期的账会自动记上',
+      )
+    }
+    closeTransactionModal()
+  }
+
+  const confirmPendingRecurring = (draft: TransactionDraft) => {
+    const item = pendingRecurring
+    if (!item) return
+    const id = recurringTransactionId(item.ruleId, item.date)
+    // Allocation ids are derived from the transaction id too: a confirmation
+    // made on both devices then produces byte-identical records instead of a
+    // conflict over a random id.
+    const allocations = resolveDraftAllocations(draft, null).map(
+      (line, index) => ({
+        ...line,
+        id: `${id}-al-${index + 1}`,
+      }),
+    )
+    const created: LedgerTransaction = {
+      id,
+      schemaVersion: 2,
+      type: draft.type,
+      amountCents: draft.amountCents,
+      categoryId: draft.categoryId,
+      accountId: draft.accountId,
+      date: item.date,
+      note: draft.note,
+      ...(draft.type === 'expense' && draft.spendingNature
+        ? { spendingNature: draft.spendingNature }
+        : {}),
+      allocations,
+      // Deterministic timestamps keep a simultaneous confirmation on both
+      // devices byte-identical.
+      createdAt: `${item.date}T00:00:00.000Z`,
+      recurringRuleId: item.ruleId,
+      recurringPeriod: item.date,
+    }
+    setTransactions((current) =>
+      sortTransactions([
+        created,
+        ...current.filter((transaction) => transaction.id !== id),
+      ]),
+    )
+    setRecurringPending((current) =>
+      current.filter((pending) => pending.id !== item.id),
+    )
+    const targetMonth = monthOfDateKey(item.date)
+    if (targetMonth !== monthKey && targetMonth <= latestMonth) {
+      setMonthKey(targetMonth)
+    }
+    showToast(
+      `已确认 ${formatMoney(draft.amountCents / 100)} 的周期记账`,
+    )
+    closeTransactionModal()
+  }
+
+  const handleSkipRecurring = (item: RecurringPending) => {
+    setRecurringPending((current) =>
+      current.filter((pending) => pending.id !== item.id),
+    )
+    showToast('已跳过这一期周期记账')
+  }
+
+  const handleToggleRecurringRule = (rule: RecurringRule) => {
+    const now = new Date().toISOString()
+    setRecurringRules((current) =>
+      current.map((item) => {
+        if (item.id !== rule.id) return item
+        if (item.enabled) {
+          return {
+            ...item,
+            enabled: false,
+            stoppedAt: now,
+            updatedAt: now,
+          }
+        }
+        // Resume skips the paused gap but still lets today's due period in.
+        const yesterday = addDays(localDateKey(), -1)
+        const through =
+          item.generatedThrough && item.generatedThrough > yesterday
+            ? item.generatedThrough
+            : yesterday
+        const next: RecurringRule = {
+          ...item,
+          enabled: true,
+          generatedThrough: through,
+          updatedAt: now,
+        }
+        delete next.stoppedAt
+        return next
+      }),
+    )
+    showToast(rule.enabled ? '周期规则已暂停' : '周期规则已启用')
+  }
+
+  const handleDeleteRecurringRule = async (id: string) => {
+    const rule = recurringRules.find((item) => item.id === id)
+    if (!rule) return
+    const confirmed = await confirmDesktopAction(
+      `确定删除这条周期规则吗？已经生成的流水会保留，之后不再自动生成。`,
+      '删除周期规则',
+    )
+    if (!confirmed) return
+    setRecurringRules((current) =>
+      current.filter((item) => item.id !== id),
+    )
+    setRecurringPending((current) =>
+      current.filter((item) => item.ruleId !== id),
+    )
+    showToast('周期规则已删除')
   }
 
   const handleSaveTransaction = (draft: TransactionDraft) => {
+    if (ruleForm) {
+      handleSaveRecurringRule(draft)
+      return
+    }
+    if (pendingRecurring) {
+      confirmPendingRecurring(draft)
+      return
+    }
+
     const targetMonth = monthOfDateKey(draft.date)
     const allocations = resolveDraftAllocations(draft, editing)
     const base = {
@@ -738,21 +1076,128 @@ export default function App() {
 
     if (editing) {
       const updatedAt = new Date().toISOString()
+      const linkedRule = editing.recurringRuleId
+        ? recurringRules.find(
+            (rule) => rule.id === editing.recurringRuleId,
+          ) ?? null
+        : null
+      const scope = draft.recurringEditScope
+      const detach =
+        linkedRule && !editing.recurringDetached && scope === 'once'
       setTransactions((current) =>
         sortTransactions(
           current.map((item) =>
             item.id === editing.id
-              ? { ...item, ...base, updatedAt }
+              ? {
+                  ...item,
+                  ...base,
+                  updatedAt,
+                  ...(detach ? { recurringDetached: true } : {}),
+                }
               : item,
           ),
         ),
       )
-      showToast('这笔记录已更新')
+
+      if (linkedRule && scope === 'future') {
+        const template = templateFromDraft(draft)
+        const dateChanged = draft.date !== editing.date
+        setRecurringRules((current) =>
+          current.map((rule) => {
+            if (rule.id !== linkedRule.id) return rule
+            const frequency = dateChanged
+              ? reanchorFrequency(rule.frequency, draft.date)
+              : rule.frequency
+            // Re-anchoring makes the edited date a period again. Advance the
+            // cursor past it so catch-up does not record the same period twice
+            // under its new deterministic id.
+            const through =
+              dateChanged &&
+              frequency.kind !== 'interval' &&
+              (!rule.generatedThrough || rule.generatedThrough < draft.date)
+                ? draft.date
+                : rule.generatedThrough
+            return {
+              ...rule,
+              template,
+              frequency,
+              ...(through ? { generatedThrough: through } : {}),
+              updatedAt,
+            }
+          }),
+        )
+      } else if (linkedRule && scope === 'stop') {
+        setRecurringRules((current) =>
+          current.map((rule) =>
+            rule.id === linkedRule.id
+              ? {
+                  ...rule,
+                  enabled: false,
+                  stoppedAt: updatedAt,
+                  updatedAt,
+                }
+              : rule,
+          ),
+        )
+        setRecurringPending((current) =>
+          current.filter(
+            (pending) => pending.ruleId !== linkedRule.id,
+          ),
+        )
+      }
+
+      showToast(
+        scope === 'stop'
+          ? '这笔已更新，周期规则已停止'
+          : scope === 'future'
+            ? '这次及以后的周期记账已更新'
+            : '这笔记录已更新',
+      )
     } else {
-      const created: LedgerTransaction = {
+      let created: LedgerTransaction = {
         ...base,
         id: newTransactionId(),
         createdAt: new Date().toISOString(),
+      }
+      if (draft.recurring) {
+        const now = new Date().toISOString()
+        const rule: RecurringRule = {
+          id: newRecurringRuleId(),
+          schemaVersion: 1,
+          enabled: true,
+          template: templateFromDraft(draft),
+          frequency: draft.recurring.frequency,
+          startDate: draft.recurring.startDate,
+          ...(draft.recurring.endDate
+            ? { endDate: draft.recurring.endDate }
+            : {}),
+          mode: draft.recurring.mode,
+          createdAt: now,
+          updatedAt: now,
+        }
+        const first = firstOccurrenceOnOrAfter(
+          rule.frequency,
+          rule.startDate,
+          draft.date,
+        )
+        // When this entry itself is the first due period, link it and move the
+        // cursor so the catch-up pass does not record it a second time.
+        if (first === draft.date) {
+          rule.generatedThrough = draft.date
+          const id = recurringTransactionId(rule.id, draft.date)
+          created = {
+            ...created,
+            id,
+            allocations: created.allocations.map((line, index) => ({
+              ...line,
+              id: `${id}-al-${index + 1}`,
+            })),
+            createdAt: `${draft.date}T00:00:00.000Z`,
+            recurringRuleId: rule.id,
+            recurringPeriod: draft.date,
+          }
+        }
+        setRecurringRules((current) => [...current, rule])
       }
       setTransactions((current) => sortTransactions([created, ...current]))
       if (annotatingCapture) {
@@ -1001,6 +1446,8 @@ export default function App() {
       accounts,
       projects,
       liabilities,
+      recurringRules,
+      recurringPending,
       transactions,
     }
     try {
@@ -1070,6 +1517,14 @@ export default function App() {
       if (imported.budgetRanges !== null) {
         setBudgetRanges(imported.budgetRanges)
       }
+      const nextRules = imported.recurringRules ?? recurringRules
+      setRecurringRules(nextRules)
+      const nextPending =
+        imported.recurringPending ?? recurringPending
+      const ruleIds = new Set(nextRules.map((rule) => rule.id))
+      setRecurringPending(
+        nextPending.filter((pending) => ruleIds.has(pending.ruleId)),
+      )
       if (imported.openingBalance !== null) {
         setOpeningBalance(imported.openingBalance)
       }
@@ -1096,6 +1551,8 @@ export default function App() {
     setLiabilities(sample.liabilities)
     setBudgets(sample.budgets)
     setBudgetRanges(sample.budgetRanges)
+    setRecurringRules([])
+    setRecurringPending([])
     setOpeningBalance(sample.openingBalanceCents / 100)
     setMonthKey(currentMonthKey())
     setView('overview')
@@ -1127,7 +1584,7 @@ export default function App() {
       ? '同步已开启，另一台设备上的账目也会被清除。'
       : ''
     const confirmed = await confirmDesktopAction(
-      `确定清除现有账本吗？全部流水、项目与负债会被删除，预算和起始资金会重置。分类与外观设置保留。此操作无法撤销，建议先导出备份。${syncHint}`,
+      `确定清除现有账本吗？全部流水、项目、负债与周期规则会被删除，预算和起始资金会重置。分类与外观设置保留。此操作无法撤销，建议先导出备份。${syncHint}`,
       '清除现有账本',
     )
     if (!confirmed) return
@@ -1137,12 +1594,37 @@ export default function App() {
     setLiabilities([])
     setBudgets({})
     setBudgetRanges([])
+    setRecurringRules([])
+    setRecurringPending([])
     setOpeningBalance(0)
     setMonthKey(currentMonthKey())
     setSettingsOpen(false)
     setView('overview')
     showToast('账本已清除')
   }
+
+  const linkedRule = useMemo(() => {
+    if (!editing?.recurringRuleId || editing.recurringDetached) return null
+    return (
+      recurringRules.find(
+        (rule) => rule.id === editing.recurringRuleId,
+      ) ?? null
+    )
+  }, [editing, recurringRules])
+
+  const sortedRecurringRules = useMemo(
+    () =>
+      [...recurringRules].sort((left, right) => {
+        if (left.enabled !== right.enabled) return left.enabled ? -1 : 1
+        const leftNext = nextDueDate(left) ?? '9999-12-31'
+        const rightNext = nextDueDate(right) ?? '9999-12-31'
+        return (
+          leftNext.localeCompare(rightNext) ||
+          right.updatedAt.localeCompare(left.updatedAt)
+        )
+      }),
+    [recurringRules],
+  )
 
   return (
     <div className="app-shell">
@@ -1184,9 +1666,13 @@ export default function App() {
             budgetMetrics={budgetMetrics}
             rangeMetrics={monthRangeMetrics}
             openingBalance={openingBalance}
+            categories={categories}
             pendingCaptureCount={pendingCaptures.length}
             pendingCaptureTotalCents={pendingCaptureTotalCents}
             onOpenPendingCaptures={() => handleChangeView('transactions')}
+            recurringPending={recurringPending}
+            onConfirmRecurring={openRecurringPending}
+            onSkipRecurring={handleSkipRecurring}
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={handleDeleteTransaction}
@@ -1226,11 +1712,17 @@ export default function App() {
             accounts={accounts}
             monthKey={monthKey}
             pendingCaptures={pendingCaptures}
+            recurringRules={sortedRecurringRules}
+            recurringPending={recurringPending}
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={handleDeleteTransaction}
             onAnnotateCapture={openCaptureAnnotation}
             onIgnoreCapture={handleIgnoreCapture}
+            onOpenRules={() => setRulesModalOpen(true)}
+            onNewRule={() => openRuleForm('new')}
+            onConfirmRecurring={openRecurringPending}
+            onSkipRecurring={handleSkipRecurring}
             onLoadSample={handleLoadSample}
           />
         ) : null}
@@ -1306,6 +1798,18 @@ export default function App() {
 
       <MobileNav view={view} onChangeView={handleChangeView} />
 
+      <RecurringRulesModal
+        open={rulesModalOpen}
+        rules={sortedRecurringRules}
+        categories={categories}
+        pendingCount={recurringPending.length}
+        onClose={() => setRulesModalOpen(false)}
+        onNew={() => openRuleForm('new')}
+        onEdit={openRuleForm}
+        onToggle={handleToggleRecurringRule}
+        onDelete={handleDeleteRecurringRule}
+      />
+
       <TransactionModal
         open={transactionModalOpen}
         editing={editing}
@@ -1316,6 +1820,9 @@ export default function App() {
         defaultProjectId={transactionProjectId ?? undefined}
         initialDraft={captureSeed}
         captureHint={captureHint}
+        ruleForm={ruleForm}
+        pendingRecurring={pendingRecurring}
+        linkedRule={linkedRule}
         onClose={closeTransactionModal}
         onSave={handleSaveTransaction}
         onDelete={handleDeleteTransaction}

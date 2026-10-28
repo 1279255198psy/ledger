@@ -51,6 +51,7 @@ function countText(counts: BackupInspection['counts']): string {
   const parts = [`${counts.transactions} 笔流水`]
   if (counts.projects > 0) parts.push(`${counts.projects} 个项目`)
   if (counts.liabilities > 0) parts.push(`${counts.liabilities} 笔负债`)
+  if (counts.recurringRules > 0) parts.push(`${counts.recurringRules} 条周期规则`)
   return parts.join(' · ')
 }
 
