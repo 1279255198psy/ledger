@@ -3460,6 +3460,94 @@ a {
   letter-spacing: -0.02em;
 }
 
+.global-search-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+}
+
+.global-search-box {
+  flex: 1 1 300px;
+}
+
+.date-range {
+  display: flex;
+  height: 38px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.date-range:focus-within {
+  border-color: var(--accent-mid);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.date-range.is-invalid {
+  border-color: var(--negative);
+}
+
+.date-range-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.date-range-label {
+  flex: none;
+  color: var(--ink-faint);
+  font-size: calc(9.5px * var(--font-scale));
+}
+
+.date-range input[type='date'] {
+  width: 118px;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: calc(11px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+
+.date-range input[type='date']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.date-range-sep {
+  color: var(--ink-faint);
+  font-size: calc(10px * var(--font-scale));
+}
+
+.global-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: calc(10.5px * var(--font-scale));
+}
+
+.global-scope-exit {
+  min-height: 30px;
+  padding-inline: 10px;
+  font-size: calc(10.5px * var(--font-scale));
+}
+
+.global-search-warning {
+  margin: -6px 4px 0;
+  color: var(--negative);
+  font-size: calc(10.5px * var(--font-scale));
+}
+
 .filter-panel {
   padding: 13px 14px;
 }
@@ -3627,6 +3715,45 @@ a {
 
 .day-total .is-income {
   color: var(--positive);
+}
+
+.month-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.month-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.month-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 0 4px 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.month-heading > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.month-heading h2 {
+  color: var(--ink);
+  font-size: calc(14px * var(--font-scale));
+  font-weight: 620;
+  letter-spacing: -0.02em;
+}
+
+.month-heading > div:first-child span {
+  color: var(--ink-faint);
+  font-size: calc(9.5px * var(--font-scale));
 }
 
 .day-card {
@@ -7237,6 +7364,29 @@ a {
 
   .search-box {
     flex-basis: 100%;
+  }
+
+  .global-search-box {
+    flex-basis: 100%;
+  }
+
+  .date-range {
+    flex: 1 1 100%;
+  }
+
+  .date-range-field {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .date-range input[type='date'] {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .global-scope {
+    flex: 1 1 100%;
+    justify-content: space-between;
   }
 
   .type-filter {

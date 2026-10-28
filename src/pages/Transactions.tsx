@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  CalendarRange,
   Check,
   ChevronDown,
   ChevronRight,
@@ -16,11 +17,13 @@ import { PendingCaptureCard } from '../components/PendingCaptureCard'
 import { SelectMenu } from '../components/SelectMenu'
 import { TransactionRow } from '../components/TransactionRow'
 import type { PendingCapture } from '../lib/capture/types'
-import {
-  getCategory,
-  getCategoryPathName,
-} from '../lib/categories'
+import { getCategoryPathName } from '../lib/categories'
 import { expenseDeltaCents } from '../lib/refunds'
+import {
+  filterTransactions,
+  hasActiveFilters,
+  hasGlobalScope,
+} from '../lib/search'
 import {
   formatDayHeading,
   formatMoney,
@@ -86,6 +89,18 @@ function measurePopover(
   return { left, top, width: clampedWidth, maxHeight }
 }
 
+function groupByDay(
+  items: LedgerTransaction[],
+): Array<[string, LedgerTransaction[]]> {
+  const groups = new Map<string, LedgerTransaction[]>()
+  for (const item of items) {
+    const list = groups.get(item.date) ?? []
+    list.push(item)
+    groups.set(item.date, list)
+  }
+  return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a))
+}
+
 export function Transactions({
   transactions,
   projects,
@@ -101,6 +116,8 @@ export function Transactions({
   onLoadSample,
 }: TransactionsProps) {
   const [query, setQuery] = useState('')
+  const [rangeStart, setRangeStart] = useState('')
+  const [rangeEnd, setRangeEnd] = useState('')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [accountFilter, setAccountFilter] = useState('')
@@ -115,6 +132,8 @@ export function Transactions({
 
   useEffect(() => {
     setQuery('')
+    setRangeStart('')
+    setRangeEnd('')
     setTypeFilter('all')
     setCategoryFilter('')
     setAccountFilter('')
@@ -122,8 +141,17 @@ export function Transactions({
     setExpandedFilterIds(new Set())
   }, [monthKey])
 
-  const monthTransactions = getMonthTransactions(transactions, monthKey)
-  const totals = getTotals(monthTransactions)
+  const monthTransactions = useMemo(
+    () => getMonthTransactions(transactions, monthKey),
+    [transactions, monthKey],
+  )
+  const isGlobal = hasGlobalScope({
+    query,
+    startDate: rangeStart,
+    endDate: rangeEnd,
+  })
+  const rangeInvalid =
+    rangeStart !== '' && rangeEnd !== '' && rangeStart > rangeEnd
 
   const categoryTree = useMemo(() => {
     const scoped =
@@ -211,69 +239,88 @@ export function Transactions({
     }
   }, [accounts, accountFilter])
 
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    const selectedCategory = categoryFilter
-      ? categories.find((category) => category.id === categoryFilter)
-      : undefined
-    return monthTransactions.filter((item) => {
-      if (typeFilter !== 'all' && item.type !== typeFilter) return false
-      if (selectedCategory) {
-        const itemCategory = categories.find(
-          (category) => category.id === item.categoryId,
-        )
-        // Picking a big category includes everything filed under it.
-        const matchesParent =
-          !selectedCategory.parentId &&
-          itemCategory?.parentId === selectedCategory.id
-        if (
-          item.categoryId !== selectedCategory.id &&
-          !matchesParent
-        ) {
-          return false
-        }
-      }
-      if (accountFilter && item.accountId !== accountFilter) return false
-      if (normalizedQuery) {
-        const category = getCategory(item.categoryId, item.type)
-        const haystack = `${category.name} ${getCategoryPathName(category)} ${item.note}`.toLowerCase()
-        if (!haystack.includes(normalizedQuery)) return false
-      }
-      return true
-    })
-  }, [
-    monthTransactions,
-    query,
-    typeFilter,
-    categoryFilter,
-    accountFilter,
-    categories,
-  ])
+  const filtered = useMemo(
+    () =>
+      filterTransactions(
+        isGlobal ? transactions : monthTransactions,
+        {
+          query,
+          type: typeFilter,
+          categoryId: categoryFilter,
+          accountId: accountFilter,
+          startDate: rangeStart,
+          endDate: rangeEnd,
+        },
+        categories,
+        accounts,
+        projects,
+      ),
+    [
+      transactions,
+      monthTransactions,
+      isGlobal,
+      query,
+      typeFilter,
+      categoryFilter,
+      accountFilter,
+      rangeStart,
+      rangeEnd,
+      categories,
+      accounts,
+      projects,
+    ],
+  )
 
-  const grouped = useMemo(() => {
-    const groups = new Map<string, LedgerTransaction[]>()
+  const summaryTransactions = isGlobal ? filtered : monthTransactions
+  const summaryTotals = useMemo(
+    () => getTotals(summaryTransactions),
+    [summaryTransactions],
+  )
+
+  const monthGroups = useMemo(() => {
+    if (!isGlobal) return []
+    const months = new Map<string, LedgerTransaction[]>()
     for (const item of filtered) {
-      const list = groups.get(item.date) ?? []
+      const key = item.date.slice(0, 7)
+      const list = months.get(key) ?? []
       list.push(item)
-      groups.set(item.date, list)
+      months.set(key, list)
     }
-    return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a))
-  }, [filtered])
+    return [...months.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([month, items]) => ({ month, items, totals: getTotals(items) }))
+  }, [filtered, isGlobal])
 
-  const hasFilters =
-    query.trim() !== '' ||
-    typeFilter !== 'all' ||
-    categoryFilter !== '' ||
-    accountFilter !== ''
+  const hasFilters = hasActiveFilters({
+    query,
+    type: typeFilter,
+    categoryId: categoryFilter,
+    accountId: accountFilter,
+    startDate: rangeStart,
+    endDate: rangeEnd,
+  })
 
   const resetFilters = () => {
     setQuery('')
+    setRangeStart('')
+    setRangeEnd('')
     setTypeFilter('all')
     setCategoryFilter('')
     setAccountFilter('')
     setCategoryMenuOpen(false)
     setExpandedFilterIds(new Set())
   }
+
+  const clearGlobalScope = () => {
+    setQuery('')
+    setRangeStart('')
+    setRangeEnd('')
+  }
+
+  const globalScopeLabel =
+    rangeStart || rangeEnd
+      ? `${rangeStart || '最早'} 至 ${rangeEnd || '最新'}`
+      : '全部月份'
 
   const handleTypeFilter = (next: TypeFilter) => {
     setTypeFilter(next)
@@ -396,6 +443,50 @@ export function Transactions({
     </div>
   )
 
+  const renderDayGroups = (items: LedgerTransaction[]) => (
+    <div className="day-groups">
+      {groupByDay(items).map(([date, dayItems]) => {
+        const dayExpense = dayItems
+          .filter((item) => item.type === 'expense')
+          .reduce((sum, item) => sum + expenseDeltaCents(item), 0) / 100
+        const dayIncome = dayItems
+          .filter((item) => item.type === 'income')
+          .reduce((sum, item) => sum + item.amountCents, 0) / 100
+        return (
+          <section className="day-group" key={date}>
+            <header className="day-heading">
+              <div>
+                <h2>{formatDayHeading(date)}</h2>
+                <span>{dayItems.length} 笔</span>
+              </div>
+              <div className="day-total">
+                {dayExpense > 0 ? (
+                  <span>支出 {formatMoney(dayExpense)}</span>
+                ) : null}
+                {dayIncome > 0 ? (
+                  <span className="is-income">
+                    收入 {formatMoney(dayIncome)}
+                  </span>
+                ) : null}
+              </div>
+            </header>
+            <div className="card day-card">
+              {dayItems.map((transaction) => (
+                <TransactionRow
+                  key={transaction.id}
+                  transaction={transaction}
+                  projects={projects}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              ))}
+            </div>
+          </section>
+        )
+      })}
+    </div>
+  )
+
   if (transactions.length === 0) {
     return (
       <div className="page-stack transactions-page">
@@ -417,40 +508,107 @@ export function Transactions({
         onIgnore={onIgnoreCapture}
       />
 
-      <section className="card ledger-summary" aria-label="本月流水摘要">
+      <section
+        className="card global-search-panel"
+        aria-label="全局搜索与日期范围"
+      >
+        <label className="search-box global-search-box">
+          <Search size={16} aria-hidden />
+          <span className="sr-only">在所有月份中搜索流水</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索备注、金额、分类、账户或项目"
+          />
+        </label>
+
+        <div
+          className={`date-range${rangeInvalid ? ' is-invalid' : ''}`}
+          role="group"
+          aria-label="日期范围"
+        >
+          <CalendarRange size={15} aria-hidden />
+          <label className="date-range-field">
+            <span className="date-range-label">开始</span>
+            <input
+              type="date"
+              value={rangeStart}
+              max={rangeEnd || undefined}
+              onChange={(event) => setRangeStart(event.target.value)}
+              aria-label="开始日期"
+            />
+          </label>
+          <span className="date-range-sep" aria-hidden>
+            至
+          </span>
+          <label className="date-range-field">
+            <span className="date-range-label">结束</span>
+            <input
+              type="date"
+              value={rangeEnd}
+              min={rangeStart || undefined}
+              onChange={(event) => setRangeEnd(event.target.value)}
+              aria-label="结束日期"
+            />
+          </label>
+        </div>
+
+        {isGlobal ? (
+          <div className="global-scope">
+            <span>
+              {rangeStart || rangeEnd
+                ? `范围：${globalScopeLabel}`
+                : '正在全部月份中查找'}
+              {query.trim() ? ' · 关键词' : ''}
+            </span>
+            <button
+              type="button"
+              className="button ghost global-scope-exit"
+              onClick={clearGlobalScope}
+            >
+              返回按月查看
+            </button>
+          </div>
+        ) : null}
+      </section>
+
+      {rangeInvalid ? (
+        <p className="global-search-warning" role="alert">
+          结束日期不能早于开始日期
+        </p>
+      ) : null}
+
+      <section
+        className="card ledger-summary"
+        aria-label={isGlobal ? '筛选结果摘要' : '本月流水摘要'}
+      >
         <div className="summary-cell">
-          <span>本月收入</span>
-          <strong className="is-income">{formatMoney(totals.income)}</strong>
+          <span>{isGlobal ? '合计收入' : '本月收入'}</span>
+          <strong className="is-income">
+            {formatMoney(summaryTotals.income)}
+          </strong>
         </div>
         <div className="summary-cell">
-          <span>本月支出</span>
-          <strong>{formatMoney(totals.expense)}</strong>
+          <span>{isGlobal ? '合计支出' : '本月支出'}</span>
+          <strong>{formatMoney(summaryTotals.expense)}</strong>
         </div>
         <div className="summary-cell">
-          <span>本月结余</span>
-          <strong className={totals.balance < 0 ? 'is-negative' : ''}>
-            {formatSignedMoney(totals.balance)}
+          <span>{isGlobal ? '合计结余' : '本月结余'}</span>
+          <strong
+            className={summaryTotals.balance < 0 ? 'is-negative' : ''}
+          >
+            {formatSignedMoney(summaryTotals.balance)}
           </strong>
         </div>
         <div className="summary-cell summary-cell--count">
-          <span>记录</span>
-          <strong>{monthTransactions.length} 笔</strong>
+          <span>{isGlobal ? '结果' : '记录'}</span>
+          <strong>{summaryTransactions.length} 笔</strong>
         </div>
       </section>
 
       <section className="card filter-panel" aria-label="筛选流水">
         <div className="filter-row">
-          <label className="search-box">
-            <Search size={16} aria-hidden />
-            <span className="sr-only">搜索流水</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索备注或分类"
-            />
-          </label>
-
           <div className="type-filter" role="group" aria-label="收支类型">
             {(
               [
@@ -561,7 +719,9 @@ export function Transactions({
 
       <div className="result-meta">
         <span>
-          {monthLabel(monthKey)} · {hasFilters ? '筛选结果' : '全部流水'}
+          {isGlobal
+            ? `${globalScopeLabel} · ${query.trim() ? '搜索结果' : '筛选结果'}`
+            : `${monthLabel(monthKey)} · ${hasFilters ? '筛选结果' : '全部流水'}`}
         </span>
         <span>共 {filtered.length} 笔</span>
       </div>
@@ -575,9 +735,11 @@ export function Transactions({
             {hasFilters ? '没有找到符合条件的流水' : '这个月的账页还是空白'}
           </h2>
           <p>
-            {hasFilters
-              ? '换一个关键词，或清空筛选再看看。'
-              : '从一笔早餐、一趟地铁开始，账本就有了生活的形状。'}
+            {isGlobal
+              ? '换个关键词或日期范围再试试。'
+              : hasFilters
+                ? '换一个关键词，或清空筛选再看看。'
+                : '从一笔早餐、一趟地铁开始，账本就有了生活的形状。'}
           </p>
           {hasFilters ? (
             <button type="button" className="button secondary" onClick={resetFilters}>
@@ -590,48 +752,32 @@ export function Transactions({
             </button>
           )}
         </section>
-      ) : (
-        <div className="day-groups">
-          {grouped.map(([date, items]) => {
-            const dayExpense = items
-              .filter((item) => item.type === 'expense')
-              .reduce((sum, item) => sum + expenseDeltaCents(item), 0) / 100
-            const dayIncome = items
-              .filter((item) => item.type === 'income')
-              .reduce((sum, item) => sum + item.amountCents, 0) / 100
-            return (
-              <section className="day-group" key={date}>
-                <header className="day-heading">
-                  <div>
-                    <h2>{formatDayHeading(date)}</h2>
-                    <span>{items.length} 笔</span>
-                  </div>
-                  <div className="day-total">
-                    {dayExpense > 0 ? (
-                      <span>支出 {formatMoney(dayExpense)}</span>
-                    ) : null}
-                    {dayIncome > 0 ? (
-                      <span className="is-income">
-                        收入 {formatMoney(dayIncome)}
-                      </span>
-                    ) : null}
-                  </div>
-                </header>
-                <div className="card day-card">
-                  {items.map((transaction) => (
-                    <TransactionRow
-                      key={transaction.id}
-                      transaction={transaction}
-                      projects={projects}
-                      onEdit={onEdit}
-                      onDelete={onDelete}
-                    />
-                  ))}
+      ) : isGlobal ? (
+        <div className="month-groups">
+          {monthGroups.map((group) => (
+            <section className="month-group" key={group.month}>
+              <header className="month-heading">
+                <div>
+                  <h2>{monthLabel(group.month)}</h2>
+                  <span>{group.items.length} 笔</span>
                 </div>
-              </section>
-            )
-          })}
+                <div className="day-total">
+                  {group.totals.expense > 0 ? (
+                    <span>支出 {formatMoney(group.totals.expense)}</span>
+                  ) : null}
+                  {group.totals.income > 0 ? (
+                    <span className="is-income">
+                      收入 {formatMoney(group.totals.income)}
+                    </span>
+                  ) : null}
+                </div>
+              </header>
+              {renderDayGroups(group.items)}
+            </section>
+          ))}
         </div>
+      ) : (
+        renderDayGroups(filtered)
       )}
     </div>
   )
