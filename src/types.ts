@@ -57,11 +57,31 @@ export interface ReminderSettings {
 /** How the daily budget is derived for one month. */
 export type DailyBudgetMode = 'off' | 'auto' | 'manual'
 
+/** One recorded change to a month's effective budget. */
+export interface BudgetAdjustment {
+  id: string
+  /** ISO timestamp of when the change was recorded. */
+  at: string
+  beforeCents: number
+  afterCents: number
+  /** afterCents - beforeCents; positive is an increase. */
+  deltaCents: number
+  /** Why the budget changed. Every new adjustment needs one. */
+  note: string
+  /** "adjust" is a live change; "replan" rewrites the month's baseline. */
+  kind: 'adjust' | 'replan'
+}
+
 /** A budget plan belongs to one concrete month; months never share values. */
 export interface MonthBudget {
   /** YYYY-MM */
   month: string
+  /** The amount currently in force. Every surface reads this number. */
   amountCents: number
+  /** The amount originally planned; absent on older records. */
+  baseAmountCents?: number
+  /** Append-only history of amount changes, oldest first. */
+  adjustments?: BudgetAdjustment[]
   dailyMode: DailyBudgetMode
   /** Manual daily amounts, keyed by calendar day ("1" … "31"). */
   dailyAmountsCents?: Record<string, number>
@@ -157,6 +177,11 @@ export interface DailyBudgetStatus {
 export interface MonthBudgetMetrics {
   monthKey: string
   amountCents: number
+  /** The month's original plan; equals amountCents when never adjusted. */
+  baseAmountCents: number
+  /** amountCents - baseAmountCents. */
+  adjustedDeltaCents: number
+  adjustments: BudgetAdjustment[]
   spentCents: number
   remainingCents: number
   ratio: number

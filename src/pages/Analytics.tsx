@@ -42,6 +42,10 @@ import {
   topWeekdaySpending,
 } from '../lib/utils'
 import { getCategory } from '../lib/data'
+import {
+  formatAdjustmentTime,
+  summarizeAdjustments,
+} from '../lib/budgetLabels'
 import type {
   LedgerTransaction,
   MonthBudgetMetrics,
@@ -114,6 +118,8 @@ export function Analytics({
   const projectExpense = spend.projectCents / 100
   const budget = budgetMetrics.amountCents / 100
   const daily = budgetMetrics.daily
+  const adjustments = budgetMetrics.adjustments
+  const adjustmentSummary = summarizeAdjustments(adjustments)
   const isCurrent = isCurrentMonth(monthKey)
   const sortedCategoryBudgets = [...budgetMetrics.categories].sort(
     (left, right) => right.ratio - left.ratio,
@@ -390,6 +396,64 @@ export function Analytics({
           ) : null}
         </article>
       </div>
+
+      {adjustments.length > 0 ? (
+        <article className="card budget-adjust-card" aria-labelledby="budget-adjust-heading">
+          <div className="card-head">
+            <div>
+              <p className="card-kicker">BUDGET CHANGES</p>
+              <h2 id="budget-adjust-heading">预算调整记录</h2>
+              <p className="card-sub">
+                原定 {formatMoney(budgetMetrics.baseAmountCents / 100)}，当前{' '}
+                {formatMoney(budgetMetrics.amountCents / 100)}，共{' '}
+                {adjustments.length} 次调整。
+              </p>
+            </div>
+            <span
+              className={`budget-adjust-net ${
+                adjustmentSummary.netCents > 0 ? 'is-up' : 'is-down'
+              }`}
+            >
+              {adjustmentSummary.netCents >= 0 ? '净上调' : '净下调'}{' '}
+              {formatMoney(Math.abs(adjustmentSummary.netCents) / 100)}
+            </span>
+          </div>
+
+          <div className="budget-adjust-stats">
+            <span>
+              上调 <strong>{adjustmentSummary.up}</strong> 次
+            </span>
+            <span>
+              下调 <strong>{adjustmentSummary.down}</strong> 次
+            </span>
+            <span>
+              当前预算 <strong>{formatMoney(budgetMetrics.amountCents / 100)}</strong>
+            </span>
+          </div>
+
+          <ul className="budget-adjust-log">
+            {[...adjustments].reverse().map((entry) => (
+              <li key={entry.id}>
+                <span className="budget-adjust-time">
+                  {formatAdjustmentTime(entry.at)}
+                </span>
+                <span className="budget-adjust-flow">
+                  {formatMoney(entry.beforeCents / 100, false)} →{' '}
+                  {formatMoney(entry.afterCents / 100, false)}
+                </span>
+                <em className={entry.deltaCents > 0 ? 'is-up' : 'is-down'}>
+                  {entry.deltaCents > 0 ? '上调' : '下调'}{' '}
+                  {formatMoney(Math.abs(entry.deltaCents) / 100, false)}
+                </em>
+                <small>
+                  {entry.note || '未填写原因'}
+                  {entry.kind === 'replan' ? ' · 重新制定' : ''}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </article>
+      ) : null}
 
       <RangeBudgetPanel
         metrics={rangeMetrics}

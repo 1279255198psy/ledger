@@ -134,6 +134,16 @@ export function Sidebar({
         <p>
           已用 {formatMoney(expense, false)} / {formatMoney(budget, false)}
           {sourceTag ? <span className="sidebar-budget-tag">{sourceTag}</span> : null}
+          {budgetMetrics.adjustments.length > 0 ? (
+            <span
+              className="sidebar-budget-tag sidebar-budget-tag--adjust"
+              title={`原定 ${formatMoney(
+                budgetMetrics.baseAmountCents / 100,
+              )} · 已调整 ${budgetMetrics.adjustments.length} 次`}
+            >
+              已调整
+            </span>
+          ) : null}
         </p>
         {showDaily ? (
           <div

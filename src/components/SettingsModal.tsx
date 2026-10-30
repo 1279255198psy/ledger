@@ -13,6 +13,7 @@ import {
   ExternalLink,
   FileSpreadsheet,
   Github,
+  History,
   Inbox,
   Info,
   Moon,
@@ -34,6 +35,7 @@ import { Modal } from './Modal'
 import { AccountSettings } from './AccountSettings'
 import { CategorySettings } from './CategorySettings'
 import { BudgetSettings } from './BudgetSettings'
+import { ChangelogSection } from './ChangelogSection'
 import { ReminderSettingsSection } from './ReminderSettingsSection'
 import { GuideSection } from './GuideSection'
 import { CaptureDebugSection } from './CaptureDebugSection'
@@ -129,6 +131,7 @@ type SettingsPageId =
   | 'sync'
   | 'data'
   | 'about'
+  | 'changelog'
 
 interface SettingsPageMeta {
   id: SettingsPageId
@@ -212,6 +215,14 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
   },
 ]
 
+/** Reached from 关于账页; kept out of the nav list so it stays contextual. */
+const CHANGELOG_PAGE: SettingsPageMeta = {
+  id: 'changelog',
+  label: '历史更新',
+  detail: '每个版本改了什么',
+  icon: History,
+}
+
 export function SettingsModal({
   open,
   focusSection,
@@ -275,7 +286,9 @@ export function SettingsModal({
   // nav stays beside the content and the first page is always visible.
   const activePage: SettingsPageId = page ?? 'appearance'
   const activeMeta =
-    settingsPages.find((item) => item.id === activePage) ?? settingsPages[0]
+    activePage === CHANGELOG_PAGE.id
+      ? CHANGELOG_PAGE
+      : settingsPages.find((item) => item.id === activePage) ?? settingsPages[0]
 
   useEffect(() => {
     if (!open) return
@@ -443,8 +456,12 @@ export function SettingsModal({
             <button
               type="button"
               className="settings-back"
-              onClick={() => setPage(null)}
-              aria-label="返回设置列表"
+              onClick={() =>
+                setPage(activePage === 'changelog' ? 'about' : null)
+              }
+              aria-label={
+                activePage === 'changelog' ? '返回关于账页' : '返回设置列表'
+              }
             >
               <ChevronLeft size={19} />
             </button>
@@ -857,6 +874,8 @@ export function SettingsModal({
               </section>
             ) : null}
 
+            {activePage === 'changelog' ? <ChangelogSection /> : null}
+
             {activePage === 'about' ? (
               <>
                 <section className="settings-section">
@@ -871,8 +890,8 @@ export function SettingsModal({
                     </p>
                   </div>
 
-                  {updater.supported ? (
-                    <div className="data-actions">
+                  <div className="data-actions">
+                    {updater.supported ? (
                       <button
                         type="button"
                         className="data-row"
@@ -893,8 +912,25 @@ export function SettingsModal({
                           <small>{updateActionDetail}</small>
                         </span>
                       </button>
-                    </div>
-                  ) : null}
+                    ) : null}
+                    <button
+                      type="button"
+                      className="data-row"
+                      onClick={() => setPage('changelog')}
+                    >
+                      <span className="data-row-icon">
+                        <History size={18} />
+                      </span>
+                      <span className="data-row-text">
+                        <strong>历史更新</strong>
+                        <small>查看每个版本改了什么</small>
+                      </span>
+                      <ChevronRight
+                        size={16}
+                        className="data-row-external"
+                      />
+                    </button>
+                  </div>
                 </section>
 
                 <section className="settings-section">

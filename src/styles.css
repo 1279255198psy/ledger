@@ -12529,3 +12529,110 @@ a {
     justify-content: flex-end;
   }
 }
+
+/* ---------- Changelog ---------- */
+
+.changelog-section .settings-heading {
+  margin-bottom: 14px;
+}
+
+.changelog-list {
+  overflow: hidden;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.changelog-entry {
+  padding: 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.changelog-entry:first-child {
+  border-top: 0;
+}
+
+.changelog-entry.is-current {
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+
+.changelog-entry-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.changelog-entry-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.changelog-entry-title strong {
+  color: var(--ink);
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.changelog-current {
+  padding: 1px 7px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  font-size: calc(8.5px * var(--font-scale));
+  font-weight: 600;
+}
+
+.changelog-title {
+  color: var(--ink-muted);
+  font-size: calc(10px * var(--font-scale));
+}
+
+.changelog-entry time {
+  color: var(--ink-faint);
+  font-size: calc(9.5px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.changelog-entry ul {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-left: 16px;
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: calc(10.5px * var(--font-scale));
+  line-height: 1.65;
+}
+
+.changelog-entry li::marker {
+  color: var(--ink-faint);
+}
+
+.changelog-empty {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: calc(10px * var(--font-scale));
+}
+
+.changelog-section .data-actions {
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .changelog-entry {
+    padding: 14px 13px;
+  }
+
+  .changelog-entry-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}

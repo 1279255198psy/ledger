@@ -1,4 +1,5 @@
 import type {
+  BudgetAdjustment,
   BudgetBook,
   CategoryBudgetStatus,
   DailyBudgetDay,
@@ -16,6 +17,7 @@ import {
   getTopLevelCategories,
 } from './categories'
 import { toPostings } from './allocations'
+import { splitEvenlyCents } from './budgetForm'
 import {
   currentMonthKey,
   dateFromKey,
@@ -103,6 +105,16 @@ export function rangeOverlapsMonth(
   return range.startDate <= endDate && range.endDate >= startDate
 }
 
+export function newBudgetAdjustmentId(): string {
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+    return cryptoApi.randomUUID()
+  }
+  return `adjust-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`
+}
+
 export function newRangeBudgetId(): string {
   const cryptoApi = globalThis.crypto
   if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
@@ -140,14 +152,104 @@ export function resolveMonthBudget(
     }
   }
   if (inheritedKey) {
+    const inherited = book[inheritedKey]
+    // Amount and daily rules carry forward, but one month's adjustment log and
+    // baseline must never be displayed as another month's history.
     return {
-      budget: { ...book[inheritedKey], month: monthKey },
+      budget: {
+        month: monthKey,
+        amountCents: inherited.amountCents,
+        dailyMode: inherited.dailyMode,
+        ...(inherited.dailyAmountsCents
+          ? { dailyAmountsCents: inherited.dailyAmountsCents }
+          : {}),
+        ...(inherited.categoryBudgetsCents
+          ? { categoryBudgetsCents: inherited.categoryBudgetsCents }
+          : {}),
+      },
       source: 'inherited',
       sourceMonth: inheritedKey,
     }
   }
 
   return { budget: makeDefaultBudget(monthKey), source: 'default' }
+}
+
+export interface BudgetAdjustInput {
+  /** The new amount that takes effect immediately. */
+  amountCents: number
+  /** Why it changed; every new entry is expected to carry one. */
+  note: string
+  kind?: BudgetAdjustment['kind']
+  /** ISO timestamp; defaults to now. */
+  at?: string
+  /** Move the original baseline to the new amount (a full replan). */
+  rebase?: boolean
+}
+
+/**
+ * The single write path for changing a month's amount. It appends one log
+ * entry per real change, so no surface can change the budget silently.
+ */
+export function applyBudgetAdjustment(
+  budget: MonthBudget,
+  input: BudgetAdjustInput,
+): MonthBudget {
+  const amountCents = Math.round(input.amountCents)
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return budget
+
+  const baseAmountCents = input.rebase
+    ? amountCents
+    : budget.baseAmountCents ?? budget.amountCents
+
+  if (amountCents === budget.amountCents) {
+    return { ...budget, baseAmountCents }
+  }
+
+  const adjustment: BudgetAdjustment = {
+    id: newBudgetAdjustmentId(),
+    at: input.at ?? new Date().toISOString(),
+    beforeCents: budget.amountCents,
+    afterCents: amountCents,
+    deltaCents: amountCents - budget.amountCents,
+    note: input.note.trim(),
+    kind: input.kind ?? 'adjust',
+  }
+
+  return {
+    ...budget,
+    amountCents,
+    baseAmountCents,
+    adjustments: [...(budget.adjustments ?? []), adjustment],
+  }
+}
+
+/**
+ * Rebuilds the remaining manual daily amounts after a live budget change, so
+ * lowering the month total does not leave later days planning the old money.
+ */
+export function rescheduleRemainingDailyAmounts(
+  metrics: MonthBudgetMetrics,
+  nextAmountCents: number,
+): Record<string, number> | undefined {
+  const daily = metrics.daily
+  if (!daily || !daily.isLive) return undefined
+  const todayIndex = daily.today - 1
+  if (todayIndex < 0 || todayIndex >= daily.days.length) return undefined
+
+  const spentBeforeToday = daily.days
+    .slice(0, todayIndex)
+    .reduce((sum, entry) => sum + entry.spentCents, 0)
+  const remainingDays = daily.days.length - todayIndex
+  const remainingCents = Math.max(0, nextAmountCents - spentBeforeToday)
+  const split = splitEvenlyCents(remainingCents, remainingDays)
+
+  const result: Record<string, number> = {}
+  daily.days.forEach((entry, index) => {
+    result[String(index + 1)] =
+      index < todayIndex ? entry.budgetCents : split[index - todayIndex] ?? 0
+  })
+  return result
 }
 
 function normalizeDailyAmounts(
@@ -222,6 +324,52 @@ function normalizeCategoryBudgets(
   return Object.keys(result).length > 0 ? result : undefined
 }
 
+function normalizeBudgetAdjustments(
+  value: unknown,
+): BudgetAdjustment[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const seen = new Set<string>()
+  const result: BudgetAdjustment[] = []
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
+    const record = raw as Record<string, unknown>
+    const beforeCents = record.beforeCents
+    const afterCents = record.afterCents
+    const at =
+      typeof record.at === 'string' && !Number.isNaN(Date.parse(record.at))
+        ? record.at
+        : ''
+    if (
+      typeof beforeCents !== 'number' ||
+      !Number.isInteger(beforeCents) ||
+      beforeCents <= 0 ||
+      typeof afterCents !== 'number' ||
+      !Number.isInteger(afterCents) ||
+      afterCents <= 0 ||
+      !at
+    ) {
+      continue
+    }
+    const id =
+      typeof record.id === 'string' && record.id.trim()
+        ? record.id
+        : newBudgetAdjustmentId()
+    if (seen.has(id)) continue
+    seen.add(id)
+    result.push({
+      id,
+      at,
+      beforeCents,
+      afterCents,
+      deltaCents: afterCents - beforeCents,
+      note: typeof record.note === 'string' ? record.note.trim() : '',
+      kind: record.kind === 'replan' ? 'replan' : 'adjust',
+    })
+  }
+  if (result.length === 0) return undefined
+  return result.sort((left, right) => left.at.localeCompare(right.at))
+}
+
 /** Normalizes one month's plan; null means the record cannot be trusted. */
 export function normalizeMonthBudget(
   value: unknown,
@@ -249,10 +397,18 @@ export function normalizeMonthBudget(
   const categoryBudgetsCents = normalizeCategoryBudgets(
     record.categoryBudgetsCents,
   )
+  const adjustments = normalizeBudgetAdjustments(record.adjustments)
+  const rawBase = record.baseAmountCents
+  const baseAmountCents =
+    typeof rawBase === 'number' && Number.isInteger(rawBase) && rawBase > 0
+      ? rawBase
+      : adjustments?.[0]?.beforeCents ?? amountCents
 
   return {
     month: monthKey,
     amountCents,
+    baseAmountCents,
+    ...(adjustments ? { adjustments } : {}),
     dailyMode,
     ...(dailyAmountsCents ? { dailyAmountsCents } : {}),
     ...(categoryBudgetsCents ? { categoryBudgetsCents } : {}),
@@ -614,10 +770,14 @@ export function getMonthBudgetMetrics(
     getDailyCategorySpendCents(transactions, startDate, endDate, countedProjectIds),
   )
   const categoryBudgetTotalCents = sumCategoryBudgets(categories)
+  const baseAmountCents = budget.baseAmountCents ?? budget.amountCents
 
   return {
     monthKey,
     amountCents: budget.amountCents,
+    baseAmountCents,
+    adjustedDeltaCents: budget.amountCents - baseAmountCents,
+    adjustments: budget.adjustments ?? [],
     spentCents,
     remainingCents,
     ratio:

@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import {
   AlertTriangle,
   ArrowDownLeft,
   ArrowRight,
+  ArrowUpDown,
   ArrowUpRight,
   BellRing,
   CalendarRange,
@@ -12,6 +14,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { BalanceSummary } from '../components/BalanceSummary'
+import { BudgetAdjustDialog } from '../components/BudgetAdjustDialog'
 import { CategoryIcon } from '../components/CategoryIcon'
 import { CategoryBars } from '../components/charts/CategoryBars'
 import { RangeBudgetPanel } from '../components/RangeBudgetPanel'
@@ -68,6 +71,12 @@ interface OverviewProps {
   onDelete: (id: string) => void
   onChangeView: (view: View) => void
   onOpenBudget: () => void
+  onBudgetAdjust: (
+    monthKey: string,
+    amountCents: number,
+    note: string,
+    rescheduleDaily: boolean,
+  ) => void
   onOpenRangeBudget: () => void
   onOpenOpeningBalance: () => void
   onLoadSample: () => void
@@ -140,6 +149,7 @@ export function Overview({
   onDelete,
   onChangeView,
   onOpenBudget,
+  onBudgetAdjust,
   onOpenRangeBudget,
   onOpenOpeningBalance,
   onLoadSample,
@@ -149,6 +159,8 @@ export function Overview({
   onOpenGuide,
   onDismissOnboarding,
 }: OverviewProps) {
+  const [adjustOpen, setAdjustOpen] = useState(false)
+
   if (transactions.length === 0) {
     return (
       <div className="page-stack overview-page">
@@ -335,21 +347,55 @@ export function Overview({
                 <p className="budget-source-note">{budgetSourceNote}</p>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="icon-button icon-button--small"
-              onClick={onOpenBudget}
-              aria-label="调整预算"
-              title="调整预算"
-            >
-              <PencilLine size={16} />
-            </button>
+            <div className="budget-card-actions">
+              {isCurrent ? (
+                <button
+                  type="button"
+                  className="budget-adjust-trigger"
+                  onClick={() => setAdjustOpen(true)}
+                >
+                  <ArrowUpDown size={14} />
+                  调整本月预算
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="icon-button icon-button--small"
+                onClick={onOpenBudget}
+                aria-label="编辑预算"
+                title="编辑预算"
+              >
+                <PencilLine size={16} />
+              </button>
+            </div>
           </div>
 
           <div className="budget-figure">
             <strong>{formatPercent(ratio * 100)}</strong>
-            <span>生活支出占比 · 月预算 {formatMoney(budget)}</span>
+            <span>
+              生活支出占比 ·{' '}
+              {budgetMetrics.adjustments.length > 0 ? '当前预算' : '月预算'}{' '}
+              {formatMoney(budget)}
+            </span>
           </div>
+
+          <p className="budget-adjust-meta">
+            原定预算 {formatMoney(budgetMetrics.baseAmountCents / 100)}
+            {budgetMetrics.adjustments.length > 0 ? (
+              <>
+                {' · '}
+                {budgetMetrics.adjustedDeltaCents < 0
+                  ? '已下调'
+                  : budgetMetrics.adjustedDeltaCents > 0
+                    ? '已上调'
+                    : '净变化'}{' '}
+                {formatMoney(Math.abs(budgetMetrics.adjustedDeltaCents) / 100)}
+                <span>共 {budgetMetrics.adjustments.length} 次</span>
+              </>
+            ) : (
+              <span>尚未调整</span>
+            )}
+          </p>
 
           <div
             className="budget-meter"
@@ -754,6 +800,17 @@ export function Overview({
           </div>
         )}
       </section>
+
+      <BudgetAdjustDialog
+        open={adjustOpen}
+        monthKey={monthKey}
+        metrics={budgetMetrics}
+        onClose={() => setAdjustOpen(false)}
+        onConfirm={(amountCents, note, rescheduleDaily) => {
+          onBudgetAdjust(monthKey, amountCents, note, rescheduleDaily)
+          setAdjustOpen(false)
+        }}
+      />
     </div>
   )
 }

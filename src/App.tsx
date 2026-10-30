@@ -76,9 +76,12 @@ import {
   saveTransactions,
 } from './lib/storage'
 import {
+  applyBudgetAdjustment,
   getMonthBudgetMetrics,
   getRangeBudgetMetrics,
   rangeOverlapsMonth,
+  rescheduleRemainingDailyAmounts,
+  resolveMonthBudget,
 } from './lib/budget'
 import {
   DEFAULT_CATEGORIES,
@@ -1251,6 +1254,38 @@ export default function App() {
     showToast(`${monthLabel(nextBudget.month)}预算已更新`)
   }
 
+  const handleBudgetAdjust = (
+    targetMonth: string,
+    amountCents: number,
+    note: string,
+    rescheduleDaily: boolean,
+  ) => {
+    setBudgets((current) => {
+      const resolved = resolveMonthBudget(current, targetMonth).budget
+      let next = resolved
+      if (rescheduleDaily && resolved.dailyMode === 'manual') {
+        const metrics = getMonthBudgetMetrics(
+          transactions,
+          targetMonth,
+          current,
+          countedProjectIds,
+        )
+        const dailyAmountsCents = rescheduleRemainingDailyAmounts(
+          metrics,
+          amountCents,
+        )
+        if (dailyAmountsCents) next = { ...next, dailyAmountsCents }
+      }
+      next = applyBudgetAdjustment(next, {
+        amountCents,
+        note,
+        kind: 'adjust',
+      })
+      return { ...current, [targetMonth]: next }
+    })
+    showToast(`${monthLabel(targetMonth)}预算已调整，原因已记录`)
+  }
+
   const handleRangeSave = (nextRange: RangeBudget) => {
     setBudgetRanges((current) => {
       const exists = current.some((item) => item.id === nextRange.id)
@@ -1681,6 +1716,7 @@ export default function App() {
               setSettingsFocus('budget')
               setSettingsOpen(true)
             }}
+            onBudgetAdjust={handleBudgetAdjust}
             onOpenRangeBudget={() => {
               setSettingsFocus('budget-ranges')
               setSettingsOpen(true)

@@ -411,6 +411,13 @@ function bumpVersions(current, target) {
   updateCargoLock(target);
   updateReadme(current, target);
   log('  ✓ package.json / package-lock.json / tauri.conf.json / Cargo.toml / Cargo.lock / README.md 已更新');
+  log('→ 写入 CHANGELOG.md …');
+  run(process.execPath, [
+    join(ROOT, 'scripts', 'build-changelog.mjs'),
+    '--version',
+    target,
+  ]);
+  log('  ✓ 历史更新已更新');
 }
 
 function buildFrontend() {

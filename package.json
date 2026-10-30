@@ -1,7 +1,7 @@
 {
   "name": "zhangye-ledger",
   "private": true,
-  "version": "3.5.3",
+  "version": "3.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -11,6 +11,8 @@
     "desktop:build": "tauri build",
     "test:storage": "esbuild scripts/test-storage.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/storage-test.mjs && node node_modules/.cache/storage-test.mjs",
     "test:recurring": "esbuild scripts/test-recurring.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/recurring-test.mjs && node node_modules/.cache/recurring-test.mjs",
+    "test:budget": "esbuild scripts/test-budget.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/budget-test.mjs && node node_modules/.cache/budget-test.mjs",
+    "changelog": "node scripts/build-changelog.mjs",
     "release": "node scripts/release.mjs"
   },
   "dependencies": {

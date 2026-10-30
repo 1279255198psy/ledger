@@ -5,12 +5,14 @@ import { CategoryIcon } from './CategoryIcon'
 import { RangeBudgetSettings } from './RangeBudgetSettings'
 import { getCurrency } from '../lib/currency'
 import {
+  applyBudgetAdjustment,
   getBudgetWarnings,
   getDailyCategorySpendCents,
   getMonthBudgetMetrics,
   monthDateBounds,
   resolveMonthBudget,
 } from '../lib/budget'
+import { formatAdjustmentTime } from '../lib/budgetLabels'
 import {
   parseCents,
   scaleValuesToTotalCents,
@@ -205,6 +207,13 @@ export function BudgetSettings({
     [draft, selectedMonth, topCategories],
   )
 
+  const adjustments = resolved.budget.adjustments ?? []
+  const baseAmountCents =
+    resolved.budget.baseAmountCents ?? resolved.budget.amountCents
+  const amountChanged =
+    built.budget !== null &&
+    built.budget.amountCents !== resolved.budget.amountCents
+
   const preview = useMemo(() => {
     if (!built.budget) return null
     return getMonthBudgetMetrics(
@@ -347,7 +356,30 @@ export function BudgetSettings({
       return
     }
     setError('')
-    onSave(built.budget)
+
+    // Settings own the original plan: changing it needs no reason. Only when
+    // live adjustments exist does the new plan also close the old adjustment
+    // chain, with an automatic note instead of a user-typed one.
+    const historyBase: MonthBudget = {
+      ...built.budget,
+      amountCents: resolved.budget.amountCents,
+      baseAmountCents,
+      ...(adjustments.length > 0 ? { adjustments } : {}),
+    }
+    const next = !amountChanged
+      ? historyBase
+      : adjustments.length > 0
+        ? applyBudgetAdjustment(historyBase, {
+            amountCents: built.budget.amountCents,
+            note: '在设置中重新设定原定预算',
+            kind: 'replan',
+            rebase: true,
+          })
+        : {
+            ...built.budget,
+            baseAmountCents: built.budget.amountCents,
+          }
+    onSave(next)
   }
 
   const sourceNote =
@@ -430,6 +462,39 @@ export function BudgetSettings({
         ) : null}
       </div>
 
+      {adjustments.length > 0 ? (
+        <div className="budget-adjust-history">
+          <div className="budget-adjust-history-head">
+            <span>
+              原定 {formatMoney(baseAmountCents / 100)} · 当前{' '}
+              {formatMoney(resolved.budget.amountCents / 100)}
+            </span>
+            <em>{adjustments.length} 次调整</em>
+          </div>
+          <ul>
+            {[...adjustments].reverse().map((entry) => (
+              <li key={entry.id}>
+                <span className="budget-adjust-time">
+                  {formatAdjustmentTime(entry.at)}
+                </span>
+                <span className="budget-adjust-flow">
+                  {formatMoney(entry.beforeCents / 100, false)} →{' '}
+                  {formatMoney(entry.afterCents / 100, false)}
+                </span>
+                <em className={entry.deltaCents > 0 ? 'is-up' : 'is-down'}>
+                  {entry.deltaCents > 0 ? '上调' : '下调'}{' '}
+                  {formatMoney(Math.abs(entry.deltaCents) / 100, false)}
+                </em>
+                <small>
+                  {entry.note || '未填写原因'}
+                  {entry.kind === 'replan' ? ' · 重新制定' : ''}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {preview ? (
         <div className="budget-preview">
           <div className="budget-preview-copy">
@@ -461,6 +526,15 @@ export function BudgetSettings({
               </p>
             </div>
           </div>
+          <p className="budget-base-line">
+            原定预算 <strong>{formatMoney(baseAmountCents / 100)}</strong>
+            {adjustments.length > 0 ? (
+              <>
+                {' · '}当前生效{' '}
+                <strong>{formatMoney(resolved.budget.amountCents / 100)}</strong>
+              </>
+            ) : null}
+          </p>
           <label className="budget-input budget-input--wide">
             <span>{symbol}</span>
             <input
@@ -480,6 +554,9 @@ export function BudgetSettings({
               aria-label="月度预算金额"
             />
           </label>
+          <p className="budget-mode-note">
+            这里修改的是原定预算，不需要填写原因，保存后当前预算也会变为这个金额。只想临时上调或下调时，请回到概览使用「调整本月预算」，原定预算会保持不变并留下记录。
+          </p>
         </section>
 
         <section className="budget-block">
