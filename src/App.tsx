@@ -11,6 +11,19 @@ import { MobileNav } from './components/MobileNav'
 import { TransactionModal } from './components/TransactionModal'
 import { RecurringRulesModal } from './components/RecurringRulesModal'
 import { SettingsModal } from './components/SettingsModal'
+import { ImportWizard } from './components/ImportWizard'
+import { transactionsToExchangeCsv } from './lib/exchange/export'
+import {
+  clearLastImport,
+  loadLastImport,
+  removeImportBatch,
+  saveLastImport,
+  unusedCreatedAccounts,
+  unusedCreatedCategories,
+  type LastImport,
+} from './lib/exchange/batch'
+import { getAdapter } from './lib/exchange/adapters'
+import type { ImportPlan } from './lib/exchange/types'
 import { UpdateDialog } from './components/UpdateDialog'
 import { useUpdater } from './hooks/useUpdater'
 import { useReminderScheduler } from './hooks/useReminderScheduler'
@@ -118,7 +131,6 @@ import {
   monthLabel,
   monthOfDateKey,
   shiftMonth,
-  transactionsToCsv,
 } from './lib/utils'
 import type {
   Account,
@@ -223,6 +235,8 @@ export default function App() {
     useState<RecurringPending | null>(null)
   const [returnToRules, setReturnToRules] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [lastImport, setLastImport] = useState<LastImport | null>(loadLastImport)
   const [settingsFocus, setSettingsFocus] = useState<
     | 'opening-balance'
     | 'budget'
@@ -1500,8 +1514,12 @@ export default function App() {
   }
 
   const handleExportCsv = async () => {
-    const csv = `﻿${transactionsToCsv(
-      [...transactions].sort((a, b) => b.date.localeCompare(a.date)),
+    const sorted = [...transactions].sort((a, b) => b.date.localeCompare(a.date))
+    const csv = `﻿${transactionsToExchangeCsv(
+      sorted,
+      categories,
+      accounts,
+      projects,
     )}`
     try {
       const saved = await saveTextFile({
@@ -1573,6 +1591,102 @@ export default function App() {
         'error',
       )
     }
+  }
+
+  /**
+   * Commits one import batch. The caller has already shown a preview; this
+   * only writes, remembers the batch for undo, and reports the count.
+   */
+  const handleImportCommit = async (plan: ImportPlan) => {
+    await backupBefore('before-import')
+    if (plan.newCategories.length > 0) {
+      commitCategories([...categories, ...plan.newCategories])
+    }
+    if (plan.newAccounts.length > 0) {
+      commitAccounts([...accounts, ...plan.newAccounts])
+    }
+    setTransactions((current) =>
+      sortTransactions([...plan.transactions, ...current]),
+    )
+
+    const info: LastImport = {
+      batchId: plan.batchId,
+      at: new Date().toISOString(),
+      sourceLabel: getAdapter(plan.sourceId).label,
+      count: plan.transactions.length,
+      createdCategoryIds: plan.newCategories.map((category) => category.id),
+      createdAccountIds: plan.newAccounts.map((account) => account.id),
+    }
+    saveLastImport(info)
+    setLastImport(info)
+    showToast(`已导入 ${plan.transactions.length} 笔流水`)
+  }
+
+  /** Removes one import batch and any categories/accounts it created alone. */
+  const handleUndoImport = async (batchId?: string): Promise<boolean> => {
+    const target = batchId ?? lastImport?.batchId
+    if (!target) return false
+    const confirmed = await confirmDesktopAction(
+      '撤销这次导入吗？这批流水会被删除，其他流水不受影响。',
+      '撤销导入',
+    )
+    if (!confirmed) return false
+
+    const nextTransactions = removeImportBatch(transactions, target)
+    const removed = transactions.length - nextTransactions.length
+    setTransactions(nextTransactions)
+
+    if (lastImport && lastImport.batchId === target) {
+      // Only drop what this batch created and nothing else still points at.
+      const budgetCategories = new Set<string>()
+      for (const month of Object.values(budgets)) {
+        for (const id of Object.keys(month.categoryBudgetsCents ?? {})) {
+          budgetCategories.add(id)
+        }
+      }
+      for (const range of budgetRanges) {
+        for (const id of Object.keys(range.categoryBudgetsCents ?? {})) {
+          budgetCategories.add(id)
+        }
+      }
+      for (const project of projects) {
+        for (const id of Object.keys(project.categoryBudgetsCents ?? {})) {
+          budgetCategories.add(id)
+        }
+      }
+      const dropCategories = unusedCreatedCategories(
+        categories,
+        nextTransactions,
+        lastImport.createdCategoryIds,
+      ).filter((id) => !budgetCategories.has(id))
+      if (dropCategories.length > 0) {
+        commitCategories(
+          categories.filter((category) => !dropCategories.includes(category.id)),
+        )
+      }
+
+      const recurringAccounts = new Set(
+        recurringRules.map((rule) => rule.template.accountId),
+      )
+      const dropAccounts = unusedCreatedAccounts(
+        accounts,
+        nextTransactions,
+        lastImport.createdAccountIds,
+      ).filter((id) => !recurringAccounts.has(id))
+      if (dropAccounts.length > 0) {
+        commitAccounts(
+          accounts.filter((account) => !dropAccounts.includes(account.id)),
+        )
+      }
+
+      clearLastImport()
+      setLastImport(null)
+    }
+
+    showToast(
+      removed > 0 ? `已撤销这次导入的 ${removed} 笔流水` : '没有找到这批导入的流水',
+    )
+    return true
   }
 
   const applySampleLedger = () => {
@@ -1908,9 +2022,27 @@ export default function App() {
         onExportJson={handleExportJson}
         onExportCsv={handleExportCsv}
         onImportFile={handleImportFile}
+        onOpenImport={() => {
+          setSettingsOpen(false)
+          setSettingsFocus(null)
+          setImportOpen(true)
+        }}
+        lastImport={lastImport}
+        onUndoImport={() => void handleUndoImport()}
         onReset={handleReset}
         onClear={handleClearLedger}
       />
+
+      {importOpen ? (
+        <ImportWizard
+          categories={categories}
+          accounts={accounts}
+          transactions={transactions}
+          onClose={() => setImportOpen(false)}
+          onCommit={handleImportCommit}
+          onUndo={handleUndoImport}
+        />
+      ) : null}
 
       <UpdateDialog
         updater={updater}

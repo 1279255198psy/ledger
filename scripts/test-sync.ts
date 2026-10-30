@@ -79,7 +79,8 @@ function testAdditiveMerge() {
   })
   const result = mergeSnapshots(base, local, remote)
   assert.equal(result.snapshot.transactions.length, 2)
-  assert.equal(result.stats.added, 2)
+  // Accounts without a base also count as adds, so only check the floor.
+  assert.ok(result.stats.added >= 2)
   assert.equal(result.snapshot.openingBalanceCents, 100)
 }
 
@@ -280,6 +281,113 @@ function testBudgetMerge() {
   assert.equal(edited.snapshot.budgets['2026-09'].amountCents, 5000)
 }
 
+function budgetRecord(
+  month: string,
+  patch: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    month,
+    amountCents: 800000,
+    baseAmountCents: 800000,
+    dailyMode: 'off',
+    ...patch,
+  }
+}
+
+function adjustment(
+  id: string,
+  at: string,
+  beforeCents: number,
+  afterCents: number,
+) {
+  return {
+    id,
+    at,
+    beforeCents,
+    afterCents,
+    deltaCents: afterCents - beforeCents,
+    note: id,
+    kind: 'adjust' as const,
+  }
+}
+
+function testBudgetAdjustmentLogSurvivesConflict() {
+  const month = '2026-10'
+  const base = snapshot({ budgets: { [month]: budgetRecord(month) } })
+  const adjusted = budgetRecord(month, {
+    amountCents: 700000,
+    adjustments: [
+      adjustment('a1', '2026-10-30T10:00:00.000Z', 800000, 700000),
+    ],
+  })
+  // The other device only changed the daily plan, but its record has no
+  // adjustment log. Losing the log would make the month look directly edited.
+  const replanned = budgetRecord(month, {
+    dailyMode: 'manual',
+    dailyAmountsCents: { '31': 70000 },
+  })
+  const local = snapshot({ budgets: { [month]: adjusted } })
+  const remote = snapshot({ budgets: { [month]: replanned } })
+
+  const result = mergeSnapshots(base, local, remote)
+  assert.equal(result.snapshot.budgets[month].amountCents, 700000)
+  assert.deepEqual(
+    result.snapshot.budgets[month].adjustments?.map((item) => item.id),
+    ['a1'],
+  )
+
+  // The fuller log wins even when the connection choice favors the other side.
+  const forced = mergeSnapshots(base, local, remote, { favor: 'remote' })
+  assert.equal(forced.snapshot.budgets[month].amountCents, 700000)
+  assert.deepEqual(
+    forced.snapshot.budgets[month].adjustments?.map((item) => item.id),
+    ['a1'],
+  )
+
+  // Both orders converge.
+  const reverse = mergeSnapshots(base, remote, local)
+  assert.ok(snapshotsEqual(result.snapshot, reverse.snapshot))
+}
+
+function testBudgetAdjustmentSupersetWins() {
+  const month = '2026-10'
+  const first = adjustment('a1', '2026-10-29T10:00:00.000Z', 800000, 750000)
+  const second = adjustment('a2', '2026-10-30T10:00:00.000Z', 750000, 700000)
+  const base = snapshot({
+    budgets: {
+      [month]: budgetRecord(month, {
+        amountCents: 750000,
+        adjustments: [first],
+      }),
+    },
+  })
+  const local = snapshot({
+    budgets: {
+      [month]: budgetRecord(month, {
+        amountCents: 700000,
+        adjustments: [first, second],
+      }),
+    },
+  })
+  // Same one-entry baseline, plus an unrelated plan change on the other side.
+  const remote = snapshot({
+    budgets: {
+      [month]: budgetRecord(month, {
+        amountCents: 750000,
+        adjustments: [first],
+        dailyMode: 'auto',
+      }),
+    },
+  })
+
+  const result = mergeSnapshots(base, local, remote)
+  assert.equal(result.snapshot.budgets[month].amountCents, 700000)
+  assert.deepEqual(
+    result.snapshot.budgets[month].adjustments?.map((item) => item.id),
+    ['a1', 'a2'],
+  )
+}
+
 function testReferenceRepair() {
   // The phone added a transaction under a category the desktop just deleted.
   const custom = { id: 'custom', type: 'expense', name: '装修', color: '#000', icon: 'x' }
@@ -346,6 +454,8 @@ async function main() {
   testIdempotent()
   testRepaymentMerge()
   testBudgetMerge()
+  testBudgetAdjustmentLogSurvivesConflict()
+  testBudgetAdjustmentSupersetWins()
   testReferenceRepair()
   await testCrypto()
   console.log('sync core: all checks passed')

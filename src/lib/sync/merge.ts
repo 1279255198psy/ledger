@@ -34,6 +34,11 @@ export interface MergeOptions {
 interface CollectionOptions<T extends { id: string }> extends MergeOptions {
   /** Used only to break ties; equal values fall back to a stable comparison. */
   stamp?: (item: T) => string
+  /**
+   * Settles a both-sides-changed conflict before the time or favor rules.
+   * Returning null falls through to the normal choice.
+   */
+  prefer?: (local: T, remote: T) => 'local' | 'remote' | null
 }
 
 interface CollectionResult<T> {
@@ -177,12 +182,14 @@ function mergeCollection<T extends { id: string }>(
       } else if (baseItem && sameValue(remoteItem, baseItem)) {
         chosen = localItem
       } else {
-        const side = chooseBothChanged(
-          localItem,
-          remoteItem,
-          options.stamp,
-          options.favor,
-        )
+        const side =
+          options.prefer?.(localItem, remoteItem) ??
+          chooseBothChanged(
+            localItem,
+            remoteItem,
+            options.stamp,
+            options.favor,
+          )
         chosen = side === 'local' ? localItem : remoteItem
         conflicts.push({ kind, id, choice: side })
       }
@@ -414,6 +421,39 @@ function fromBudgetEntries(entries: BudgetEntry[]): BudgetBook {
 }
 
 /**
+ * Budget adjustment logs are append-only. When one side's log contains every
+ * entry of the other's, that side has strictly more history; letting the other
+ * record win would silently turn tracked adjustments back into a plain monthly
+ * amount. This outranks an explicit favor choice for the same reason: the
+ * other record carries no extra information to preserve.
+ */
+function preferBudgetLog(
+  local: BudgetEntry,
+  remote: BudgetEntry,
+): 'local' | 'remote' | null {
+  const localIds = new Set(
+    (local.adjustments ?? []).map((entry) => entry.id),
+  )
+  const remoteIds = new Set(
+    (remote.adjustments ?? []).map((entry) => entry.id),
+  )
+  if (localIds.size === remoteIds.size) return null
+  const localCoversRemote = [...remoteIds].every((id) => localIds.has(id))
+  const remoteCoversLocal = [...localIds].every((id) => remoteIds.has(id))
+  if (localCoversRemote && !remoteCoversLocal) return 'local'
+  if (remoteCoversLocal && !localCoversRemote) return 'remote'
+  return null
+}
+
+/** The latest recorded adjustment is the best clock a budget record has. */
+function budgetStampOf(budget: BudgetEntry): string {
+  return (budget.adjustments ?? []).reduce(
+    (latest, entry) => (entry.at > latest ? entry.at : latest),
+    '',
+  )
+}
+
+/**
  * Repairs references that a merge can strand: a category deleted on one device
  * while the other added a transaction using it, a project allocation whose
  * project disappeared, or a subcategory whose parent was removed. Keeping the
@@ -618,7 +658,7 @@ export function mergeSnapshots(
     toBudgetEntries(local.budgets),
     toBudgetEntries(remote.budgets),
     'budget',
-    { favor },
+    { stamp: budgetStampOf, favor, prefer: preferBudgetLog },
   )
   const ranges = mergeCollection<RangeBudget>(
     base?.budgetRanges ?? null,

@@ -1,6 +1,7 @@
 import type {
   AllocationLine,
   Category,
+  ImportMeta,
   LedgerTransaction,
   Project,
 } from '../types'
@@ -65,6 +66,31 @@ export function isValidAllocation(value: unknown): value is AllocationLine {
   )
 }
 
+function isValidImportMeta(value: unknown): value is ImportMeta {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Partial<ImportMeta>
+  const extra = item.extra
+  return (
+    typeof item.batchId === 'string' &&
+    item.batchId.length > 0 &&
+    item.batchId.length <= 120 &&
+    typeof item.source === 'string' &&
+    item.source.length > 0 &&
+    item.source.length <= 60 &&
+    typeof item.importedAt === 'string' &&
+    (item.externalId === undefined || typeof item.externalId === 'string') &&
+    (item.fingerprint === undefined || typeof item.fingerprint === 'string') &&
+    (extra === undefined ||
+      (extra !== null &&
+        typeof extra === 'object' &&
+        !Array.isArray(extra) &&
+        Object.entries(extra).every(
+          ([key, text]) =>
+            key.length <= 80 && typeof text === 'string' && text.length <= 300,
+        )))
+  )
+}
+
 export function isValidTransaction(
   value: unknown,
   categories: Category[] = getActiveCategories(),
@@ -117,7 +143,8 @@ export function isValidTransaction(
       (typeof item.recurringPeriod === 'string' &&
         /^\d{4}-\d{2}-\d{2}$/.test(item.recurringPeriod))) &&
     (item.recurringDetached === undefined ||
-      typeof item.recurringDetached === 'boolean')
+      typeof item.recurringDetached === 'boolean') &&
+    (item.importMeta === undefined || isValidImportMeta(item.importMeta))
   )
 }
 

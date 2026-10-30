@@ -11,6 +11,7 @@ import {
   Database,
   Download,
   ExternalLink,
+  FileInput,
   FileSpreadsheet,
   Github,
   History,
@@ -27,6 +28,7 @@ import {
   Tag,
   Tags,
   Trash2,
+  Undo2,
   Upload,
   Wallet,
   X,
@@ -52,6 +54,7 @@ import { CURRENCIES, getCurrency } from '../lib/currency'
 import { FONT_SIZES } from '../lib/fontSize'
 import { PALETTES } from '../lib/themes'
 import type { CategoryDraft } from '../lib/categories'
+import type { LastImport } from '../lib/exchange/batch'
 import type { UpdaterController } from '../hooks/useUpdater'
 import type {
   Account,
@@ -114,6 +117,9 @@ interface SettingsModalProps {
   onExportJson: () => void
   onExportCsv: () => void
   onImportFile: (file: File) => void
+  onOpenImport: () => void
+  lastImport: LastImport | null
+  onUndoImport: () => void
   onReset: () => void
   onClear: () => void
 }
@@ -263,6 +269,9 @@ export function SettingsModal({
   onExportJson,
   onExportCsv,
   onImportFile,
+  onOpenImport,
+  lastImport,
+  onUndoImport,
   onReset,
   onClear,
 }: SettingsModalProps) {
@@ -827,13 +836,48 @@ export function SettingsModal({
                       event.currentTarget.value = ''
                     }}
                   />
+                  <button
+                    type="button"
+                    className="data-row"
+                    onClick={onOpenImport}
+                  >
+                    <span className="data-row-icon">
+                      <FileInput size={18} />
+                    </span>
+                    <span className="data-row-text">
+                      <strong>导入其他软件</strong>
+                      <small>
+                        微信、支付宝、随手记、钱迹等导出的账单 CSV，带导入向导
+                      </small>
+                    </span>
+                  </button>
+                  {lastImport ? (
+                    <button
+                      type="button"
+                      className="data-row data-row--danger"
+                      onClick={onUndoImport}
+                    >
+                      <span className="data-row-icon">
+                        <Undo2 size={18} />
+                      </span>
+                      <span className="data-row-text">
+                        <strong>撤销上次导入</strong>
+                        <small>
+                          {lastImport.sourceLabel} · {lastImport.count} 笔 ·{' '}
+                          {lastImport.at.slice(0, 10)}
+                        </small>
+                      </span>
+                    </button>
+                  ) : null}
                   <button type="button" className="data-row" onClick={onExportCsv}>
                     <span className="data-row-icon">
                       <FileSpreadsheet size={18} />
                     </span>
                     <span className="data-row-text">
                       <strong>导出流水表格</strong>
-                      <small>CSV 格式，可用 Excel 打开</small>
+                      <small>
+                        CSV 格式，可导入其他记账软件或用 Excel 打开；也能再导回账页
+                      </small>
                     </span>
                   </button>
                   <button

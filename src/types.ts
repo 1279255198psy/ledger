@@ -236,6 +236,22 @@ export interface AllocationLine {
   note?: string
 }
 
+/**
+ * Where an imported row came from. The batch id lets one import be undone as a
+ * whole; the fingerprint is the fallback identity when the source has no
+ * transaction number of its own.
+ */
+export interface ImportMeta {
+  batchId: string
+  /** Adapter id such as `wechat`, `alipay` or `csv`. */
+  source: string
+  importedAt: string
+  externalId?: string
+  fingerprint?: string
+  /** Source columns that had no matching field in the ledger. */
+  extra?: Record<string, string>
+}
+
 export interface LedgerTransaction {
   id: string
   schemaVersion: 2
@@ -261,6 +277,8 @@ export interface LedgerTransaction {
   recurringPeriod?: string
   /** 「只改这次」后与规则脱离，规则不再覆盖它。 */
   recurringDetached?: boolean
+  /** 从其他软件导入时留下的来源信息。 */
+  importMeta?: ImportMeta
 }
 
 export type TransactionKind = 'refund'

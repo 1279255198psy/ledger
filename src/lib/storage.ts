@@ -354,6 +354,18 @@ function readStoredBudgets(): BudgetBook {
   return {}
 }
 
+/** True when the device already has a budget book worth protecting. */
+function hasStoredBudgetRecords(): boolean {
+  const raw = safeGet(KEYS.budgets)
+  if (raw === null) return false
+  try {
+    const book = normalizeBudgetBook(JSON.parse(raw))
+    return book !== null && Object.keys(book).length > 0
+  } catch {
+    return false
+  }
+}
+
 function readStoredBudgetRanges(): RangeBudget[] {
   const raw = safeGet(KEYS.budgetRanges)
   if (raw === null) return []
@@ -473,11 +485,20 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
       Number.isFinite(budgetCents) &&
       budgetCents > 0
     ) {
-      const month = currentMonthKey()
-      const book: BudgetBook = {
-        [month]: { month, amountCents: Math.round(budgetCents), dailyMode: 'off' },
+      // A pre-budget-book file knows only one number. Writing it over an
+      // existing book during an upgrade would drop every month (and every
+      // dynamic adjustment log) in favour of one plain amount.
+      if (!hasStoredBudgetRecords()) {
+        const month = currentMonthKey()
+        const book: BudgetBook = {
+          [month]: {
+            month,
+            amountCents: Math.round(budgetCents),
+            dailyMode: 'off',
+          },
+        }
+        safeSet(KEYS.budgets, JSON.stringify(book))
       }
-      safeSet(KEYS.budgets, JSON.stringify(book))
       safeSet(KEYS.budget, String(Math.round(budgetCents)))
     }
   }

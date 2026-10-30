@@ -13,6 +13,7 @@ import {
 } from './lib/bulkStore'
 import './styles.css'
 import './budget.css'
+import './import.css'
 
 async function bootstrap() {
   // Load the IndexedDB cache before anything reads storage, then let the

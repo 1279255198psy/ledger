@@ -404,30 +404,41 @@ export function Analytics({
               <p className="card-kicker">BUDGET CHANGES</p>
               <h2 id="budget-adjust-heading">预算调整记录</h2>
               <p className="card-sub">
-                原定 {formatMoney(budgetMetrics.baseAmountCents / 100)}，当前{' '}
-                {formatMoney(budgetMetrics.amountCents / 100)}，共{' '}
-                {adjustments.length} 次调整。
+                原定预算{' '}
+                {formatMoney(budgetMetrics.baseAmountCents / 100)}
+                ，本月在执行中调整了 {adjustments.length} 次。
               </p>
             </div>
             <span
-              className={`budget-adjust-net ${
-                adjustmentSummary.netCents > 0 ? 'is-up' : 'is-down'
+              className={`budget-adjust-net${
+                adjustmentSummary.netCents > 0
+                  ? ' is-up'
+                  : adjustmentSummary.netCents < 0
+                    ? ' is-down'
+                    : ''
               }`}
             >
-              {adjustmentSummary.netCents >= 0 ? '净上调' : '净下调'}{' '}
+              {adjustmentSummary.netCents === 0
+                ? '净变化'
+                : adjustmentSummary.netCents > 0
+                  ? '净上调'
+                  : '净下调'}{' '}
               {formatMoney(Math.abs(adjustmentSummary.netCents) / 100)}
             </span>
           </div>
 
           <div className="budget-adjust-stats">
             <span>
-              上调 <strong>{adjustmentSummary.up}</strong> 次
+              <em>上调</em>
+              <strong>{adjustmentSummary.up} 次</strong>
             </span>
             <span>
-              下调 <strong>{adjustmentSummary.down}</strong> 次
+              <em>下调</em>
+              <strong>{adjustmentSummary.down} 次</strong>
             </span>
             <span>
-              当前预算 <strong>{formatMoney(budgetMetrics.amountCents / 100)}</strong>
+              <em>当前预算</em>
+              <strong>{formatMoney(budgetMetrics.amountCents / 100)}</strong>
             </span>
           </div>
 
