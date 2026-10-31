@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Activity,
   Anchor,
   ChevronDown,
   CreditCard,
   Feather,
+  Hourglass,
   Info,
   PiggyBank,
   Scale,
   ShieldCheck,
   SlidersHorizontal,
+  Target,
+  TrendingUp,
   UtensilsCrossed,
+  Waves,
 } from 'lucide-react'
 import { MetricTrendChart } from '../components/charts/MetricTrendChart'
 import { EmptyLedger } from '../components/EmptyLedger'
 import { buildHealthDashboard } from '../lib/health'
 import type { HealthDetail } from '../lib/health'
 import {
+  DEFAULT_HIDDEN_INDEX_METRICS,
   loadIndexPreferences,
   saveIndexPreferences,
 } from '../lib/storage'
@@ -28,6 +34,7 @@ import {
   monthLabel,
 } from '../lib/utils'
 import type {
+  BudgetBook,
   IndexMetricKey,
   IndexPreferences,
   LedgerTransaction,
@@ -38,6 +45,9 @@ import type {
 interface IndicesProps {
   transactions: LedgerTransaction[]
   liabilities: Liability[]
+  budgets: BudgetBook
+  /** Projects set to「计入日常」 also spend from the daily budget. */
+  countedProjectIds: ReadonlySet<string>
   openingBalance: number
   monthKey: string
   onAdd: () => void
@@ -66,6 +76,11 @@ interface MetricConfig {
 const percentDisplay = (value: number) => formatPercent(value, 1)
 const percentTick = (value: number) => `${Math.round(value)}%`
 const monthsDisplay = (value: number) => `${value.toFixed(1)} 个月`
+const countPercentDisplay = (value: number) => `${Math.round(value)}%`
+const signedPercentDisplay = (value: number) =>
+  `${value > 0 ? '+' : ''}${formatPercent(value, 1)}`
+const debtFreeDisplay = (value: number) =>
+  value <= 0 ? '已清零' : `${value.toFixed(1)} 个月`
 
 const METRICS: MetricConfig[] = [
   {
@@ -187,6 +202,113 @@ const METRICS: MetricConfig[] = [
         detail.totalAssetsCents / 100,
       )} · 负债 ${formatMoney(detail.totalLiabilitiesCents / 100)}`,
   },
+  {
+    key: 'incomeStability',
+    label: '收入稳定性',
+    kicker: 'INCOME STABILITY',
+    icon: Activity,
+    formula: '月收入标准差 ÷ 月均收入',
+    reference:
+      '参考 <20%；按近 6 个完整月份计算，至少需要 3 个月收入记录。',
+    color: 'var(--tone-sky)',
+    value: (detail) => detail.incomeStability,
+    display: percentDisplay,
+    formatValue: percentDisplay,
+    formatTick: percentTick,
+    detailLine: (detail) =>
+      detail.incomeStability === null
+        ? '收入记录还不足 3 个月'
+        : `月均收入 ${formatMoney(
+            detail.monthlyIncomeAverageCents / 100,
+          )} · 标准差 ${formatMoney(
+            detail.monthlyIncomeDeviationCents / 100,
+          )}`,
+  },
+  {
+    key: 'spendingVolatility',
+    label: '支出波动率',
+    kicker: 'SPENDING VOLATILITY',
+    icon: Waves,
+    formula: '月支出标准差 ÷ 月均支出',
+    reference:
+      '参考 <30%；按近 6 个完整月份计算，一次性大额支出会拉高数值。',
+    color: 'var(--tone-plum)',
+    value: (detail) => detail.spendingVolatility,
+    display: percentDisplay,
+    formatValue: percentDisplay,
+    formatTick: percentTick,
+    detailLine: (detail) =>
+      detail.spendingVolatility === null
+        ? '支出记录还不足 3 个月'
+        : `月均支出 ${formatMoney(
+            detail.monthlyExpenseAverageCents / 100,
+          )} · 标准差 ${formatMoney(
+            detail.monthlyExpenseDeviationCents / 100,
+          )}`,
+  },
+  {
+    key: 'budgetAdherence',
+    label: '预算执行率',
+    kicker: 'BUDGET ADHERENCE',
+    icon: Target,
+    formula: '未超原定预算的月份 ÷ 已设预算的月份',
+    reference:
+      '参考 ≥80%；只统计近 6 个完整月份中确实设过预算的月份，按原定月预算比较，不含上下调。',
+    color: 'var(--tone-gold)',
+    value: (detail) => detail.budgetAdherence,
+    display: countPercentDisplay,
+    formatValue: countPercentDisplay,
+    formatTick: percentTick,
+    detailLine: (detail) =>
+      detail.budgetTotalMonths === 0
+        ? '还没有设置过预算'
+        : `近 ${detail.budgetTotalMonths} 个设预算的月份 · ${detail.budgetWithinMonths} 个未超支`,
+  },
+  {
+    key: 'netWorthGrowth',
+    label: '净资产增长率',
+    kicker: 'NET WORTH GROWTH',
+    icon: TrendingUp,
+    formula: '(本期净资产 − 半年前净资产) ÷ |半年前净资产|',
+    reference:
+      '参考为正；按月看 6 个月前，按季度看 2 个季度前。基期净资产为 0 时暂不计算。',
+    color: 'var(--tone-forest)',
+    allowNegative: true,
+    value: (detail) => detail.netWorthGrowth,
+    display: signedPercentDisplay,
+    formatValue: signedPercentDisplay,
+    formatTick: percentTick,
+    detailLine: (detail) =>
+      detail.netWorthBaseCents === null
+        ? '数据还不足半年'
+        : detail.netWorthBaseCents === 0
+          ? '半年前净资产为 0，暂不计算增幅'
+          : `当前 ${formatSignedMoney(
+              detail.netWorthCents / 100,
+            )} · 半年前 ${formatSignedMoney(
+              detail.netWorthBaseCents / 100,
+            )}`,
+  },
+  {
+    key: 'debtFreeMonths',
+    label: '负债清零月数',
+    kicker: 'DEBT FREE',
+    icon: Hourglass,
+    formula: '剩余负债 ÷ 月均还款',
+    reference:
+      '参考越短越好；按近 6 个月的还款速度估算，没有还款记录时暂不计算。',
+    color: 'var(--tone-rose)',
+    value: (detail) => detail.debtFreeMonths,
+    display: debtFreeDisplay,
+    formatValue: debtFreeDisplay,
+    formatTick: (value) => `${Math.round(value)}`,
+    detailLine: (detail) =>
+      detail.totalLiabilitiesCents <= 0
+        ? '当前没有未还负债'
+        : `剩余负债 ${formatMoney(
+            detail.totalLiabilitiesCents / 100,
+          )} · 月均还款 ${formatMoney(detail.monthlyDebtCents / 100)}`,
+  },
 ]
 
 function statusFor(
@@ -230,6 +352,31 @@ function statusFor(
       if (value > 0) return { label: '为正', tone: 'good' }
       if (value < 0) return { label: '为负', tone: 'bad' }
       return { label: '持平', tone: 'neutral' }
+    case 'incomeStability':
+      if (value <= 15) return { label: '稳定', tone: 'good' }
+      if (value <= 25) return { label: '较稳', tone: 'good' }
+      if (value <= 40) return { label: '起伏', tone: 'warn' }
+      return { label: '波动大', tone: 'bad' }
+    case 'spendingVolatility':
+      if (value <= 15) return { label: '平稳', tone: 'good' }
+      if (value <= 30) return { label: '正常', tone: 'good' }
+      if (value <= 50) return { label: '起伏', tone: 'warn' }
+      return { label: '波动大', tone: 'bad' }
+    case 'budgetAdherence':
+      if (value >= 80) return { label: '良好', tone: 'good' }
+      if (value >= 60) return { label: '一般', tone: 'warn' }
+      return { label: '常超支', tone: 'bad' }
+    case 'netWorthGrowth':
+      if (value > 0) return { label: '增长', tone: 'good' }
+      if (value === 0) return { label: '持平', tone: 'neutral' }
+      if (value >= -10) return { label: '回落', tone: 'warn' }
+      return { label: '缩水', tone: 'bad' }
+    case 'debtFreeMonths':
+      if (value <= 0) return { label: '已清', tone: 'good' }
+      if (value <= 12) return { label: '一年内', tone: 'good' }
+      if (value <= 36) return { label: '可期', tone: 'warn' }
+      if (value <= 60) return { label: '较长', tone: 'warn' }
+      return { label: '遥远', tone: 'bad' }
     default:
       return { label: '暂无', tone: 'neutral' }
   }
@@ -238,6 +385,8 @@ function statusFor(
 export function Indices({
   transactions,
   liabilities,
+  budgets,
+  countedProjectIds,
   openingBalance,
   monthKey,
   onAdd,
@@ -261,6 +410,11 @@ export function Indices({
         Math.round(openingBalance * 100),
         monthKey,
         preferences.granularity,
+        {
+          hidden,
+          budgets,
+          countedProjectIds,
+        },
       ),
     [
       transactions,
@@ -268,6 +422,9 @@ export function Indices({
       openingBalance,
       monthKey,
       preferences.granularity,
+      hidden,
+      budgets,
+      countedProjectIds,
     ],
   )
 
@@ -408,7 +565,7 @@ export function Indices({
                   </label>
                 ))}
                 <p className="index-display-hint">
-                  得分固定展示，其余指标可随时隐藏，选择会保存在本机。
+                  综合得分固定展示，但只计入可计分且已勾选的指标；取消勾选会同步改变得分，选择保存在本机。
                 </p>
               </div>
             ) : null}
@@ -474,7 +631,9 @@ export function Indices({
             <p className="index-score-comment">
               {score
                 ? score.comment
-                : '记录一些收支后，综合得分会随着你的账本一起长出来。'}
+                : detail.totalIncomeCents + detail.totalExpenseCents > 0
+                  ? '在「显示指标」里至少保留一个可计分的指标，综合得分才会生成。'
+                  : '记录一些收支后，综合得分会随着你的账本一起长出来。'}
             </p>
             {score?.focus ? (
               <p className="index-score-focus">
@@ -482,7 +641,7 @@ export function Indices({
               </p>
             ) : null}
             <p className="index-score-meta">
-              由储蓄率、应急金、负债、支出结构、恩格尔系数与净资产加权得出；缺失指标会自动剔除并重新分配权重。
+              按当前显示的可计分指标加权得出；隐藏或暂无数据的指标不计入，权重在其余指标间重新分配。
             </p>
           </div>
         </div>
@@ -600,14 +759,16 @@ export function Indices({
         </div>
       ) : (
         <div className="card index-hidden-callout">
-          <p>所有指标卡片都已隐藏，综合得分仍会照常计算。</p>
+          <p>
+            所有指标都已隐藏。综合得分需要至少一个显示的指标，勾选上方指标即可恢复。
+          </p>
           <button
             type="button"
             className="button secondary"
             onClick={() =>
               updatePreferences({
                 ...preferences,
-                hidden: ['debt'],
+                hidden: [...DEFAULT_HIDDEN_INDEX_METRICS],
               })
             }
           >

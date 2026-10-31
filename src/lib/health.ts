@@ -1,4 +1,5 @@
 import { getCategory, getRootCategoryId } from './categories'
+import { getMonthBudgetMetrics, resolveMonthBudget } from './budget'
 import { balanceDeltaCents, expenseDeltaCents } from './refunds'
 import {
   currentMonthKey,
@@ -8,6 +9,7 @@ import {
   shiftMonth,
 } from './utils'
 import type {
+  BudgetBook,
   IndexGranularity,
   IndexMetricKey,
   LedgerTransaction,
@@ -21,8 +23,13 @@ import type {
  * 所有数字都从本地流水与负债记录推导：
  * - 流量指标（恩格尔、储蓄率、必要/弹性占比）按所选周期汇总；
  * - 存量指标（活期资产、净资产）取周期末的余额；
+ * - 稳定性指标（收入、支出）与预算执行率按近 6 个完整月份滚动计算；
  * - 应急金按月均必要支出折算；
- * - 负债收入比按近 6 个月还款记录估算“每月固定还款”。
+ * - 负债收入比按近 6 个月还款记录估算“每月固定还款”，清零月数用剩余
+ *   负债除以同一月均还款。
+ *
+ * 综合得分只计入当前显示的指标：被隐藏的指标既不展示卡片，也不参与得分，
+ * 权重在可见指标之间重新归一化。历史各期的得分同样按同一套可见指标计算。
  */
 
 export const INDEX_METRIC_KEYS: IndexMetricKey[] = [
@@ -33,6 +40,11 @@ export const INDEX_METRIC_KEYS: IndexMetricKey[] = [
   'emergency',
   'debt',
   'netWorth',
+  'incomeStability',
+  'spendingVolatility',
+  'budgetAdherence',
+  'netWorthGrowth',
+  'debtFreeMonths',
 ]
 
 const TRAILING_MONTHS = 6
@@ -102,6 +114,18 @@ export interface HealthDetail {
   monthlyEssentialCents: number
   monthlyDebtCents: number
   monthlyIncomeCents: number
+  incomeStability: number | null
+  monthlyIncomeAverageCents: number
+  monthlyIncomeDeviationCents: number
+  spendingVolatility: number | null
+  monthlyExpenseAverageCents: number
+  monthlyExpenseDeviationCents: number
+  budgetAdherence: number | null
+  budgetWithinMonths: number
+  budgetTotalMonths: number
+  netWorthGrowth: number | null
+  netWorthBaseCents: number | null
+  debtFreeMonths: number | null
   score: HealthScore | null
 }
 
@@ -261,15 +285,41 @@ function liabilitiesAtEnd(
   return remaining
 }
 
-function essentialForMonth(
-  transactions: LedgerTransaction[],
+interface HealthContext {
+  transactions: LedgerTransaction[]
+  liabilities: Liability[]
+  budgets: BudgetBook
+  countedProjectIds?: ReadonlySet<string>
+  earliestMonth: string | null
+  hidden: ReadonlySet<IndexMetricKey>
+  /** Monthly aggregates are reused across the twelve period windows. */
+  monthTotalsCache: Map<string, RangeTotals>
+  budgetCache: Map<
+    string,
+    { spentCents: number; baseAmountCents: number } | null
+  >
+}
+
+function monthTotalsFor(
+  ctx: HealthContext,
   monthKey: string,
-): number {
+): RangeTotals {
+  const cached = ctx.monthTotalsCache.get(monthKey)
+  if (cached) return cached
   const totals = totalsInRange(
-    transactions,
+    ctx.transactions,
     `${monthKey}-01`,
     endOfMonthDate(monthKey),
   )
+  ctx.monthTotalsCache.set(monthKey, totals)
+  return totals
+}
+
+function essentialForMonth(
+  ctx: HealthContext,
+  monthKey: string,
+): number {
+  const totals = monthTotalsFor(ctx, monthKey)
   if (monthKey === currentMonthKey()) {
     const elapsed = Math.max(new Date().getDate(), 1)
     return Math.round(
@@ -309,21 +359,144 @@ function trailingMonthKeys(
 }
 
 function averageMonthlyEssential(
-  transactions: LedgerTransaction[],
+  ctx: HealthContext,
   endMonth: string,
-  earliestMonth: string | null,
 ): number {
   const keys = trailingMonthKeys(
     endMonth,
-    earliestMonth,
+    ctx.earliestMonth,
     TRAILING_MONTHS,
   )
   if (keys.length === 0) return 0
   const total = keys.reduce(
-    (sum, key) => sum + essentialForMonth(transactions, key),
+    (sum, key) => sum + essentialForMonth(ctx, key),
     0,
   )
   return Math.round(total / keys.length)
+}
+
+/**
+ * Rolling window for the stability metrics. The current month is still in
+ * progress, so only completed months are used; older selections use the
+ * selected month as the end of their own window.
+ */
+function completedMonthWindow(
+  endMonth: string,
+  earliestMonth: string | null,
+): string[] {
+  const current = currentMonthKey()
+  const anchor = endMonth >= current ? shiftMonth(current, -1) : endMonth
+  return trailingMonthKeys(anchor, earliestMonth, TRAILING_MONTHS)
+}
+
+function averageAndDeviation(values: number[]): {
+  average: number
+  deviation: number
+} {
+  const average =
+    values.reduce((sum, value) => sum + value, 0) / values.length
+  const variance =
+    values.reduce(
+      (sum, value) => sum + (value - average) ** 2,
+      0,
+    ) / values.length
+  return { average, deviation: Math.sqrt(variance) }
+}
+
+interface FlowStats {
+  incomeStability: number | null
+  incomeAverageCents: number
+  incomeDeviationCents: number
+  spendingVolatility: number | null
+  expenseAverageCents: number
+  expenseDeviationCents: number
+}
+
+function flowStats(ctx: HealthContext, endMonth: string): FlowStats {
+  const keys = completedMonthWindow(endMonth, ctx.earliestMonth)
+  if (keys.length < 3) {
+    return {
+      incomeStability: null,
+      incomeAverageCents: 0,
+      incomeDeviationCents: 0,
+      spendingVolatility: null,
+      expenseAverageCents: 0,
+      expenseDeviationCents: 0,
+    }
+  }
+
+  const incomes = keys.map(
+    (key) => monthTotalsFor(ctx, key).incomeCents,
+  )
+  const expenses = keys.map(
+    (key) => monthTotalsFor(ctx, key).expenseCents,
+  )
+  const income = averageAndDeviation(incomes)
+  const expense = averageAndDeviation(expenses)
+
+  return {
+    incomeStability:
+      income.average > 0
+        ? (income.deviation / income.average) * 100
+        : null,
+    incomeAverageCents: Math.round(income.average),
+    incomeDeviationCents: Math.round(income.deviation),
+    spendingVolatility:
+      expense.average > 0
+        ? (expense.deviation / expense.average) * 100
+        : null,
+    expenseAverageCents: Math.round(expense.average),
+    expenseDeviationCents: Math.round(expense.deviation),
+  }
+}
+
+interface BudgetAdherenceStats {
+  within: number
+  total: number
+  ratio: number | null
+}
+
+/**
+ * Completed months that actually carry a budget. Months that would only use
+ * the default plan are skipped, otherwise a user who never opened the budget
+ * page would appear to be failing a budget they never set.
+ *
+ * The comparison uses the original plan (baseAmountCents), not the amount
+ * after a dynamic adjustment — raising or lowering the budget mid-month
+ * should not rewrite whether the month was kept within its original plan.
+ */
+function budgetAdherenceStats(
+  ctx: HealthContext,
+  endMonth: string,
+): BudgetAdherenceStats {
+  const keys = completedMonthWindow(endMonth, ctx.earliestMonth)
+  let within = 0
+  let total = 0
+  for (const key of keys) {
+    if (!ctx.budgetCache.has(key)) {
+      const resolved = resolveMonthBudget(ctx.budgets, key)
+      ctx.budgetCache.set(
+        key,
+        resolved.source === 'default'
+          ? null
+          : getMonthBudgetMetrics(
+              ctx.transactions,
+              key,
+              ctx.budgets,
+              ctx.countedProjectIds,
+            ),
+      )
+    }
+    const metrics = ctx.budgetCache.get(key)
+    if (!metrics) continue
+    total += 1
+    if (metrics.spentCents <= metrics.baseAmountCents) within += 1
+  }
+  return {
+    within,
+    total,
+    ratio: total > 0 ? (within / total) * 100 : null,
+  }
 }
 
 interface DebtStats {
@@ -461,6 +634,11 @@ interface ScoreInput {
   netWorthCents: number
   monthlyIncomeCents: number
   totalLiabilitiesCents: number
+  incomeStability: number | null
+  spendingVolatility: number | null
+  budgetAdherence: number | null
+  netWorthGrowth: number | null
+  debtFreeMonths: number | null
 }
 
 function netWorthScore(
@@ -517,16 +695,24 @@ const FOCUS_ADVICE: Record<IndexMetricKey, string> = {
   engel: '餐饮占比较高，可以从外食和饮品开始调整。',
   flexible: '弹性消费偏高，给非必要花销设一个上限。',
   netWorth: '净资产仍偏薄或为负，先让资产端转正。',
+  incomeStability: '收入起伏较大，先留出更厚的缓冲再安排大额花销。',
+  spendingVolatility: '支出起伏偏大，给非固定花销设一个月度上限。',
+  budgetAdherence: '预算经常被突破，先从最容易超支的分类开始收紧。',
+  netWorthGrowth: '净资产在回落，检查近期大额支出与负债变化。',
+  debtFreeMonths: '按当前还款速度，负债还要较长时间才能清零。',
 }
 
-function buildScore(input: ScoreInput): HealthScore | null {
+function buildScore(
+  input: ScoreInput,
+  hidden: ReadonlySet<IndexMetricKey>,
+): HealthScore | null {
   if (!input.hasActivity) return null
 
-  const parts: HealthScorePart[] = [
+  const allParts: HealthScorePart[] = [
     {
       key: 'savings',
       label: '储蓄率',
-      weight: 22,
+      weight: 17,
       score:
         input.savings === null
           ? null
@@ -545,7 +731,7 @@ function buildScore(input: ScoreInput): HealthScore | null {
     {
       key: 'emergency',
       label: '应急金',
-      weight: 22,
+      weight: 17,
       score:
         input.emergencyMonths === null
           ? null
@@ -561,7 +747,7 @@ function buildScore(input: ScoreInput): HealthScore | null {
     {
       key: 'debt',
       label: '负债收入比',
-      weight: 20,
+      weight: 11,
       score:
         input.debtRatio === null
           ? null
@@ -579,7 +765,7 @@ function buildScore(input: ScoreInput): HealthScore | null {
     {
       key: 'essential',
       label: '必要支出占比',
-      weight: 14,
+      weight: 9,
       score:
         input.essentialRatio === null
           ? null
@@ -597,7 +783,7 @@ function buildScore(input: ScoreInput): HealthScore | null {
     {
       key: 'engel',
       label: '恩格尔系数',
-      weight: 12,
+      weight: 8,
       score:
         input.engel === null
           ? null
@@ -615,7 +801,7 @@ function buildScore(input: ScoreInput): HealthScore | null {
     {
       key: 'netWorth',
       label: '净资产',
-      weight: 10,
+      weight: 7,
       score:
         input.netWorthCents === 0 && input.totalLiabilitiesCents === 0
           ? null
@@ -626,7 +812,111 @@ function buildScore(input: ScoreInput): HealthScore | null {
               ),
             ),
     },
+    {
+      key: 'incomeStability',
+      label: '收入稳定性',
+      weight: 8,
+      score:
+        input.incomeStability === null
+          ? null
+          : clampScore(
+              piecewise(input.incomeStability, [
+                [0, 100],
+                [10, 95],
+                [20, 82],
+                [30, 65],
+                [45, 40],
+                [60, 15],
+                [80, 0],
+              ]),
+            ),
+    },
+    {
+      key: 'spendingVolatility',
+      label: '支出波动率',
+      weight: 4,
+      score:
+        input.spendingVolatility === null
+          ? null
+          : clampScore(
+              piecewise(input.spendingVolatility, [
+                [0, 100],
+                [15, 95],
+                [25, 85],
+                [40, 60],
+                [55, 38],
+                [75, 12],
+                [100, 0],
+              ]),
+            ),
+    },
+    {
+      key: 'budgetAdherence',
+      label: '预算执行率',
+      weight: 9,
+      score:
+        input.budgetAdherence === null
+          ? null
+          : clampScore(
+              piecewise(input.budgetAdherence, [
+                [0, 0],
+                [40, 40],
+                [60, 62],
+                [80, 85],
+                [90, 95],
+                [100, 100],
+              ]),
+            ),
+    },
+    {
+      key: 'netWorthGrowth',
+      label: '净资产增长率',
+      weight: 5,
+      score:
+        input.netWorthGrowth === null
+          ? null
+          : clampScore(
+              piecewise(input.netWorthGrowth, [
+                [-40, 0],
+                [-20, 15],
+                [-10, 32],
+                [0, 50],
+                [10, 65],
+                [20, 78],
+                [30, 88],
+                [50, 97],
+                [80, 100],
+              ]),
+            ),
+    },
+    {
+      key: 'debtFreeMonths',
+      label: '负债清零月数',
+      weight: 5,
+      score:
+        input.debtFreeMonths === null
+          ? null
+          : clampScore(
+              piecewise(input.debtFreeMonths, [
+                [0, 100],
+                [6, 95],
+                [12, 88],
+                [24, 72],
+                [36, 56],
+                [60, 30],
+                [120, 5],
+                [180, 0],
+              ]),
+            ),
+    },
   ]
+
+  const parts = allParts.filter((part) => !hidden.has(part.key))
+
+  const visibleWeightTotal = parts.reduce(
+    (sum, part) => sum + part.weight,
+    0,
+  )
 
   const available = parts.filter(
     (part): part is HealthScorePart & { score: number } =>
@@ -673,43 +963,51 @@ function buildScore(input: ScoreInput): HealthScore | null {
     comment,
     focus,
     focusKey: focus ? weakest.key : null,
-    parts,
+    // Show the weight as a share of the visible metrics so the listed
+    // percentages still add up after hiding some of them.
+    parts: parts.map((part) => ({
+      ...part,
+      weight:
+        visibleWeightTotal > 0
+          ? Math.round((part.weight / visibleWeightTotal) * 100)
+          : 0,
+    })),
   }
 }
 
 function computeDetail(
-  transactions: LedgerTransaction[],
-  liabilities: Liability[],
+  ctx: HealthContext,
   openingBalanceCents: number,
   period: Period,
-  earliestMonth: string | null,
+  netWorthBaseCents: number | null,
 ): HealthDetail {
   const totals = totalsInRange(
-    transactions,
+    ctx.transactions,
     period.startDate,
     period.endDate,
   )
   const liquidAssetsCents = assetsAtEnd(
-    transactions,
+    ctx.transactions,
     openingBalanceCents,
     period.endDate,
   )
   const totalLiabilitiesCents = liabilitiesAtEnd(
-    liabilities,
+    ctx.liabilities,
     period.endDate,
   )
   const netWorthCents = liquidAssetsCents - totalLiabilitiesCents
   const monthlyEssentialCents = averageMonthlyEssential(
-    transactions,
+    ctx,
     period.endMonth,
-    earliestMonth,
   )
   const debt = debtStats(
-    transactions,
-    liabilities,
+    ctx.transactions,
+    ctx.liabilities,
     period.endMonth,
-    earliestMonth,
+    ctx.earliestMonth,
   )
+  const flows = flowStats(ctx, period.endMonth)
+  const budget = budgetAdherenceStats(ctx, period.endMonth)
 
   const engel =
     totals.expenseCents > 0
@@ -733,24 +1031,44 @@ function computeDetail(
     monthlyEssentialCents > 0
       ? liquidAssetsCents / monthlyEssentialCents
       : null
+  const netWorthGrowth =
+    netWorthBaseCents !== null && netWorthBaseCents !== 0
+      ? ((netWorthCents - netWorthBaseCents) /
+          Math.abs(netWorthBaseCents)) *
+        100
+      : null
+  const debtFreeMonths =
+    totalLiabilitiesCents <= 0
+      ? 0
+      : debt.monthlyDebtCents > 0
+        ? totalLiabilitiesCents / debt.monthlyDebtCents
+        : null
 
   const monthlyIncomeCents =
     debt.monthlyIncomeCents > 0
       ? debt.monthlyIncomeCents
       : Math.round(totals.incomeCents / period.monthCount)
 
-  const score = buildScore({
-    hasActivity:
-      totals.incomeCents + totals.expenseCents > 0,
-    savings,
-    emergencyMonths,
-    debtRatio: debt.ratio,
-    essentialRatio,
-    engel,
-    netWorthCents,
-    monthlyIncomeCents,
-    totalLiabilitiesCents,
-  })
+  const score = buildScore(
+    {
+      hasActivity:
+        totals.incomeCents + totals.expenseCents > 0,
+      savings,
+      emergencyMonths,
+      debtRatio: debt.ratio,
+      essentialRatio,
+      engel,
+      netWorthCents,
+      monthlyIncomeCents,
+      totalLiabilitiesCents,
+      incomeStability: flows.incomeStability,
+      spendingVolatility: flows.spendingVolatility,
+      budgetAdherence: budget.ratio,
+      netWorthGrowth,
+      debtFreeMonths,
+    },
+    ctx.hidden,
+  )
 
   return {
     periodKey: period.key,
@@ -776,6 +1094,18 @@ function computeDetail(
     monthlyEssentialCents,
     monthlyDebtCents: debt.monthlyDebtCents,
     monthlyIncomeCents,
+    incomeStability: flows.incomeStability,
+    monthlyIncomeAverageCents: flows.incomeAverageCents,
+    monthlyIncomeDeviationCents: flows.incomeDeviationCents,
+    spendingVolatility: flows.spendingVolatility,
+    monthlyExpenseAverageCents: flows.expenseAverageCents,
+    monthlyExpenseDeviationCents: flows.expenseDeviationCents,
+    budgetAdherence: budget.ratio,
+    budgetWithinMonths: budget.within,
+    budgetTotalMonths: budget.total,
+    netWorthGrowth,
+    netWorthBaseCents,
+    debtFreeMonths,
     score,
   }
 }
@@ -793,24 +1123,50 @@ function toPoints(
   }))
 }
 
+export interface HealthDashboardOptions {
+  /** Metrics excluded from both the score and the historical score series. */
+  hidden?: ReadonlySet<IndexMetricKey>
+  budgets?: BudgetBook
+  countedProjectIds?: ReadonlySet<string>
+}
+
 export function buildHealthDashboard(
   transactions: LedgerTransaction[],
   liabilities: Liability[],
   openingBalanceCents: number,
   monthKey: string,
   granularity: IndexGranularity,
+  options: HealthDashboardOptions = {},
 ): HealthDashboard {
   const periods = buildPeriods(monthKey, granularity)
   const earliestMonth = earliestTransactionMonth(transactions)
-  const details = periods.map((period) =>
-    computeDetail(
-      transactions,
-      liabilities,
+  const ctx: HealthContext = {
+    transactions,
+    liabilities,
+    budgets: options.budgets ?? {},
+    countedProjectIds: options.countedProjectIds,
+    earliestMonth,
+    hidden: options.hidden ?? new Set(),
+    monthTotalsCache: new Map(),
+    budgetCache: new Map(),
+  }
+  const details = periods.map((period) => {
+    // Net worth growth compares with the same point half a year earlier. For
+    // quarters that is exactly two quarters back, so one rule covers both
+    // granularities and every historical point gets a baseline.
+    const baseEndDate = endOfMonthDate(
+      shiftMonth(period.endMonth, -6),
+    )
+    const netWorthBaseCents =
+      assetsAtEnd(transactions, openingBalanceCents, baseEndDate) -
+      liabilitiesAtEnd(liabilities, baseEndDate)
+    return computeDetail(
+      ctx,
       openingBalanceCents,
       period,
-      earliestMonth,
-    ),
-  )
+      netWorthBaseCents,
+    )
+  })
   const current = details[details.length - 1]
 
   let unmarkedTotalCount = 0
@@ -852,6 +1208,31 @@ export function buildHealthDashboard(
         periods,
         details,
         (detail) => detail.netWorthCents / 100,
+      ),
+      incomeStability: toPoints(
+        periods,
+        details,
+        (detail) => detail.incomeStability,
+      ),
+      spendingVolatility: toPoints(
+        periods,
+        details,
+        (detail) => detail.spendingVolatility,
+      ),
+      budgetAdherence: toPoints(
+        periods,
+        details,
+        (detail) => detail.budgetAdherence,
+      ),
+      netWorthGrowth: toPoints(
+        periods,
+        details,
+        (detail) => detail.netWorthGrowth,
+      ),
+      debtFreeMonths: toPoints(
+        periods,
+        details,
+        (detail) => detail.debtFreeMonths,
       ),
       score: toPoints(
         periods,

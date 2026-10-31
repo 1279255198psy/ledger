@@ -21,11 +21,18 @@ export type IndexMetricKey =
   | 'emergency'
   | 'debt'
   | 'netWorth'
+  | 'incomeStability'
+  | 'spendingVolatility'
+  | 'budgetAdherence'
+  | 'netWorthGrowth'
+  | 'debtFreeMonths'
 
 export interface IndexPreferences {
   granularity: IndexGranularity
-  /** 被隐藏的指标；综合得分固定显示，不在此列。 */
+  /** 被隐藏的指标；综合得分只计入显示的指标。 */
   hidden: IndexMetricKey[]
+  /** 旧版保存没有这个字段，读取时会补上新增指标的默认可见性。 */
+  version?: 2
 }
 
 export type Theme = 'light' | 'dark'

@@ -1928,6 +1928,8 @@ export default function App() {
           <Indices
             transactions={transactions}
             liabilities={liabilities}
+            budgets={budgets}
+            countedProjectIds={countedProjectIds}
             openingBalance={openingBalance}
             monthKey={monthKey}
             onAdd={openAdd}

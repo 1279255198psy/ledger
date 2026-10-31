@@ -1034,6 +1034,24 @@ const INDEX_METRIC_KEYS: IndexMetricKey[] = [
   'emergency',
   'debt',
   'netWorth',
+  'incomeStability',
+  'spendingVolatility',
+  'budgetAdherence',
+  'netWorthGrowth',
+  'debtFreeMonths',
+]
+
+/** Metrics whose cards start hidden; the rest are shown on first visit. */
+export const DEFAULT_HIDDEN_INDEX_METRICS: IndexMetricKey[] = [
+  'debt',
+  'incomeStability',
+  'debtFreeMonths',
+]
+
+/** Preferences saved before these metrics existed need their defaults merged. */
+const METRICS_ADDED_WITH_DEFAULTS: IndexMetricKey[] = [
+  'incomeStability',
+  'debtFreeMonths',
 ]
 
 function isIndexMetricKey(value: unknown): value is IndexMetricKey {
@@ -1049,7 +1067,8 @@ function isGranularity(value: unknown): value is IndexGranularity {
 
 const DEFAULT_INDEX_PREFERENCES: IndexPreferences = {
   granularity: 'month',
-  hidden: ['debt'],
+  hidden: [...DEFAULT_HIDDEN_INDEX_METRICS],
+  version: 2,
 }
 
 function normalizeIndexPreferences(
@@ -1060,7 +1079,14 @@ function normalizeIndexPreferences(
   if (!isGranularity(record.granularity)) return null
   if (!Array.isArray(record.hidden)) return null
   const hidden = record.hidden.filter(isIndexMetricKey)
-  return { granularity: record.granularity, hidden }
+  // Old saves predate the newer metrics, so apply only their default
+  // visibility; every existing choice is kept as it was.
+  if (record.version !== 2) {
+    for (const key of METRICS_ADDED_WITH_DEFAULTS) {
+      if (!hidden.includes(key)) hidden.push(key)
+    }
+  }
+  return { granularity: record.granularity, hidden, version: 2 }
 }
 
 export function loadIndexPreferences(): IndexPreferences {

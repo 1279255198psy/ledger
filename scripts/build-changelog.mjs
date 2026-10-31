@@ -97,7 +97,8 @@ if (workingVersion) {
   if (!exists) {
     const body = extractReleaseBody(readYaml(null))
     if (body) {
-      const date = new Date().toISOString().slice(0, 10)
+      // 用本地日期，和下面从 tag 读到的时间（提交时区）保持一致。
+      const date = new Date().toLocaleDateString('sv-SE')
       const { title, items } = parseReleaseBody(body, workingVersion)
       entries.unshift({ version: workingVersion, date, title, items })
     }

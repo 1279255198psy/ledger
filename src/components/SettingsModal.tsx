@@ -6,7 +6,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Coins,
   CreditCard,
   Database,
   Download,
@@ -30,7 +29,6 @@ import {
   Trash2,
   Undo2,
   Upload,
-  Wallet,
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
@@ -127,12 +125,10 @@ interface SettingsModalProps {
 type SettingsPageId =
   | 'guide'
   | 'appearance'
-  | 'currency'
   | 'reminders'
   | 'capture'
   | 'categories'
   | 'accounts'
-  | 'opening'
   | 'budget'
   | 'sync'
   | 'data'
@@ -160,12 +156,6 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
     icon: PaletteIcon,
   },
   {
-    id: 'currency',
-    label: '货币',
-    detail: '记账使用的货币符号',
-    icon: Coins,
-  },
-  {
     id: 'reminders',
     label: '记账提醒',
     detail: '定时提醒，别漏掉当天的账',
@@ -186,14 +176,8 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
   {
     id: 'accounts',
     label: '账户',
-    detail: '常用钱包与银行卡，支持多张卡',
+    detail: '钱包、银行卡、起始资金与货币',
     icon: CreditCard,
-  },
-  {
-    id: 'opening',
-    label: '起始资金',
-    detail: '总结余从哪里开始',
-    icon: Wallet,
   },
   {
     id: 'budget',
@@ -284,6 +268,7 @@ export function SettingsModal({
   )
   const [openingError, setOpeningError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const openingSectionRef = useRef<HTMLElement>(null)
 
   // Notification capture only exists in the Android shell, so the page is
   // hidden everywhere else instead of showing a dead end.
@@ -303,7 +288,7 @@ export function SettingsModal({
     if (!open) return
     setPage(
       focusSection === 'opening-balance'
-        ? 'opening'
+        ? 'accounts'
         : focusSection === 'budget' || focusSection === 'budget-ranges'
           ? 'budget'
           : focusSection === 'reminders'
@@ -313,6 +298,19 @@ export function SettingsModal({
               : null,
     )
   }, [open, focusSection])
+
+  // 起始资金 lives inside the accounts page now, so bring it into view when
+  // the overview card links straight to it.
+  useEffect(() => {
+    if (!open || focusSection !== 'opening-balance') return
+    const timer = window.setTimeout(() => {
+      openingSectionRef.current?.scrollIntoView({
+        block: 'start',
+        behavior: 'smooth',
+      })
+    }, 80)
+    return () => window.clearTimeout(timer)
+  }, [open, focusSection, page])
 
   useEffect(() => {
     if (!open) return
@@ -603,39 +601,6 @@ export function SettingsModal({
               </section>
             ) : null}
 
-            {activePage === 'currency' ? (
-              <section className="settings-section">
-                <div className="settings-heading">
-                  <h3>货币</h3>
-                  <p>
-                    选择记账使用的货币。切换只更换金额符号，不会换算已有金额。
-                  </p>
-                </div>
-                <div className="currency-grid" role="radiogroup" aria-label="货币">
-                  {CURRENCIES.map((item) => {
-                    const active = item.id === currency
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        aria-label={`${item.name}（${item.code}）`}
-                        className={`currency-option${active ? ' is-active' : ''}`}
-                        onClick={() => onCurrencyChange(item.id)}
-                      >
-                        <span className="currency-symbol" aria-hidden="true">
-                          {item.symbol}
-                        </span>
-                        <span className="currency-name">{item.name}</span>
-                        <span className="currency-code">{item.code}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </section>
-            ) : null}
-
             {activePage === 'reminders' ? (
               <ReminderSettingsSection
                 settings={reminders}
@@ -667,100 +632,136 @@ export function SettingsModal({
             ) : null}
 
             {activePage === 'accounts' ? (
-              <section className="settings-section">
-                <div className="settings-heading">
-                  <h3>账户</h3>
-                  <p>
-                    记一笔和流水筛选里的账户都来自这里。微信、支付宝和现金是固定账户；
-                    银行卡可以添加多张，名称重复时会自动编号，也可以随时改名方便区分。
-                  </p>
-                </div>
-                <AccountSettings
-                  accounts={accounts}
-                  transactionUsage={accountTransactionUsage}
-                  onCreate={onCreateAccount}
-                  onRename={onRenameAccount}
-                  onDelete={onDeleteAccount}
-                />
-              </section>
-            ) : null}
-
-            {activePage === 'opening' ? (
-              <section
-                className="settings-section"
-                aria-labelledby="opening-balance-heading"
-              >
-                <div className="settings-heading">
-                  <h3 id="opening-balance-heading">总结余起始资金</h3>
-                  <p>
-                    总结余 = 起始资金 + 全部月份的收入 − 支出。使用账页之前已有的钱可以记在这里；
-                    不填就当作从零开始，只统计账本里的收支。
-                  </p>
-                </div>
-                <form
-                  className="opening-balance-form"
-                  onSubmit={handleOpeningBalanceSubmit}
-                >
-                  <div
-                    className="opening-mode-switch"
-                    role="group"
-                    aria-label="起始资金方式"
-                  >
-                    <button
-                      type="button"
-                      className={openingMode === 'zero' ? 'is-active' : ''}
-                      onClick={() => {
-                        setOpeningMode('zero')
-                        setOpeningError('')
-                      }}
-                      aria-pressed={openingMode === 'zero'}
-                    >
-                      从零开始
-                    </button>
-                    <button
-                      type="button"
-                      className={openingMode === 'existing' ? 'is-active' : ''}
-                      onClick={() => {
-                        setOpeningMode('existing')
-                        setOpeningError('')
-                      }}
-                      aria-pressed={openingMode === 'existing'}
-                    >
-                      已有资金
-                    </button>
+              <>
+                <section className="settings-section">
+                  <div className="settings-heading">
+                    <h3>账户</h3>
+                    <p>
+                      记一笔和流水筛选里的账户都来自这里。微信、支付宝和现金是固定账户；
+                      银行卡可以添加多张，名称重复时会自动编号，也可以随时改名方便区分。
+                    </p>
                   </div>
-                  {openingMode === 'existing' ? (
-                    <label className="budget-input">
-                      <span>{getCurrency(currency).symbol}</span>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.01"
-                        value={openingInput}
-                        onChange={(event) => {
-                          setOpeningInput(event.target.value)
+                  <AccountSettings
+                    accounts={accounts}
+                    transactionUsage={accountTransactionUsage}
+                    onCreate={onCreateAccount}
+                    onRename={onRenameAccount}
+                    onDelete={onDeleteAccount}
+                  />
+                </section>
+
+                <section
+                  className="settings-section"
+                  aria-labelledby="opening-balance-heading"
+                  ref={openingSectionRef}
+                >
+                  <div className="settings-heading">
+                    <h3 id="opening-balance-heading">起始资金</h3>
+                    <p>
+                      总结余 = 起始资金 + 全部月份的收入 − 支出。使用账页之前已有的钱可以记在这里；
+                      不填就当作从零开始，只统计账本里的收支。
+                    </p>
+                  </div>
+                  <form
+                    className="opening-balance-form"
+                    onSubmit={handleOpeningBalanceSubmit}
+                  >
+                    <div
+                      className="opening-mode-switch"
+                      role="group"
+                      aria-label="起始资金方式"
+                    >
+                      <button
+                        type="button"
+                        className={openingMode === 'zero' ? 'is-active' : ''}
+                        onClick={() => {
+                          setOpeningMode('zero')
                           setOpeningError('')
                         }}
-                        placeholder="0.00"
-                        aria-label="起始资金金额"
-                      />
-                    </label>
-                  ) : (
-                    <p className="opening-balance-note">
-                      起始资金记为 0，总结余只反映账本记录以来的收支。
+                        aria-pressed={openingMode === 'zero'}
+                      >
+                        从零开始
+                      </button>
+                      <button
+                        type="button"
+                        className={openingMode === 'existing' ? 'is-active' : ''}
+                        onClick={() => {
+                          setOpeningMode('existing')
+                          setOpeningError('')
+                        }}
+                        aria-pressed={openingMode === 'existing'}
+                      >
+                        已有资金
+                      </button>
+                    </div>
+                    {openingMode === 'existing' ? (
+                      <label className="budget-input">
+                        <span>{getCurrency(currency).symbol}</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          value={openingInput}
+                          onChange={(event) => {
+                            setOpeningInput(event.target.value)
+                            setOpeningError('')
+                          }}
+                          placeholder="0.00"
+                          aria-label="起始资金金额"
+                        />
+                      </label>
+                    ) : (
+                      <p className="opening-balance-note">
+                        起始资金记为 0，总结余只反映账本记录以来的收支。
+                      </p>
+                    )}
+                    <button type="submit" className="button secondary">
+                      保存起始资金
+                    </button>
+                  </form>
+                  {openingError ? (
+                    <p className="form-error" role="alert">
+                      {openingError}
                     </p>
-                  )}
-                  <button type="submit" className="button secondary">
-                    保存起始资金
-                  </button>
-                </form>
-                {openingError ? (
-                  <p className="form-error" role="alert">
-                    {openingError}
-                  </p>
-                ) : null}
-              </section>
+                  ) : null}
+                </section>
+
+                <section className="settings-section">
+                  <div className="settings-heading">
+                    <h3>货币</h3>
+                    <p>
+                      选择记账使用的货币。切换只更换金额符号，不会换算已有金额。
+                    </p>
+                  </div>
+                  <div
+                    className="currency-grid"
+                    role="radiogroup"
+                    aria-label="货币"
+                  >
+                    {CURRENCIES.map((item) => {
+                      const active = item.id === currency
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          aria-label={`${item.name}（${item.code}）`}
+                          className={`currency-option${active ? ' is-active' : ''}`}
+                          onClick={() => onCurrencyChange(item.id)}
+                        >
+                          <span className="currency-symbol" aria-hidden="true">
+                            {item.symbol}
+                          </span>
+                          <span className="currency-name">{item.name}</span>
+                          <span className="currency-code">{item.code}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </section>
+              </>
             ) : null}
 
             {activePage === 'budget' ? (
