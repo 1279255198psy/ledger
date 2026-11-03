@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Trash2,
 } from 'lucide-react'
+import { copyText } from '../lib/clipboard'
 import {
   captureSupported,
   clearCaptureEvents,
@@ -61,27 +62,6 @@ function eventCopyText(event: CaptureEventRecord): string {
   ]
     .filter((line) => line && line.trim().length > 0)
     .join('\n')
-}
-
-async function copyText(value: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(value)
-    return true
-  } catch {
-    try {
-      const input = document.createElement('textarea')
-      input.value = value
-      input.style.position = 'fixed'
-      input.style.opacity = '0'
-      document.body.appendChild(input)
-      input.select()
-      const copied = document.execCommand('copy')
-      document.body.removeChild(input)
-      return copied
-    } catch {
-      return false
-    }
-  }
 }
 
 /**

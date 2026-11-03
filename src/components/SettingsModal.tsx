@@ -16,6 +16,7 @@ import {
   History,
   Inbox,
   Info,
+  MessageSquarePlus,
   Moon,
   Palette as PaletteIcon,
   PiggyBank,
@@ -42,6 +43,7 @@ import { CaptureDebugSection } from './CaptureDebugSection'
 import { SyncSettingsSection } from './SyncSettingsSection'
 import { StorageUsageSection } from './StorageUsageSection'
 import { BackupSection } from './BackupSection'
+import { FeedbackSection } from './FeedbackSection'
 import {
   GITHUB_RELEASES_URL,
   GITHUB_REPO_URL,
@@ -132,6 +134,7 @@ type SettingsPageId =
   | 'budget'
   | 'sync'
   | 'data'
+  | 'feedback'
   | 'about'
   | 'changelog'
 
@@ -196,6 +199,12 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
     label: '数据管理',
     detail: '备份、导入与重新开始',
     icon: Database,
+  },
+  {
+    id: 'feedback',
+    label: '意见反馈',
+    detail: '建议、问题与使用感受',
+    icon: MessageSquarePlus,
   },
   {
     id: 'about',
@@ -919,6 +928,8 @@ export function SettingsModal({
               </section>
             ) : null}
 
+            {activePage === 'feedback' ? <FeedbackSection /> : null}
+
             {activePage === 'changelog' ? <ChangelogSection /> : null}
 
             {activePage === 'about' ? (
@@ -961,6 +972,23 @@ export function SettingsModal({
                     <button
                       type="button"
                       className="data-row"
+                      onClick={() => setPage('feedback')}
+                    >
+                      <span className="data-row-icon">
+                        <MessageSquarePlus size={18} />
+                      </span>
+                      <span className="data-row-text">
+                        <strong>意见反馈</strong>
+                        <small>写下建议或问题，提交到 GitHub</small>
+                      </span>
+                      <ChevronRight
+                        size={16}
+                        className="data-row-external"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      className="data-row"
                       onClick={() => setPage('changelog')}
                     >
                       <span className="data-row-icon">
@@ -982,7 +1010,7 @@ export function SettingsModal({
                   <div className="settings-heading">
                     <h3>在 GitHub 上关注账页</h3>
                     <p>
-                      账页是一个本地优先的小项目，源码、版本发布记录和安装包都公开在 GitHub。遇到问题、想看看更新细节，或者想提交建议，都可以从下面进入。
+                      账页是一个本地优先的小项目，源码、版本发布记录和安装包都公开在 GitHub。想提交建议可以直接用上面的「意见反馈」，想看看更新细节或安装包，从下面进入。
                     </p>
                   </div>
                   <div className="data-actions">
