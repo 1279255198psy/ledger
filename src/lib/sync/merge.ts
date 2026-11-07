@@ -69,10 +69,51 @@ export function sameValue(left: unknown, right: unknown): boolean {
   return stableStringify(left) === stableStringify(right)
 }
 
+function sortById<T extends { id: string }>(items: T[]): T[] {
+  return [...items].sort((left, right) =>
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+  )
+}
+
+/**
+ * A snapshot with every id collection in one canonical order.
+ *
+ * Each device keeps the order the user sees, and a three-way merge follows the
+ * local side's order. Comparing raw arrays would therefore report a difference
+ * after every merge and make both devices push each other in a loop. Order is
+ * not meaningful to the books (nothing can reorder records), so it is ignored
+ * here while the stored order stays untouched.
+ */
+function canonicalSnapshot(snapshot: LedgerDataSnapshot): unknown {
+  const { updatedAt: _updatedAt, ...rest } = snapshot
+  return {
+    ...rest,
+    categories: sortById(snapshot.categories),
+    accounts: snapshot.accounts
+      ? sortById(snapshot.accounts)
+      : snapshot.accounts,
+    transactions: sortById(snapshot.transactions).map((transaction) => ({
+      ...transaction,
+      allocations: sortById(transaction.allocations),
+    })),
+    projects: sortById(snapshot.projects),
+    liabilities: sortById(snapshot.liabilities).map((liability) => ({
+      ...liability,
+      repayments: sortById(liability.repayments),
+    })),
+    budgetRanges: sortById(snapshot.budgetRanges),
+    recurringRules: snapshot.recurringRules
+      ? sortById(snapshot.recurringRules)
+      : snapshot.recurringRules,
+    recurringPending: snapshot.recurringPending
+      ? sortById(snapshot.recurringPending)
+      : snapshot.recurringPending,
+  }
+}
+
 /** Everything that matters for "has this ledger changed", excluding the clock. */
 export function snapshotFingerprint(snapshot: LedgerDataSnapshot): string {
-  const { updatedAt: _updatedAt, ...rest } = snapshot
-  return stableStringify(rest)
+  return stableStringify(canonicalSnapshot(snapshot))
 }
 
 export function snapshotsEqual(
@@ -720,7 +761,14 @@ export function mergeSnapshots(
   } else if (baseOpening !== undefined && remoteOpening === baseOpening) {
     openingBalanceCents = localOpening
   } else {
-    const side = favor ?? 'local'
+    // Both sides changed the same value (or there is no base). Falling back to
+    // "local" would pick a different number on each device and never converge;
+    // the comparison below selects the same side on both.
+    const side: 'local' | 'remote' =
+      favor ??
+      (stableStringify(localOpening) >= stableStringify(remoteOpening)
+        ? 'local'
+        : 'remote')
     openingBalanceCents = side === 'local' ? localOpening : remoteOpening
     conflicts.push({
       kind: 'openingBalance',

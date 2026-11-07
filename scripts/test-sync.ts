@@ -201,6 +201,46 @@ function testEqualStampTieBreakConverges() {
   assert.ok(snapshotsEqual(first.snapshot, second.snapshot))
 }
 
+function testArrayOrderIsNotAChange() {
+  const local = snapshot({
+    accounts: [],
+    recurringRules: [],
+    recurringPending: [],
+    transactions: [transaction('a'), transaction('b')],
+  })
+  const reordered = snapshot({
+    accounts: [],
+    recurringRules: [],
+    recurringPending: [],
+    transactions: [transaction('b'), transaction('a')],
+  })
+  assert.ok(snapshotsEqual(local, reordered))
+
+  // Each device keeps its own display order; that alone must never look like
+  // new data, otherwise both sides push forever.
+  const base = snapshot()
+  const onPhone = mergeSnapshots(base, local, reordered)
+  const onDesktop = mergeSnapshots(base, reordered, local)
+  assert.ok(snapshotsEqual(onPhone.snapshot, onDesktop.snapshot))
+  assert.ok(snapshotsEqual(onPhone.snapshot, local))
+
+  // The phone's next poll against the desktop's reply is a no-op.
+  const reply = onDesktop.snapshot
+  const nextRound = mergeSnapshots(reply, local, reply)
+  assert.ok(snapshotsEqual(nextRound.snapshot, local))
+}
+
+function testOpeningBalanceConvergesWithoutBase() {
+  const local = snapshot({ openingBalanceCents: 1000 })
+  const remote = snapshot({ openingBalanceCents: 3000 })
+  const first = mergeSnapshots(null, local, remote)
+  const second = mergeSnapshots(null, remote, local)
+  assert.equal(
+    first.snapshot.openingBalanceCents,
+    second.snapshot.openingBalanceCents,
+  )
+}
+
 function testIdempotent() {
   const base = snapshot()
   const local = snapshot({ transactions: [transaction('a')] })
@@ -451,6 +491,8 @@ async function main() {
   testConnectionPriorityOverridesEditTime()
   testOpeningBalanceFollowsPriority()
   testEqualStampTieBreakConverges()
+  testArrayOrderIsNotAChange()
+  testOpeningBalanceConvergesWithoutBase()
   testIdempotent()
   testRepaymentMerge()
   testBudgetMerge()

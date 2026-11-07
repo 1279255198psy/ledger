@@ -105,6 +105,22 @@ export interface MergeStats {
   removed: number
 }
 
+/**
+ * One line in the sync history kept in settings. Only merges that actually
+ * changed something are stored, so an ordinary background poll leaves no
+ * trace. `removed` counts records that existed here and disappeared because of
+ * the other device (not deletions the user made on this device).
+ */
+export interface SyncHistoryEntry {
+  at: string
+  /** push = the other device's snapshot arrived here. */
+  direction: 'push' | 'pull'
+  added: number
+  updated: number
+  removed: number
+  conflicts: number
+}
+
 export interface MergeResult {
   snapshot: LedgerDataSnapshot
   conflicts: SyncConflict[]
@@ -148,6 +164,11 @@ export interface SyncUiState {
   } | null
   /** The phone is waiting for "this connection: phone or computer first". */
   pendingPriority: boolean
+  /**
+   * Set right after a merge removed records that existed on this device.
+   * Cleared when the user undoes it or dismisses the notice.
+   */
+  syncUndo: { removed: number; at: string } | null
   /** Stored preference; `ask` means prompt on every explicit connection. */
   priority: SyncPriority
 }

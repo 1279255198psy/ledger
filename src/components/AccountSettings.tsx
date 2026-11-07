@@ -13,6 +13,9 @@ import { SelectMenu } from './SelectMenu'
 import {
   ACCOUNT_TYPE_LABELS,
   BANK_PRESETS,
+  getDefaultAccountId,
+  loadDefaultAccountId,
+  saveDefaultAccountId,
   uniqueAccountName,
 } from '../lib/accounts'
 import type { Account } from '../types'
@@ -44,9 +47,34 @@ export function AccountSettings({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editError, setEditError] = useState('')
+  const [chosenDefaultId, setChosenDefaultId] = useState<string | null>(() =>
+    loadDefaultAccountId(),
+  )
 
   const wallets = accounts.filter((account) => account.type !== 'bank')
   const cards = accounts.filter((account) => account.type === 'bank')
+
+  // The stored choice wins while that account still exists; otherwise fall
+  // back to the same account the entry form would pick.
+  const defaultAccountId =
+    chosenDefaultId &&
+    accounts.some((account) => account.id === chosenDefaultId)
+      ? chosenDefaultId
+      : getDefaultAccountId(accounts)
+  const defaultAccountName =
+    accounts.find((account) => account.id === defaultAccountId)?.name ?? '微信'
+  const defaultOptions = [
+    ...wallets.map((account) => ({
+      value: account.id,
+      label: account.name,
+      group: '常用钱包',
+    })),
+    ...cards.map((account) => ({
+      value: account.id,
+      label: account.name,
+      group: '银行卡',
+    })),
+  ]
 
   const bank =
     bankChoice === CUSTOM_BANK ? customBank.trim() : bankChoice.trim()
@@ -118,6 +146,28 @@ export function AccountSettings({
     <div className="account-admin">
       <div className="account-group">
         <div className="account-group-head">
+          <strong>默认账户</strong>
+          <small>
+            记一笔时，账户一栏会先选中「{defaultAccountName}」，不用每次都改。
+            这个选择只保存在当前设备上。
+          </small>
+        </div>
+        <SelectMenu
+          value={defaultAccountId}
+          options={defaultOptions}
+          onChange={(value) => {
+            saveDefaultAccountId(value)
+            setChosenDefaultId(value)
+          }}
+          ariaLabel="选择默认账户"
+          icon={<Wallet size={15} aria-hidden />}
+          className="account-default-select"
+          elevated
+        />
+      </div>
+
+      <div className="account-group">
+        <div className="account-group-head">
           <strong>常用钱包</strong>
           <small>微信、支付宝与现金是固定账户，每一笔都可以继续使用</small>
         </div>
@@ -136,6 +186,11 @@ export function AccountSettings({
                     {used > 0 ? `${used} 笔流水` : '还没有流水'}
                   </small>
                 </div>
+                {account.id === defaultAccountId ? (
+                  <span className="account-badge account-badge--default">
+                    默认
+                  </span>
+                ) : null}
                 <span className="account-badge">内置</span>
               </div>
             )
@@ -220,6 +275,11 @@ export function AccountSettings({
                           {used > 0 ? `${used} 笔流水` : '还没有流水'}
                         </small>
                       </div>
+                      {account.id === defaultAccountId ? (
+                        <span className="account-badge account-badge--default">
+                          默认
+                        </span>
+                      ) : null}
                       <button
                         type="button"
                         className="category-admin-action"

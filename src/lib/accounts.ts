@@ -76,8 +76,38 @@ export function isBuiltinAccount(account: Account): boolean {
   return account.type !== 'bank'
 }
 
+/**
+ * Which account a fresh entry starts on is a per-device habit, so it stays in
+ * local storage and is never part of the synced snapshot.
+ */
+const DEFAULT_ACCOUNT_KEY = 'zhangye.defaultAccount.v1'
+
+export function loadDefaultAccountId(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const value = window.localStorage.getItem(DEFAULT_ACCOUNT_KEY)
+    return value && value.length > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+export function saveDefaultAccountId(id: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(DEFAULT_ACCOUNT_KEY, id)
+  } catch {
+    // Private mode: the choice just won't survive a restart.
+  }
+}
+
 /** The everyday account a fresh entry starts on. */
 export function getDefaultAccountId(accounts: Account[]): string {
+  const preferred = loadDefaultAccountId()
+  if (preferred && accounts.some((account) => account.id === preferred)) {
+    return preferred
+  }
+  // The chosen account may have been deleted, or this is a first run.
   return (
     accounts.find((account) => account.type === 'wechat')?.id ??
     accounts[0]?.id ??

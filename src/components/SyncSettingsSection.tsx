@@ -3,6 +3,7 @@ import {
   AlertCircle,
   Check,
   Copy,
+  History,
   KeyRound,
   Link2,
   RefreshCw,
@@ -19,6 +20,7 @@ import {
   connectMobile,
   disableSync,
   enableDesktopSync,
+  readSyncHistory,
   refreshDesktopStatus,
   resetPairing,
   resolveDirection,
@@ -28,7 +30,11 @@ import {
   syncNow,
 } from '../lib/sync/engine'
 import { formatSyncCode } from '../lib/sync/crypto'
-import type { SyncFavor, SyncPriority } from '../lib/sync/types'
+import type {
+  SyncFavor,
+  SyncHistoryEntry,
+  SyncPriority,
+} from '../lib/sync/types'
 
 const PRIORITY_OPTIONS: Array<{ value: SyncFavor; label: string }> = [
   { value: 'latest', label: '按最后改动时间' },
@@ -58,8 +64,18 @@ function formatTime(value: string | null): string {
   })
 }
 
+function historySummary(entry: SyncHistoryEntry): string {
+  const parts: string[] = []
+  if (entry.added > 0) parts.push(`新增 ${entry.added}`)
+  if (entry.updated > 0) parts.push(`修改 ${entry.updated}`)
+  if (entry.removed > 0) parts.push(`删除 ${entry.removed}`)
+  if (entry.conflicts > 0) parts.push(`冲突 ${entry.conflicts}`)
+  return parts.join(' · ')
+}
+
 export function SyncSettingsSection() {
   const sync = useSync()
+  const history = readSyncHistory()
   const [address, setAddress] = useState(sync.url ?? '')
   const [code, setCode] = useState(sync.code ?? '')
   const [busy, setBusy] = useState(false)
@@ -532,6 +548,32 @@ export function SyncSettingsSection() {
           </p>
         </>
       )}
+
+      <details className="sync-history">
+        <summary>
+          <History size={14} />
+          同步历史
+        </summary>
+        {history.length === 0 ? (
+          <p className="sync-note">
+            只记录真正带来改动的同步，日常自动同步不会留下记录。
+          </p>
+        ) : (
+          <ul className="sync-history-list">
+            {history.map((entry, index) => (
+              <li key={`${entry.at}-${index}`}>
+                <span className="sync-history-time">{formatTime(entry.at)}</span>
+                <span className="sync-history-direction">
+                  {entry.direction === 'push' ? '手机 → 电脑' : '电脑 → 手机'}
+                </span>
+                <span className="sync-history-counts">
+                  {historySummary(entry)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
 
       {notice ? (
         <p className={`sync-notice${notice.kind === 'bad' ? ' is-bad' : ''}`}>

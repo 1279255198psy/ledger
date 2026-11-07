@@ -33,23 +33,40 @@ import {
 } from './transport'
 import type {
   LedgerDataSnapshot,
+  MergeResult,
   SyncConfig,
   SyncFavor,
+  SyncHistoryEntry,
   SyncPayload,
   SyncPriority,
   SyncRole,
   SyncUiState,
 } from './types'
+import type {
+  Account,
+  Category,
+  LedgerTransaction,
+  Liability,
+  Project,
+  RangeBudget,
+  RecurringPending,
+  RecurringRule,
+} from '../../types'
 
 const CONFIG_KEY = 'zhangye.sync.config.v1'
 const META_KEY = 'zhangye.sync.meta.v1'
+const HISTORY_KEY = 'zhangye.sync.history.v1'
 const RELOAD_EVENT = 'zhangye:ledger-reloaded'
 
 const MOBILE_CHANGE_DELAY = 2000
 const DESKTOP_CHANGE_DELAY = 1500
 const MOBILE_POLL_INTERVAL = 8000
 const DESKTOP_STATUS_INTERVAL = 15000
-const REPLY_DELAY = 400
+/** The desktop merges a push and replies; retry a few times before giving up. */
+const REPLY_DELAYS = [400, 900, 1600]
+/** Wait this long for an acknowledged reply before sending the push again. */
+const ACK_WAIT_MS = 30000
+const HISTORY_LIMIT = 30
 
 type DirectionChoice = 'merge' | 'local' | 'remote'
 type SyncTrigger = 'startup' | 'manual' | 'resume' | 'change' | 'poll'
@@ -114,6 +131,28 @@ let quietSync = false
 let syncApplied = false
 /** Set while a modal is open, so a background poll cannot close an entry. */
 let syncSuspended = false
+/** Records the last merge dropped, kept in memory so the user can restore them. */
+let pendingUndo: UndoPayload | null = null
+/** When the current push was sent; a lost reply is retried after this window. */
+let pendingPushAt = 0
+
+/**
+ * Records that disappeared locally during one merge. Restoring the whole
+ * pre-merge snapshot would also roll back the other device's additions (their
+ * next merge would read that as deletions), so only the missing records are
+ * kept.
+ */
+interface UndoPayload {
+  at: string
+  transactions: LedgerTransaction[]
+  projects: Project[]
+  liabilities: Liability[]
+  categories: Category[]
+  accounts: Account[]
+  budgetRanges: RangeBudget[]
+  recurringRules: RecurringRule[]
+  recurringPending: RecurringPending[]
+}
 
 const listeners = new Set<() => void>()
 
@@ -136,6 +175,7 @@ let ui: SyncUiState = {
   hasBase: false,
   pendingDirection: null,
   pendingPriority: false,
+  syncUndo: null,
   priority: 'ask',
 }
 
@@ -223,6 +263,165 @@ function saveBase(snapshot: LedgerDataSnapshot | null): void {
  */
 export function noteLocalRestore(snapshot: LedgerDataSnapshot): void {
   saveBase(snapshot)
+}
+
+function missingById<T extends { id: string }>(
+  before: T[],
+  after: T[] | undefined,
+): T[] {
+  const kept = new Set((after ?? []).map((item) => item.id))
+  return before.filter((item) => !kept.has(item.id))
+}
+
+/** Records that existed before a merge and are gone after it. */
+function lostFrom(
+  before: LedgerDataSnapshot,
+  after: LedgerDataSnapshot,
+): UndoPayload {
+  return {
+    at: new Date().toISOString(),
+    transactions: missingById(before.transactions, after.transactions),
+    projects: missingById(before.projects, after.projects),
+    liabilities: missingById(before.liabilities, after.liabilities),
+    categories: missingById(before.categories, after.categories),
+    accounts: missingById(before.accounts ?? [], after.accounts),
+    budgetRanges: missingById(before.budgetRanges, after.budgetRanges),
+    recurringRules: missingById(
+      before.recurringRules ?? [],
+      after.recurringRules,
+    ),
+    recurringPending: missingById(
+      before.recurringPending ?? [],
+      after.recurringPending,
+    ),
+  }
+}
+
+function undoCount(undo: UndoPayload): number {
+  return (
+    undo.transactions.length +
+    undo.projects.length +
+    undo.liabilities.length +
+    undo.categories.length +
+    undo.accounts.length +
+    undo.budgetRanges.length +
+    undo.recurringRules.length +
+    undo.recurringPending.length
+  )
+}
+
+/** Shows the one-time "this sync deleted N records" notice with an undo. */
+function announceLost(undo: UndoPayload): void {
+  const removed = undoCount(undo)
+  if (removed === 0) return
+  pendingUndo = undo
+  emit({ syncUndo: { removed, at: undo.at } })
+}
+
+export function dismissSyncUndo(): void {
+  if (!pendingUndo && !ui.syncUndo) return
+  pendingUndo = null
+  emit({ syncUndo: null })
+}
+
+/**
+ * Puts back the records the last merge dropped. The merge base already lacks
+ * them, so they are local-only additions on the next sync and travel to the
+ * other device instead of being read as deletions.
+ */
+export async function undoSyncDeletion(): Promise<void> {
+  const undo = pendingUndo
+  pendingUndo = null
+  emit({ syncUndo: null })
+  if (!undo) return
+
+  const current = readLedgerDataSnapshot()
+  const now = new Date().toISOString()
+  const restore = <T extends { id: string }>(
+    present: T[],
+    missing: T[],
+    bumpStamp: boolean,
+  ): T[] => {
+    const ids = new Set(present.map((item) => item.id))
+    const revived = missing
+      .filter((item) => !ids.has(item.id))
+      .map((item) =>
+        bumpStamp ? ({ ...item, updatedAt: now } as T) : item,
+      )
+    return revived.length > 0 ? [...present, ...revived] : present
+  }
+
+  const next: LedgerDataSnapshot = {
+    ...current,
+    transactions: restore(current.transactions, undo.transactions, true),
+    projects: restore(current.projects, undo.projects, true),
+    liabilities: restore(current.liabilities, undo.liabilities, true),
+    categories: restore(current.categories, undo.categories, false),
+    accounts: restore(current.accounts ?? [], undo.accounts, false),
+    budgetRanges: restore(current.budgetRanges, undo.budgetRanges, false),
+    recurringRules: restore(
+      current.recurringRules ?? [],
+      undo.recurringRules,
+      true,
+    ),
+    recurringPending: restore(
+      current.recurringPending ?? [],
+      undo.recurringPending,
+      false,
+    ),
+  }
+
+  applySyncedSnapshot(next)
+  emit({ message: '已恢复本次同步删除的记录' })
+
+  if (!config?.enabled) return
+  if (runtimeRole === 'mobile') {
+    void runMobileSync('manual')
+  } else {
+    void publishDesktopSnapshot().catch(() => undefined)
+  }
+}
+
+function recordHistory(
+  direction: SyncHistoryEntry['direction'],
+  added: number,
+  updated: number,
+  removed: number,
+  conflicts: number,
+): void {
+  if (added + updated + removed + conflicts === 0) return
+  const entry: SyncHistoryEntry = {
+    at: new Date().toISOString(),
+    direction,
+    added,
+    updated,
+    removed,
+    conflicts,
+  }
+  const history = [entry, ...readSyncHistory()].slice(0, HISTORY_LIMIT)
+  try {
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
+  } catch {
+    // History is a diagnostic aid; losing it must not affect the sync.
+  }
+}
+
+/** Newest first. Used by the settings screen. */
+export function readSyncHistory(): SyncHistoryEntry[] {
+  const stored = readJson<unknown>(HISTORY_KEY)
+  if (!Array.isArray(stored)) return []
+  return stored.filter((entry): entry is SyncHistoryEntry => {
+    if (!entry || typeof entry !== 'object') return false
+    const item = entry as Record<string, unknown>
+    return (
+      typeof item.at === 'string' &&
+      (item.direction === 'push' || item.direction === 'pull') &&
+      typeof item.added === 'number' &&
+      typeof item.updated === 'number' &&
+      typeof item.removed === 'number' &&
+      typeof item.conflicts === 'number'
+    )
+  })
 }
 
 function newConfig(role: SyncRole): SyncConfig {
@@ -530,10 +729,14 @@ async function handleIncomingBlob(): Promise<void> {
   emit({ phase: 'merging', message: '正在合并手机上的账目…', lastError: null })
   const current = readLedgerDataSnapshot()
   const priority = payload.priority ?? 'latest'
-  const merged =
-    payload.mode === 'replace'
-      ? { snapshot: payload.snapshot, conflicts: [] }
-      : mergeSnapshots(base, current, payload.snapshot, favorOf(priority))
+  const replacing = payload.mode === 'replace'
+  const merged: MergeResult = replacing
+    ? {
+        snapshot: payload.snapshot,
+        conflicts: [],
+        stats: { added: 0, updated: 0, removed: 0 },
+      }
+    : mergeSnapshots(base, current, payload.snapshot, favorOf(priority))
 
   // Applying a merged snapshot fires the change watcher; never publish that
   // echo back as if the user had edited something here.
@@ -584,6 +787,19 @@ async function handleIncomingBlob(): Promise<void> {
 
   meta.lastMobileSeq = payload.seq
   persistMeta()
+  // "Replace" is the user's explicit first-sync choice, so its deletions are
+  // not an accident and need no reminder.
+  if (!replacing) {
+    const lost = lostFrom(current, merged.snapshot)
+    announceLost(lost)
+    recordHistory(
+      'push',
+      merged.stats.added,
+      merged.stats.updated,
+      undoCount(lost),
+      merged.conflicts.length,
+    )
+  }
   // Flush anything edited here while the reply was being encrypted, so the
   // phone's next poll sees it even though this reply was already built.
   void publishDesktopSnapshot().catch(() => undefined)
@@ -1110,7 +1326,16 @@ async function performMobileSync(): Promise<void> {
   const alreadyApplied =
     remotePayload?.sender === 'desktop' &&
     remotePayload.seq <= meta.lastDesktopSeq
-  const remoteSnapshot = alreadyApplied ? null : (remotePayload?.snapshot ?? null)
+  // The blob still holds this device's own push: the desktop has not answered
+  // yet. Its snapshot is not the desktop's state, and it must never advance
+  // the merge base.
+  const ownPush =
+    remotePayload?.sender === 'mobile' &&
+    meta.seq > 0 &&
+    remotePayload.seq === meta.seq
+  const remoteSnapshot = alreadyApplied || ownPush
+    ? null
+    : (remotePayload?.snapshot ?? null)
   const remoteEtag = remote?.etag ?? null
 
   const local = readLedgerDataSnapshot()
@@ -1120,6 +1345,22 @@ async function performMobileSync(): Promise<void> {
   // handle the same blob.
   if (quietSync && syncSuspended) return
 
+  if (ownPush) {
+    if (Date.now() - pendingPushAt < ACK_WAIT_MS) {
+      await fetchReply(key, token, meta.seq)
+      meta.lastSyncAt = new Date().toISOString()
+      persistMeta()
+      return
+    }
+    // No reply arrived in time; send the snapshot again so the desktop
+    // processes it (and answers) once more.
+    const pushed = await pushSnapshot(local, 'snapshot', remoteEtag)
+    await fetchReply(key, token, pushed.seq)
+    meta.lastSyncAt = new Date().toISOString()
+    persistMeta()
+    return
+  }
+
   if (!base) {
     await firstSync(local, remoteSnapshot, remotePayload, remoteEtag)
     return
@@ -1128,20 +1369,12 @@ async function performMobileSync(): Promise<void> {
   if (!remoteSnapshot) {
     if (!snapshotsEqual(local, base)) {
       const pushed = await pushSnapshot(local, 'snapshot', remoteEtag)
-      saveBase(local)
-      meta.lastSyncAt = new Date().toISOString()
-      persistMeta()
+      // The base advances only when the desktop's reply confirms the push.
       await fetchReply(key, token, pushed.seq)
-    } else {
-      meta.lastSyncAt = new Date().toISOString()
-      persistMeta()
     }
-    return
-  }
-
-  if (remotePayload?.sender === 'desktop') {
-    meta.lastDesktopSeq = Math.max(meta.lastDesktopSeq, remotePayload.seq)
+    meta.lastSyncAt = new Date().toISOString()
     persistMeta()
+    return
   }
 
   emitPhase({ phase: 'merging', message: '正在合并两边的账目…' })
@@ -1157,21 +1390,37 @@ async function performMobileSync(): Promise<void> {
     applied = applySyncedSnapshot(merged.snapshot)
   }
 
+  // Only after the merge was applied: a snapshot that failed validation must
+  // be retried on the next poll, not skipped as already applied.
+  if (remotePayload?.sender === 'desktop') {
+    meta.lastDesktopSeq = Math.max(meta.lastDesktopSeq, remotePayload.seq)
+    persistMeta()
+  }
+
   emitPhase({ conflictCount: merged.conflicts.length })
+
+  const lost = lostFrom(local, merged.snapshot)
+  announceLost(lost)
+  recordHistory(
+    'pull',
+    merged.stats.added,
+    merged.stats.updated,
+    undoCount(lost),
+    merged.conflicts.length,
+  )
 
   if (snapshotsEqual(applied, remoteSnapshot)) {
     // The desktop is already up to date; nothing to push.
-    saveBase(snapshotsEqual(applied, base) ? base : applied)
+    saveBase(remoteSnapshot)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     return
   }
 
   const pushed = await pushSnapshot(applied, 'snapshot', remoteEtag)
-  saveBase(applied)
+  await fetchReply(key, token, pushed.seq)
   meta.lastSyncAt = new Date().toISOString()
   persistMeta()
-  await fetchReply(key, token, pushed.seq)
 }
 
 async function firstSync(
@@ -1183,7 +1432,6 @@ async function firstSync(
   if (!remoteSnapshot) {
     emitPhase({ phase: 'pushing', message: '正在把账目写入电脑…' })
     const pushed = await pushSnapshot(local, 'snapshot', remoteEtag)
-    saveBase(local)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     await fetchReply(await syncKey(), await syncToken(), pushed.seq)
@@ -1199,7 +1447,6 @@ async function firstSync(
     // Push the adopted snapshot back so the desktop records it as the shared
     // base. Without a base it cannot tell later deletions from additions.
     const pushed = await pushSnapshot(applied, 'snapshot', remoteEtag)
-    saveBase(applied)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     await fetchReply(
@@ -1213,7 +1460,6 @@ async function firstSync(
   if (!hasLedgerData(remoteSnapshot)) {
     emitPhase({ phase: 'pushing', message: '正在把账目写入电脑…' })
     const pushed = await pushSnapshot(local, 'snapshot', remoteEtag)
-    saveBase(local)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     await fetchReply(
@@ -1233,7 +1479,6 @@ async function firstSync(
       meta.lastDesktopSeq = Math.max(meta.lastDesktopSeq, remotePayload.seq)
     }
     const pushed = await pushSnapshot(applied, 'snapshot', remoteEtag)
-    saveBase(applied)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     await fetchReply(await syncKey(), await syncToken(), pushed.seq)
@@ -1245,7 +1490,6 @@ async function firstSync(
     emitPhase({ phase: 'pushing', message: '正在替换电脑上的账目…' })
     const normalized = applySyncedSnapshot(local)
     const pushed = await pushSnapshot(normalized, 'replace', remoteEtag)
-    saveBase(normalized)
     meta.lastSyncAt = new Date().toISOString()
     persistMeta()
     await fetchReply(
@@ -1269,7 +1513,6 @@ async function firstSync(
   emitPhase({ conflictCount: merged.conflicts.length })
   emitPhase({ phase: 'pushing', message: '正在把合并结果写入电脑…' })
   const pushed = await pushSnapshot(applied, 'snapshot', remoteEtag)
-  saveBase(applied)
   meta.lastSyncAt = new Date().toISOString()
   persistMeta()
   await fetchReply(
@@ -1311,6 +1554,7 @@ async function pushSnapshot(
     throw new StaleBlobError('电脑上的账目刚刚更新，正在重试')
   }
   meta.seq = seq
+  pendingPushAt = Date.now()
   persistMeta()
   return { etag: result.etag, seq }
 }
@@ -1324,40 +1568,47 @@ async function fetchReply(
   key: CryptoKey,
   token: string,
   pushedSeq: number,
-): Promise<void> {
+): Promise<boolean> {
   const cfg = config
-  if (!cfg?.url) return
-  await wait(REPLY_DELAY)
-  let remote
-  try {
-    remote = await fetchSyncBlob(cfg.url, token)
-  } catch {
-    return
-  }
-  if (!remote?.text) return
-  let payload: SyncPayload
-  try {
-    payload = await decryptPayload(parseSyncEnvelope(remote.text), key)
-  } catch {
-    return
-  }
-  if (payload.sender !== 'desktop' || payload.ack !== pushedSeq) return
-  if (quietSync && syncSuspended) return
+  if (!cfg?.url) return false
+  for (const delay of REPLY_DELAYS) {
+    await wait(delay)
+    if (quietSync && syncSuspended) return false
+    let remote
+    try {
+      remote = await fetchSyncBlob(cfg.url, token)
+    } catch {
+      continue
+    }
+    if (!remote?.text) continue
+    let payload: SyncPayload
+    try {
+      payload = await decryptPayload(parseSyncEnvelope(remote.text), key)
+    } catch {
+      continue
+    }
+    if (payload.sender !== 'desktop' || payload.ack !== pushedSeq) continue
 
-  const local = readLedgerDataSnapshot()
-  const merged = mergeSnapshots(
-    base,
-    local,
-    payload.snapshot,
-    favorOf(payload.priority ?? activePriority()),
-  )
-  if (!snapshotsEqual(merged.snapshot, local)) {
-    applySyncedSnapshot(merged.snapshot)
+    const local = readLedgerDataSnapshot()
+    const merged = mergeSnapshots(
+      base,
+      local,
+      payload.snapshot,
+      favorOf(payload.priority ?? activePriority()),
+    )
+    if (!snapshotsEqual(merged.snapshot, local)) {
+      applySyncedSnapshot(merged.snapshot)
+    }
+    announceLost(lostFrom(local, merged.snapshot))
+    // The desktop acknowledged our push: this is the only point where the
+    // shared base advances, so a lost reply can never look like a deletion.
+    saveBase(payload.snapshot)
+    meta.lastDesktopSeq = Math.max(meta.lastDesktopSeq, payload.seq)
+    meta.lastSyncAt = new Date().toISOString()
+    persistMeta()
+    return true
   }
-  saveBase(payload.snapshot)
-  meta.lastDesktopSeq = Math.max(meta.lastDesktopSeq, payload.seq)
-  meta.lastSyncAt = new Date().toISOString()
-  persistMeta()
+  return false
 }
 
 /** Display helper for the settings screen. */

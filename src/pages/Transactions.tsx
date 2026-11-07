@@ -619,26 +619,38 @@ export function Transactions({
           <CalendarRange size={15} aria-hidden />
           <label className="date-range-field">
             <span className="date-range-label">开始</span>
-            <input
-              type="date"
-              value={rangeStart}
-              max={rangeEnd || undefined}
-              onChange={(event) => setRangeStart(event.target.value)}
-              aria-label="开始日期"
-            />
+            <span
+              className={`date-range-input${rangeStart ? '' : ' is-empty'}`}
+            >
+              <input
+                type="date"
+                value={rangeStart}
+                max={rangeEnd || undefined}
+                onChange={(event) => setRangeStart(event.target.value)}
+                aria-label="开始日期"
+              />
+              <span className="date-range-placeholder" aria-hidden>
+                选择日期
+              </span>
+            </span>
           </label>
           <span className="date-range-sep" aria-hidden>
             至
           </span>
           <label className="date-range-field">
             <span className="date-range-label">结束</span>
-            <input
-              type="date"
-              value={rangeEnd}
-              min={rangeStart || undefined}
-              onChange={(event) => setRangeEnd(event.target.value)}
-              aria-label="结束日期"
-            />
+            <span className={`date-range-input${rangeEnd ? '' : ' is-empty'}`}>
+              <input
+                type="date"
+                value={rangeEnd}
+                min={rangeStart || undefined}
+                onChange={(event) => setRangeEnd(event.target.value)}
+                aria-label="结束日期"
+              />
+              <span className="date-range-placeholder" aria-hidden>
+                选择日期
+              </span>
+            </span>
           </label>
         </div>
 

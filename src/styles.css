@@ -3523,6 +3523,38 @@ a {
   opacity: 0.5;
 }
 
+.date-range-input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Chromium otherwise parks a「yyyy/mm/dd」hint in the empty field. */
+.date-range-input.is-empty input[type='date']::-webkit-datetime-edit {
+  color: transparent;
+}
+
+/* While editing, the native segments have to be visible to type into. */
+.date-range-input.is-empty input[type='date']:focus::-webkit-datetime-edit {
+  color: var(--ink);
+}
+
+.date-range-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  color: var(--ink-faint);
+  font-size: calc(11px * var(--font-scale));
+  pointer-events: none;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.date-range-input:not(.is-empty) .date-range-placeholder,
+.date-range-input.is-empty:focus-within .date-range-placeholder {
+  display: none;
+}
+
 .date-range-sep {
   color: var(--ink-faint);
   font-size: calc(10px * var(--font-scale));
@@ -7477,6 +7509,11 @@ a {
     min-width: 0;
   }
 
+  .date-range-input {
+    flex: 1;
+    min-width: 0;
+  }
+
   .date-range input[type='date'] {
     width: 100%;
     min-width: 0;
@@ -11024,6 +11061,32 @@ a {
   font-size: calc(8.5px * var(--font-scale));
 }
 
+.account-badge--default {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-color: var(--accent-mid);
+}
+
+.account-default-select {
+  width: 100%;
+  height: 41px;
+  padding: 0 8px 0 11px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.account-default-select .category-filter-trigger {
+  min-width: 0;
+  max-width: none;
+  flex: 1;
+  font-size: calc(11.5px * var(--font-scale));
+}
+
+.account-default-select .category-filter-trigger span {
+  flex: 1;
+}
+
 .account-empty {
   padding: 14px 12px;
   margin: 0;
@@ -12732,5 +12795,135 @@ a {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+}
+
+/* ---------- Sync deletion undo + history ---------- */
+
+.sync-history {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.sync-history summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-secondary);
+  font-size: calc(10.5px * var(--font-scale));
+  cursor: pointer;
+  list-style: none;
+}
+
+.sync-history summary::-webkit-details-marker {
+  display: none;
+}
+
+.sync-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 9px 0 2px;
+  padding: 0;
+  list-style: none;
+}
+
+.sync-history-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: calc(9.5px * var(--font-scale));
+  line-height: 1.55;
+}
+
+.sync-history-time {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.sync-history-direction {
+  color: var(--ink-secondary);
+}
+
+.sync-undo {
+  position: fixed;
+  right: 28px;
+  bottom: 76px;
+  z-index: 201;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 12px;
+  color: var(--tooltip-ink);
+  background: var(--tooltip-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.26);
+  font-size: calc(11.5px * var(--font-scale));
+  animation: toast-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sync-undo-text {
+  flex: 1 1 auto;
+  line-height: 1.45;
+}
+
+.sync-undo-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  color: var(--tooltip-ink);
+  background: rgba(255, 255, 255, 0.14);
+  border: 0;
+  border-radius: 7px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sync-undo-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.sync-undo-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.sync-undo-close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 3px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  opacity: 0.65;
+  cursor: pointer;
+}
+
+.sync-undo-close:hover {
+  opacity: 1;
+}
+
+@media (max-width: 1024px) {
+  .sync-undo {
+    right: 16px;
+    bottom: calc(146px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 560px) {
+  .sync-undo {
+    right: 12px;
+    left: 12px;
+    bottom: calc(146px + env(safe-area-inset-bottom));
+    max-width: none;
   }
 }

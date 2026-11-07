@@ -25,6 +25,7 @@ import {
 import { getAdapter } from './lib/exchange/adapters'
 import type { ImportPlan } from './lib/exchange/types'
 import { UpdateDialog } from './components/UpdateDialog'
+import { SyncUndoNotice } from './components/SyncUndoNotice'
 import { useUpdater } from './hooks/useUpdater'
 import { useReminderScheduler } from './hooks/useReminderScheduler'
 import { useCaptureInbox } from './hooks/useCaptureInbox'
@@ -2050,6 +2051,8 @@ export default function App() {
         updater={updater}
         suspended={transactionModalOpen || settingsOpen}
       />
+
+      <SyncUndoNotice />
 
       {toast ? (
         <div
