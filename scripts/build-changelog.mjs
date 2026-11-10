@@ -17,6 +17,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import summaries from './changelog-summaries.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const argv = process.argv.slice(2)
@@ -82,25 +83,49 @@ const tags = git(['tag', '--sort=-v:refname'])
 const entries = []
 for (const tag of tags) {
   const version = tag.slice(1)
+  const date = git(['log', '-1', '--format=%ad', '--date=short', tag])
+
+  // 应用内只展示 changelog-summaries.mjs 里的精简条目；没有精简条目的
+  // 版本才回退到 Release 的完整说明。
+  const summary = summaries[version]
+  if (summary) {
+    const title = summary.title || ''
+    const items = summary.items || []
+    if (!title && items.length === 0) continue
+    entries.push({ version, date, title, items })
+    continue
+  }
+
   const yaml =
     workingVersion && version === workingVersion ? readYaml(null) : readYaml(tag)
   const body = extractReleaseBody(yaml)
   if (!body) continue
-  const date = git(['log', '-1', '--format=%ad', '--date=short', tag])
   const { title, items } = parseReleaseBody(body, version)
   if (!title && items.length === 0) continue
+  console.warn(`  · ${version} 没有精简条目，回退到 Release 的完整说明`)
   entries.push({ version, date, title, items })
 }
 
 if (workingVersion) {
   const exists = entries.some((entry) => entry.version === workingVersion)
   if (!exists) {
-    const body = extractReleaseBody(readYaml(null))
-    if (body) {
-      // 用本地日期，和下面从 tag 读到的时间（提交时区）保持一致。
-      const date = new Date().toLocaleDateString('sv-SE')
-      const { title, items } = parseReleaseBody(body, workingVersion)
-      entries.unshift({ version: workingVersion, date, title, items })
+    // 用本地日期，和下面从 tag 读到的时间（提交时区）保持一致。
+    const date = new Date().toLocaleDateString('sv-SE')
+    const summary = summaries[workingVersion]
+    if (summary) {
+      entries.unshift({
+        version: workingVersion,
+        date,
+        title: summary.title || '',
+        items: summary.items || [],
+      })
+    } else {
+      console.warn(`  · ${workingVersion} 没有精简条目，回退到 Release 的完整说明`)
+      const body = extractReleaseBody(readYaml(null))
+      if (body) {
+        const { title, items } = parseReleaseBody(body, workingVersion)
+        entries.unshift({ version: workingVersion, date, title, items })
+      }
     }
   }
 }
@@ -115,7 +140,7 @@ const sections = entries.map((entry) => {
 
 const output = `# 账页 · 更新日志
 
-> 记录每个正式版本的主要变化。设置 → 关于账页 → 历史更新 会读取这份文件。
+> 只记录主要功能更新；关键问题修复会简述一句，其余小问题统一记为「修复了一些 BUG」。设置 → 关于账页 → 历史更新 会读取这份文件。
 
 ${sections.join('\n\n')}
 `

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { PencilLine } from 'lucide-react'
 import {
   formatMoney,
   getTotals,
@@ -22,14 +21,12 @@ interface BalanceSummaryProps {
   transactions: LedgerTransaction[]
   monthKey: string
   openingBalance: number
-  onAdjustOpeningBalance: () => void
 }
 
 export function BalanceSummary({
   transactions,
   monthKey,
   openingBalance,
-  onAdjustOpeningBalance,
 }: BalanceSummaryProps) {
   const [mode, setMode] = useState<RangeMode>('month')
   const [customStart, setCustomStart] = useState(() =>
@@ -70,20 +67,43 @@ export function BalanceSummary({
     [transactions, start, end],
   )
 
-  // 总结余跟着上方切换的月份走：起始资金加上截至所选月份（含）的收支，
-  // 不把之后月份的流水算进来。区间选择只改变下方「区间收入 / 支出 /
-  // 笔数」的统计，不影响总结余。
-  const totalsThroughMonth = useMemo(
+  // 总结余跟着上方切换的月份走：起始资金 = 上个月的总结余（最早一个月
+  // 就是设置的起始资金），再加上该月收支。区间选择只改变下方「区间收入 /
+  // 支出 / 笔数」的统计，不影响总结余。
+  const totalsBeforeMonth = useMemo(
     () =>
       getTotals(
         transactions.filter(
-          (transaction) => transaction.date.slice(0, 7) <= monthKey,
+          (transaction) => transaction.date.slice(0, 7) < monthKey,
+        ),
+      ),
+    [transactions, monthKey],
+  )
+  const totalsForMonth = useMemo(
+    () =>
+      getTotals(
+        transactions.filter(
+          (transaction) => transaction.date.slice(0, 7) === monthKey,
         ),
       ),
     [transactions, monthKey],
   )
   const totals = getTotals(filtered)
-  const total = openingBalance + totalsThroughMonth.balance
+  const startingBalance = openingBalance + totalsBeforeMonth.balance
+  const total = startingBalance + totalsForMonth.balance
+
+  // 区间统计的期初结余：所选区间开始之前的累计结余；「全部」就是起始资金。
+  const rangeOpeningBalance = useMemo(() => {
+    if (!start) return openingBalance
+    return (
+      openingBalance +
+      getTotals(
+        transactions.filter(
+          (transaction) => transaction.date.slice(0, 7) < start,
+        ),
+      ).balance
+    )
+  }, [transactions, openingBalance, start])
 
   let rangeLabel = '全部月份'
   if (mode === 'month') {
@@ -114,7 +134,7 @@ export function BalanceSummary({
           <p className="card-kicker">TOTAL BALANCE</p>
           <h2 id="balance-summary-heading">总结余</h2>
           <p className="card-sub">
-            起始资金加上截至所选月份的收入与支出；下方切换区间统计
+            上月总结余加上该月收入与支出；下方切换区间统计
           </p>
         </div>
         <div className="balance-range" role="group" aria-label="区间统计范围">
@@ -178,28 +198,24 @@ export function BalanceSummary({
             {formatMoney(Math.abs(total))}
           </strong>
           <p className="balance-formula">
-            <span>起始资金 {formatMoney(openingBalance)}</span>
+            <span>
+              上月总结余 {startingBalance < 0 ? '−' : ''}
+              {formatMoney(Math.abs(startingBalance))}
+            </span>
             <b aria-hidden="true">+</b>
-            <span>截至该月收入 {formatMoney(totalsThroughMonth.income)}</span>
+            <span>该月收入 {formatMoney(totalsForMonth.income)}</span>
             <b aria-hidden="true">−</b>
-            <span>截至该月支出 {formatMoney(totalsThroughMonth.expense)}</span>
+            <span>该月支出 {formatMoney(totalsForMonth.expense)}</span>
           </p>
-          <button
-            type="button"
-            className="text-link balance-edit"
-            onClick={onAdjustOpeningBalance}
-          >
-            <PencilLine size={14} />
-            {openingBalance > 0 ? '调整起始资金' : '设置起始资金'}
-          </button>
         </div>
 
         <div className="balance-breakdown">
           <p className="balance-breakdown-label">区间统计 · {rangeLabel}</p>
           <div className="balance-cell">
-            <span>起始资金</span>
-            <strong>
-              {openingBalance > 0 ? formatMoney(openingBalance) : '从零开始'}
+            <span>期初结余</span>
+            <strong className={rangeOpeningBalance < 0 ? 'is-negative' : ''}>
+              {rangeOpeningBalance < 0 ? '−' : ''}
+              {formatMoney(Math.abs(rangeOpeningBalance))}
             </strong>
           </div>
           <div className="balance-cell">

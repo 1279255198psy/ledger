@@ -78,7 +78,6 @@ interface OverviewProps {
     rescheduleDaily: boolean,
   ) => void
   onOpenRangeBudget: () => void
-  onOpenOpeningBalance: () => void
   onLoadSample: () => void
   showOnboarding: boolean
   hasMonthBudget: boolean
@@ -151,7 +150,6 @@ export function Overview({
   onOpenBudget,
   onBudgetAdjust,
   onOpenRangeBudget,
-  onOpenOpeningBalance,
   onLoadSample,
   showOnboarding,
   hasMonthBudget,
@@ -181,7 +179,6 @@ export function Overview({
           transactions={transactions}
           monthKey={monthKey}
           openingBalance={openingBalance}
-          onAdjustOpeningBalance={onOpenOpeningBalance}
         />
         <EmptyLedger onAdd={onAdd} onLoadSample={onLoadSample} />
       </div>
@@ -660,7 +657,6 @@ export function Overview({
         transactions={transactions}
         monthKey={monthKey}
         openingBalance={openingBalance}
-        onAdjustOpeningBalance={onOpenOpeningBalance}
       />
 
       <section className="card metric-strip" aria-label="本月摘要">

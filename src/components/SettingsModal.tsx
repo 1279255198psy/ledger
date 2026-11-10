@@ -668,8 +668,8 @@ export function SettingsModal({
                   <div className="settings-heading">
                     <h3 id="opening-balance-heading">起始资金</h3>
                     <p>
-                      总结余 = 起始资金 + 截至所选月份的收入 − 支出。使用账页之前已有的钱可以记在这里；
-                      不填就当作从零开始，只统计账本里的收支。
+                      这是使用账页之前已有的钱，只在最早一个月作为起点；之后每月总结余会自动承接
+                      上月结余，再加上当月收支。不填就当作从零开始，只统计账本里的收支。
                     </p>
                   </div>
                   <form

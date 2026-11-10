@@ -1836,10 +1836,6 @@ export default function App() {
               setSettingsFocus('budget-ranges')
               setSettingsOpen(true)
             }}
-            onOpenOpeningBalance={() => {
-              setSettingsFocus('opening-balance')
-              setSettingsOpen(true)
-            }}
             onLoadSample={handleLoadSample}
             showOnboarding={!onboardingDismissed}
             hasMonthBudget={budgetMetrics.source !== 'default'}
