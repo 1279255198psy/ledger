@@ -14,6 +14,27 @@ mod sync;
 
 static SAVE_LOCK: Mutex<()> = Mutex::new(());
 
+/// Debug 构建即测试版。测试版与正式版共用应用标识，所以同一时间只允许
+/// 一个账页进程运行；测试版通过托盘角标、提示文字和窗口标题与正式版区分。
+const TEST_BUILD: bool = cfg!(debug_assertions);
+
+fn app_title() -> &'static str {
+    if TEST_BUILD {
+        "账页 · 生活账簿（测试版）"
+    } else {
+        "账页 · 生活账簿"
+    }
+}
+
+/// 托盘菜单里的简短名称，例如「打开账页（测试版）」。
+fn app_label() -> &'static str {
+    if TEST_BUILD {
+        "账页（测试版）"
+    } else {
+        "账页"
+    }
+}
+
 /// Mirrors `ReminderSettings` in the frontend.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -398,6 +419,11 @@ fn show_reminder(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 fn apply_autostart(app: &tauri::AppHandle, enabled: bool) {
+    // 测试版和正式版共用同一个自启注册表项名（产品名），测试版写入会覆盖
+    // 正式版的路径。测试版一律不碰开机自启。
+    if TEST_BUILD {
+        return;
+    }
     use tauri_plugin_autostart::ManagerExt;
     let manager = app.autolaunch();
     let current = manager.is_enabled().unwrap_or(false);
@@ -469,13 +495,54 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+/// 测试版的托盘图标：在默认图标右下角画一个橙色角标，和正式版一眼可分。
+fn tray_icon(app: &tauri::App) -> Option<tauri::image::Image<'static>> {
+    let icon = app.default_window_icon()?;
+    let (width, height) = (icon.width(), icon.height());
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let mut rgba = icon.rgba().to_vec();
+    if TEST_BUILD {
+        let radius = (width.min(height) as f32 * 0.30).max(4.0);
+        let cx = width as f32 - radius - 1.0;
+        let cy = height as f32 - radius - 1.0;
+        for y in 0..height {
+            for x in 0..width {
+                let dx = x as f32 + 0.5 - cx;
+                let dy = y as f32 + 0.5 - cy;
+                let distance = (dx * dx + dy * dy).sqrt();
+                let index = ((y * width + x) * 4) as usize;
+                if distance <= radius {
+                    rgba[index..index + 4].copy_from_slice(&[0xF5, 0x9E, 0x0B, 0xFF]);
+                } else if distance <= radius + 1.0 {
+                    rgba[index..index + 4].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+                }
+            }
+        }
+    }
+    Some(tauri::image::Image::new_owned(rgba, width, height))
+}
+
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, "show", "打开账页", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "退出账页", true, None::<&str>)?;
+    let show = MenuItem::with_id(
+        app,
+        "show",
+        format!("打开{}", app_label()),
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(
+        app,
+        "quit",
+        format!("退出{}", app_label()),
+        true,
+        None::<&str>,
+    )?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("main")
-        .tooltip("账页 · 生活账簿")
+        .tooltip(app_title())
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -494,8 +561,8 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             }
         });
 
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
+    if let Some(icon) = tray_icon(app) {
+        builder = builder.icon(icon);
     }
     builder.build(app)?;
     Ok(())
@@ -549,6 +616,14 @@ fn reminder_permission_state(app: tauri::AppHandle) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        // 单实例锁必须最先注册：再次启动时只把已有窗口带到前台并退出，
+        // 不会出现第二个托盘图标，也不会出现两个进程同时写账本。
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // 开机自启撞上已运行实例时保持安静；用户手动再打开才显示窗口。
+            if !args.iter().any(|arg| arg == "--autostart") {
+                show_main_window(app);
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
@@ -564,6 +639,11 @@ pub fn run() {
                 last_fired: Mutex::new(String::new()),
             });
             let _ = app.manage(sync::SyncServerState::new());
+            if TEST_BUILD {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_title(app_title());
+                }
+            }
             setup_tray(app)?;
             // The window starts hidden so a login launch goes straight to the
             // tray without a flash. A normal launch shows it right away.

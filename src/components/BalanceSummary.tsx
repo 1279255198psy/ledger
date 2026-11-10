@@ -70,11 +70,20 @@ export function BalanceSummary({
     [transactions, start, end],
   )
 
-  // 总结余是账本的当前余额：起始资金加上每一个月的结余，不能只取
-  // 选定区间。区间选择只改变下方「区间收入 / 支出 / 笔数」的统计。
-  const allTotals = getTotals(transactions)
+  // 总结余跟着上方切换的月份走：起始资金加上截至所选月份（含）的收支，
+  // 不把之后月份的流水算进来。区间选择只改变下方「区间收入 / 支出 /
+  // 笔数」的统计，不影响总结余。
+  const totalsThroughMonth = useMemo(
+    () =>
+      getTotals(
+        transactions.filter(
+          (transaction) => transaction.date.slice(0, 7) <= monthKey,
+        ),
+      ),
+    [transactions, monthKey],
+  )
   const totals = getTotals(filtered)
-  const total = openingBalance + allTotals.balance
+  const total = openingBalance + totalsThroughMonth.balance
 
   let rangeLabel = '全部月份'
   if (mode === 'month') {
@@ -105,7 +114,7 @@ export function BalanceSummary({
           <p className="card-kicker">TOTAL BALANCE</p>
           <h2 id="balance-summary-heading">总结余</h2>
           <p className="card-sub">
-            起始资金加上全部月份的收入与支出；下方切换区间统计
+            起始资金加上截至所选月份的收入与支出；下方切换区间统计
           </p>
         </div>
         <div className="balance-range" role="group" aria-label="区间统计范围">
@@ -161,7 +170,9 @@ export function BalanceSummary({
 
       <div className="balance-body">
         <div className="balance-figure">
-          <span className="balance-figure-label">当前总结余</span>
+          <span className="balance-figure-label">
+            {monthLabel(monthKey)} 总结余
+          </span>
           <strong className={total < 0 ? 'is-negative' : ''}>
             {total < 0 ? '−' : ''}
             {formatMoney(Math.abs(total))}
@@ -169,9 +180,9 @@ export function BalanceSummary({
           <p className="balance-formula">
             <span>起始资金 {formatMoney(openingBalance)}</span>
             <b aria-hidden="true">+</b>
-            <span>累计收入 {formatMoney(allTotals.income)}</span>
+            <span>截至该月收入 {formatMoney(totalsThroughMonth.income)}</span>
             <b aria-hidden="true">−</b>
-            <span>累计支出 {formatMoney(allTotals.expense)}</span>
+            <span>截至该月支出 {formatMoney(totalsThroughMonth.expense)}</span>
           </p>
           <button
             type="button"
