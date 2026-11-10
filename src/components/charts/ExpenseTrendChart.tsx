@@ -19,6 +19,21 @@ interface ExpenseTrendChartProps {
 const HEIGHT = 238
 const MARGIN = { top: 34, right: 16, bottom: 32, left: 46 }
 
+function coverageText(item: MonthDatum): string {
+  switch (item.coverage) {
+    case 'first-partial':
+      return `首月，仅覆盖 ${item.effectiveDays ?? 0}/${item.totalDays ?? 0} 天`
+    case 'current':
+      return `本月至今 ${item.effectiveDays ?? 0}/${item.totalDays ?? 0} 天`
+    case 'future':
+      return '尚未开始'
+    case 'before-start':
+      return '早于统计起点'
+    default:
+      return '完整月'
+  }
+}
+
 export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
   const { ref, width } = useElementWidth<HTMLDivElement>()
   const [hovered, setHovered] = useState<number | null>(null)
@@ -58,7 +73,10 @@ export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
           height={HEIGHT}
           role="img"
           aria-label={`近六个月支出柱状图，${data
-            .map((item) => `${monthLabel(item.key)}${formatMoney(item.value)}`)
+            .map(
+              (item) =>
+                `${monthLabel(item.key)}${formatMoney(item.value)}，${coverageText(item)}`,
+            )
             .join('，')}`}
         >
           {ticks.map((tick) => {
@@ -90,13 +108,15 @@ export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
             const barHeight = baseline - barY
             const isHovered = hovered === index
             const isActive = index === activeIndex
+            const isPartial =
+              item.coverage !== undefined && item.coverage !== 'complete'
             return (
               <g
                 key={item.key}
                 className="chart-bar-group"
                 tabIndex={0}
                 role="img"
-                aria-label={`${monthLabel(item.key)}支出 ${formatMoney(item.value)}`}
+                aria-label={`${monthLabel(item.key)}支出 ${formatMoney(item.value)}，${coverageText(item)}`}
                 onPointerEnter={() => setHovered(index)}
                 onPointerLeave={() => setHovered(null)}
                 onFocus={() => setHovered(index)}
@@ -122,7 +142,7 @@ export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
                 {barHeight > 0 ? (
                   <path
                     d={topRoundedBarPath(barX, barY, barWidth, barHeight)}
-                    className="chart-bar chart-bar--trend"
+                    className={`chart-bar chart-bar--trend${isPartial ? ' is-partial' : ''}`}
                   />
                 ) : (
                   <rect
@@ -156,17 +176,22 @@ export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
             )
           })}
 
-          {data.map((item, index) => (
-            <text
-              key={item.key}
-              x={MARGIN.left + band * index + band / 2}
-              y={HEIGHT - 9}
-              textAnchor="middle"
-              className={`chart-x-label${item.key === activeKey ? ' is-active' : ''}`}
-            >
-              {item.label}
-            </text>
-          ))}
+          {data.map((item, index) => {
+            const partial =
+              item.coverage !== undefined && item.coverage !== 'complete'
+            return (
+              <text
+                key={item.key}
+                x={MARGIN.left + band * index + band / 2}
+                y={HEIGHT - 9}
+                textAnchor="middle"
+                className={`chart-x-label${item.key === activeKey ? ' is-active' : ''}${partial ? ' is-incomplete' : ''}`}
+              >
+                {item.label}
+                {partial ? '*' : ''}
+              </text>
+            )
+          })}
 
           {activeDatum && activeDatum.value === 0 ? (
             <text
@@ -191,6 +216,12 @@ export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
               <i className="tooltip-key series-trend" aria-hidden />
               {monthLabel(hoveredDatum.key)}支出
             </span>
+            {hoveredDatum.coverage !== undefined &&
+            hoveredDatum.coverage !== 'complete' ? (
+              <span className="chart-tooltip-note">
+                {coverageText(hoveredDatum)}
+              </span>
+            ) : null}
           </div>
         ) : null}
 
@@ -199,10 +230,22 @@ export function ExpenseTrendChart({ data, activeKey }: ExpenseTrendChartProps) {
         ) : null}
       </div>
 
+      {data.some(
+        (item) => item.coverage !== undefined && item.coverage !== 'complete',
+      ) ? (
+        <p className="chart-partial-hint">
+          * 首月只统计覆盖天数，本月统计至今，金额会偏低。
+        </p>
+      ) : null}
+
       <ChartTable
         label="近六个月支出"
-        columns={['月份', '支出']}
-        rows={data.map((item) => [monthLabel(item.key), formatMoney(item.value)])}
+        columns={['月份', '支出', '覆盖']}
+        rows={data.map((item) => [
+          monthLabel(item.key),
+          formatMoney(item.value),
+          coverageText(item),
+        ])}
       />
     </div>
   )

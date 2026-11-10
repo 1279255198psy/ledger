@@ -24,7 +24,6 @@ import {
 import {
   buildDailyExpenses,
   buildMonthPairSeries,
-  daysElapsedInMonth,
   daysInMonthOfKey,
   formatMoney,
   formatPercent,
@@ -37,7 +36,6 @@ import {
   monthLabel,
   percentChange,
   projectCoversMonth,
-  projectMonthlySpend,
   shiftMonth,
   topWeekdaySpending,
 } from '../lib/utils'
@@ -46,11 +44,16 @@ import {
   formatAdjustmentTime,
   summarizeAdjustments,
 } from '../lib/budgetLabels'
+import {
+  monthCoverage,
+} from '../lib/coverage'
+import { projectMonthSpend } from '../lib/projection'
 import type {
   LedgerTransaction,
   MonthBudgetMetrics,
   Project,
   RangeBudgetMetrics,
+  RecurringRule,
   View,
 } from '../types'
 
@@ -60,6 +63,11 @@ interface AnalyticsProps {
   monthKey: string
   budgetMetrics: MonthBudgetMetrics
   rangeMetrics: RangeBudgetMetrics[]
+  /** First day the books cover; the first month may start mid-month. */
+  ledgerStartDate: string | null
+  /** When notification capture started, for the coverage note only. */
+  captureStartDate?: string | null
+  recurringRules: RecurringRule[]
   onAdd: () => void
   onChangeView: (view: View) => void
   onOpenBudget: () => void
@@ -71,13 +79,15 @@ function StatDelta({
   value,
   goodWhenUp,
   label = '较上月同期',
+  emptyLabel = '上月暂无数据',
 }: {
   value: number | null
   goodWhenUp: boolean
   label?: string
+  emptyLabel?: string
 }) {
   if (value === null) {
-    return <span className="stat-delta is-neutral">上月暂无数据</span>
+    return <span className="stat-delta is-neutral">{emptyLabel}</span>
   }
   const up = value >= 0
   const good = up === goodWhenUp
@@ -96,6 +106,9 @@ export function Analytics({
   monthKey,
   budgetMetrics,
   rangeMetrics,
+  ledgerStartDate,
+  captureStartDate,
+  recurringRules,
   onAdd,
   onChangeView,
   onOpenBudget,
@@ -117,6 +130,13 @@ export function Analytics({
   const dailyExpense = spend.dailyCents / 100
   const projectExpense = spend.projectCents / 100
   const budget = budgetMetrics.amountCents / 100
+  // Adjustment history is kept in full-month terms, away from the first
+  // month's prorated display amount.
+  const planAmountCents =
+    budgetMetrics.proration?.fullAmountCents ?? budgetMetrics.amountCents
+  const planBaseAmountCents =
+    budgetMetrics.proration?.fullBaseAmountCents ??
+    budgetMetrics.baseAmountCents
   const daily = budgetMetrics.daily
   const adjustments = budgetMetrics.adjustments
   const adjustmentSummary = summarizeAdjustments(adjustments)
@@ -126,12 +146,16 @@ export function Analytics({
   )
   const categories = getCategoryTotals(monthTransactions, 'expense')
   const previousKey = shiftMonth(monthKey, -1)
-  const elapsed = Math.max(daysElapsedInMonth(monthKey), 1)
+  const coverage = monthCoverage(monthKey, ledgerStartDate)
+  const previousCoverage = monthCoverage(previousKey, ledgerStartDate)
+  const canCompare = previousCoverage.complete
+  const elapsed = Math.max(coverage.effectiveDays, 1)
   const cutoff = isCurrentMonth(monthKey) ? new Date().getDate() : 31
-  const previousTransactions = getMonthTransactions(
-    transactions,
-    previousKey,
-  ).filter((item) => Number(item.date.slice(8, 10)) <= cutoff)
+  const previousTransactions = canCompare
+    ? getMonthTransactions(transactions, previousKey).filter(
+        (item) => Number(item.date.slice(8, 10)) <= cutoff,
+      )
+    : []
   const previousTotals = getTotals(previousTransactions)
   const previousSpend = getMonthSpendCents(
     previousTransactions,
@@ -139,30 +163,59 @@ export function Analytics({
     countedProjectIds,
   )
 
-  const incomeChange = percentChange(totals.income, previousTotals.income)
-  const expenseChange = percentChange(totals.expense, previousTotals.expense)
+  const incomeChange = canCompare
+    ? percentChange(totals.income, previousTotals.income)
+    : null
+  const expenseChange = canCompare
+    ? percentChange(totals.expense, previousTotals.expense)
+    : null
   const dailyAverage = dailyExpense / elapsed
   const previousDayCount = isCurrentMonth(monthKey)
     ? cutoff
     : daysInMonthOfKey(previousKey)
   const previousDailyAverage =
     previousSpend.dailyCents / 100 / Math.max(previousDayCount, 1)
-  const dailyChange = percentChange(dailyAverage, previousDailyAverage)
+  const dailyChange = canCompare
+    ? percentChange(dailyAverage, previousDailyAverage)
+    : null
   const balanceRate =
     totals.income > 0 ? (totals.balance / totals.income) * 100 : 0
   const comparisonLabel = isCurrentMonth(monthKey) ? '较上月同期' : '较上月'
+  const comparisonEmptyLabel =
+    previousCoverage.status === 'first-partial'
+      ? '上月是记账首月，暂不对比'
+      : previousCoverage.status === 'before-start'
+        ? '上月还没有记账'
+        : '上月暂无数据'
 
-  const pairSeries = buildMonthPairSeries(transactions, monthKey, 6)
-  const dailyData = buildDailyExpenses(
+  const pairSeries = buildMonthPairSeries(
+    transactions,
+    monthKey,
+    6,
+    ledgerStartDate,
+  )
+  const allDailyData = buildDailyExpenses(
     transactions,
     monthKey,
     'daily',
     countedProjectIds,
-  ).slice(
-    0,
-    Math.min(elapsed, 31),
   )
-  const projection = projectMonthlySpend(dailyExpense, monthKey)
+  const dailyData =
+    coverage.effectiveDays > 0
+      ? allDailyData.slice(
+          coverage.startDay - 1,
+          coverage.startDay - 1 + coverage.effectiveDays,
+        )
+      : []
+  const projectionResult = projectMonthSpend({
+    transactions,
+    monthKey,
+    spentCents: spend.dailyCents,
+    startDate: ledgerStartDate,
+    recurringRules,
+    countedProjectIds,
+  })
+  const projection = projectionResult.projectedCents / 100
   const biggest = largestExpense(monthTransactions)
   const topCategory = categories[0]
   const activeDays = dailyData.filter((item) => item.value > 0).length
@@ -171,10 +224,22 @@ export function Analytics({
     dailyData[0] ?? { day: 1, value: 0 },
   )
   const costlyWeekday = topWeekdaySpending(monthTransactions)
-  const projectedOverBudget = projection > budget
+  const projectedOverBudget = budget > 0 && projection > budget
   const topCategoryText = topCategory
     ? `${topCategory.category.name}占本月支出的 ${formatPercent(topCategory.share * 100)}`
     : '还没有形成支出结构'
+  const coverageNote =
+    coverage.status === 'first-partial'
+      ? `记账首月自 ${coverage.startDay} 日起，共 ${coverage.effectiveDays}/${coverage.totalDays} 天。首月不计入月均、波动率与应急金指标，日均按实际覆盖天数计算。`
+      : coverage.status === 'current' && coverage.startDay > 1
+        ? `本月统计自 ${coverage.startDay} 日起，共 ${coverage.effectiveDays}/${coverage.totalDays} 天；起点之前没有记录，不计入日均。`
+        : coverage.status === 'before-start'
+          ? '这个月早于统计起点，没有可统计的流水。'
+          : null
+  const captureNote =
+    captureStartDate && captureStartDate.slice(0, 7) === monthKey
+      ? `自动记账覆盖自 ${formatShortDate(captureStartDate)} 起；开启前的日子如果有支出，需要手动补记。`
+      : null
 
   const monthProjectRows = new Map(
     getProjectMonthRows(transactions, monthKey).map((row) => [
@@ -222,6 +287,7 @@ export function Analytics({
             value={incomeChange}
             goodWhenUp
             label={comparisonLabel}
+            emptyLabel={comparisonEmptyLabel}
           />
         </article>
 
@@ -235,6 +301,7 @@ export function Analytics({
             value={expenseChange}
             goodWhenUp={false}
             label={comparisonLabel}
+            emptyLabel={comparisonEmptyLabel}
           />
           <span className="kpi-note">
             生活 {formatMoney(dailyExpense)} · 项目{' '}
@@ -269,6 +336,7 @@ export function Analytics({
             value={dailyChange}
             goodWhenUp={false}
             label={comparisonLabel}
+            emptyLabel={comparisonEmptyLabel}
           />
           {daily && isCurrent ? (
             <span
@@ -280,6 +348,16 @@ export function Analytics({
           ) : null}
         </article>
       </section>
+
+      {coverageNote || captureNote ? (
+        <div className="coverage-note" role="note">
+          <CalendarDays size={16} aria-hidden="true" />
+          <div>
+            {coverageNote ? <p>{coverageNote}</p> : null}
+            {captureNote ? <p>{captureNote}</p> : null}
+          </div>
+        </div>
+      ) : null}
 
       <article className="card chart-card chart-card--wide">
         <div className="card-head">
@@ -404,8 +482,7 @@ export function Analytics({
               <p className="card-kicker">BUDGET CHANGES</p>
               <h2 id="budget-adjust-heading">预算调整记录</h2>
               <p className="card-sub">
-                原定预算{' '}
-                {formatMoney(budgetMetrics.baseAmountCents / 100)}
+                原定预算 {formatMoney(planBaseAmountCents / 100)}
                 ，本月在执行中调整了 {adjustments.length} 次。
               </p>
             </div>
@@ -438,7 +515,7 @@ export function Analytics({
             </span>
             <span>
               <em>当前预算</em>
-              <strong>{formatMoney(budgetMetrics.amountCents / 100)}</strong>
+              <strong>{formatMoney(planAmountCents / 100)}</strong>
             </span>
           </div>
 
@@ -656,13 +733,25 @@ export function Analytics({
             <strong>{formatMoney(projection)}</strong>
             <p className="insight-copy">
               {isCurrentMonth(monthKey)
-                ? `按当前节奏，预计${projectedOverBudget ? '超出' : '低于'}预算 ${formatMoney(Math.abs(projection - budget))}。`
-                : `当月生活支出占预算的 ${formatPercent((dailyExpense / budget) * 100)}。`}
-              <span
-                className={`insight-chip ${projectedOverBudget ? 'is-warn' : 'is-good'}`}
-              >
-                {projectedOverBudget ? '需要留意' : '预算内'}
-              </span>
+                ? projectionResult.method === 'insufficient'
+                  ? `本月已记 ${formatMoney(dailyExpense)}，暂时还没有足够的节奏预估月末。`
+                  : projectionResult.method === 'actual'
+                    ? budget > 0
+                      ? `本月已结束，生活支出${projectedOverBudget ? '超出' : '低于'}预算 ${formatMoney(Math.abs(projection - budget))}。`
+                      : `本月已结束，生活支出 ${formatMoney(dailyExpense)}。`
+                    : budget > 0
+                      ? `${projectionResult.note ? `${projectionResult.note}，` : ''}预计${projectedOverBudget ? '超出' : '低于'}预算 ${formatMoney(Math.abs(projection - budget))}。`
+                      : `${projectionResult.note ? `${projectionResult.note}，` : ''}本月还没有设置生活预算。`
+                : budget > 0
+                  ? `当月生活支出占预算的 ${formatPercent((dailyExpense / budget) * 100)}。`
+                  : '本月还没有设置生活预算。'}
+              {budget > 0 ? (
+                <span
+                  className={`insight-chip ${projectedOverBudget ? 'is-warn' : 'is-good'}`}
+                >
+                  {projectedOverBudget ? '需要留意' : '预算内'}
+                </span>
+              ) : null}
             </p>
           </article>
 

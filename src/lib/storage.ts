@@ -40,6 +40,7 @@ import {
   sortLiabilities,
 } from './liabilities'
 import { makeDailyAllocation } from './allocations'
+import { isCoverageDateKey } from './coverage'
 import { isCurrency, normalizeCurrency } from './currency'
 import { normalizeFontSize } from './fontSize'
 import { DEFAULT_REMINDERS, normalizeReminders } from './reminders'
@@ -79,6 +80,7 @@ const KEYS = {
   recurringRules: 'zhangye.recurringRules.v1',
   recurringPending: 'zhangye.recurringPending.v1',
   openingBalance: 'zhangye.openingBalanceCents.v1',
+  ledgerStart: 'zhangye.ledgerStart.v1',
   theme: 'zhangye.theme.v1',
   palette: 'zhangye.palette.v1',
   fontSize: 'zhangye.fontSize.v1',
@@ -978,6 +980,27 @@ export function loadOpeningBalance(): number {
 
 export function saveOpeningBalance(balance: number): void {
   safeSet(KEYS.openingBalance, String(Math.round(balance * 100)))
+  scheduleDesktopPersist()
+  notifyLedgerChanged()
+}
+
+/**
+ * Optional manual override of the ledger start date. It deliberately stays
+ * local (not in the sync snapshot): two devices merging different overrides
+ * would silently move the statistical baseline. `null` means "derive it from
+ * the earliest transaction".
+ */
+export function loadLedgerStartDate(): string | null {
+  const stored = safeGet(KEYS.ledgerStart)
+  return stored && isCoverageDateKey(stored) ? stored : null
+}
+
+export function saveLedgerStartDate(dateKey: string | null): void {
+  if (dateKey === null) {
+    safeRemove(KEYS.ledgerStart)
+  } else if (isCoverageDateKey(dateKey)) {
+    safeSet(KEYS.ledgerStart, dateKey)
+  }
   scheduleDesktopPersist()
   notifyLedgerChanged()
 }

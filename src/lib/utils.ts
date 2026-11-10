@@ -12,6 +12,7 @@ import {
   transactionKindLabel,
 } from './refunds'
 import { activeCurrencySymbol } from './currency'
+import { monthCoverage } from './coverage'
 import type {
   CategoryTotal,
   DailyDatum,
@@ -206,6 +207,7 @@ export function buildMonthSeries(
   endMonth: string,
   count = 6,
   type: TransactionType = 'expense',
+  startDate?: string | null,
 ): MonthDatum[] {
   const months: MonthDatum[] = []
   for (let i = count - 1; i >= 0; i -= 1) {
@@ -219,7 +221,17 @@ export function buildMonthSeries(
             (type === 'expense' ? expenseDeltaCents(item) : item.amountCents),
           0,
         ) / 100
-    months.push({ key, label: monthShortLabel(key), value })
+    const coverage = monthCoverage(key, startDate)
+    months.push({
+      key,
+      label: monthShortLabel(key),
+      value,
+      coverage: coverage.status,
+      effectiveDays: coverage.effectiveDays,
+      totalDays: coverage.totalDays,
+      dailyValue:
+        coverage.effectiveDays > 0 ? value / coverage.effectiveDays : 0,
+    })
   }
   return months
 }
@@ -228,16 +240,29 @@ export function buildMonthPairSeries(
   transactions: LedgerTransaction[],
   endMonth: string,
   count = 6,
+  startDate?: string | null,
 ): MonthPairDatum[] {
   const months: MonthPairDatum[] = []
   for (let i = count - 1; i >= 0; i -= 1) {
     const key = shiftMonth(endMonth, -i)
     const totals = getTotals(getMonthTransactions(transactions, key))
+    const coverage = monthCoverage(key, startDate)
     months.push({
       key,
       label: monthShortLabel(key),
       income: totals.income,
       expense: totals.expense,
+      dailyIncome:
+        coverage.effectiveDays > 0
+          ? totals.income / coverage.effectiveDays
+          : 0,
+      dailyExpense:
+        coverage.effectiveDays > 0
+          ? totals.expense / coverage.effectiveDays
+          : 0,
+      coverage: coverage.status,
+      effectiveDays: coverage.effectiveDays,
+      totalDays: coverage.totalDays,
     })
   }
   return months
@@ -269,23 +294,6 @@ export function percentChange(
 ): number | null {
   if (previous === 0) return current === 0 ? 0 : null
   return ((current - previous) / previous) * 100
-}
-
-export function daysElapsedInMonth(monthKey: string): number {
-  const now = new Date()
-  const current = currentMonthKey(now)
-  if (monthKey === current) return now.getDate()
-  if (monthKey < current) return daysInMonthOfKey(monthKey)
-  return 0
-}
-
-export function projectMonthlySpend(
-  expense: number,
-  monthKey: string,
-): number {
-  const elapsed = daysElapsedInMonth(monthKey)
-  if (elapsed <= 0) return 0
-  return (expense / elapsed) * daysInMonthOfKey(monthKey)
 }
 
 /** Last day a project counts as running; an open-ended project never ends. */

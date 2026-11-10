@@ -17,13 +17,37 @@ interface IncomeExpenseChartProps {
 const HEIGHT = 260
 const MARGIN = { top: 18, right: 16, bottom: 34, left: 48 }
 
+function coverageText(item: MonthPairDatum): string {
+  switch (item.coverage) {
+    case 'first-partial':
+      return `首月自 ${item.effectiveDays > 0 ? item.totalDays - item.effectiveDays + 1 : 1} 日起`
+    case 'current':
+      return `本月至今 ${item.effectiveDays}/${item.totalDays} 天`
+    case 'future':
+      return '尚未开始'
+    case 'before-start':
+      return '早于统计起点'
+    case 'complete':
+      return '完整月'
+  }
+}
+
 export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
   const { ref, width } = useElementWidth<HTMLDivElement>()
   const [hovered, setHovered] = useState<number | null>(null)
+  const [mode, setMode] = useState<'total' | 'daily'>('total')
+
+  const valueOf = (item: MonthPairDatum) =>
+    mode === 'daily'
+      ? { income: item.dailyIncome, expense: item.dailyExpense }
+      : { income: item.income, expense: item.expense }
 
   const maxValue = Math.max(
     0,
-    ...data.map((item) => Math.max(item.income, item.expense)),
+    ...data.map((item) => {
+      const value = valueOf(item)
+      return Math.max(value.income, value.expense)
+    }),
   )
   const { max, ticks } = niceScale(maxValue)
   const plotWidth = Math.max(width - MARGIN.left - MARGIN.right, 40)
@@ -49,15 +73,35 @@ export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
 
   return (
     <div className="chart-block">
-      <div className="chart-legend" aria-hidden="true">
-        <span>
-          <i className="legend-swatch series-income" />
-          收入
-        </span>
-        <span>
-          <i className="legend-swatch series-expense" />
-          支出
-        </span>
+      <div className="chart-legend-row">
+        <div className="chart-legend" aria-hidden="true">
+          <span>
+            <i className="legend-swatch series-income" />
+            收入
+          </span>
+          <span>
+            <i className="legend-swatch series-expense" />
+            支出
+          </span>
+        </div>
+        <div className="chart-toggle" role="group" aria-label="图表口径">
+          <button
+            type="button"
+            className={mode === 'total' ? 'is-active' : ''}
+            aria-pressed={mode === 'total'}
+            onClick={() => setMode('total')}
+          >
+            总额
+          </button>
+          <button
+            type="button"
+            className={mode === 'daily' ? 'is-active' : ''}
+            aria-pressed={mode === 'daily'}
+            onClick={() => setMode('daily')}
+          >
+            日均
+          </button>
+        </div>
       </div>
 
       <div className="chart-canvas" ref={ref}>
@@ -65,10 +109,10 @@ export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
           width={width}
           height={HEIGHT}
           role="img"
-          aria-label={`近六个月收支对比柱状图，${data
+          aria-label={`近六个月收支对比柱状图，${mode === 'daily' ? '按日均' : '按总额'}，${data
             .map(
               (item) =>
-                `${monthLabel(item.key)}收入${formatMoney(item.income)}，支出${formatMoney(item.expense)}`,
+                `${monthLabel(item.key)}收入${formatMoney(valueOf(item).income)}，支出${formatMoney(valueOf(item).expense)}，${coverageText(item)}`,
             )
             .join('；')}`}
         >
@@ -98,8 +142,9 @@ export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
           {data.map((item, index) => {
             const groupX =
               MARGIN.left + band * index + (band - groupWidth) / 2
-            const incomeY = yFor(item.income)
-            const expenseY = yFor(item.expense)
+            const value = valueOf(item)
+            const incomeY = yFor(value.income)
+            const expenseY = yFor(value.expense)
             const incomeHeight = baseline - incomeY
             const expenseHeight = baseline - expenseY
             const isHovered = hovered === index
@@ -110,7 +155,7 @@ export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
                 className="chart-bar-group"
                 tabIndex={0}
                 role="img"
-                aria-label={`${monthLabel(item.key)}，收入 ${formatMoney(item.income)}，支出 ${formatMoney(item.expense)}`}
+                aria-label={`${monthLabel(item.key)}，收入 ${formatMoney(value.income)}，支出 ${formatMoney(value.expense)}，${coverageText(item)}`}
                 onPointerEnter={() => setHovered(index)}
                 onPointerLeave={() => setHovered(null)}
                 onFocus={() => setHovered(index)}
@@ -163,17 +208,30 @@ export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
             )
           })}
 
-          {data.map((item, index) => (
-            <text
-              key={item.key}
-              x={MARGIN.left + band * index + band / 2}
-              y={HEIGHT - 10}
-              textAnchor="middle"
-              className="chart-x-label"
-            >
-              {item.label}
-            </text>
-          ))}
+          {data.map((item, index) => {
+            const partial = item.coverage !== 'complete'
+            return (
+              <g key={item.key}>
+                {partial ? (
+                  <circle
+                    cx={MARGIN.left + band * index + band / 2 - 13}
+                    cy={HEIGHT - 14}
+                    r={2.5}
+                    className="chart-partial-dot"
+                  />
+                ) : null}
+                <text
+                  x={MARGIN.left + band * index + band / 2}
+                  y={HEIGHT - 10}
+                  textAnchor="middle"
+                  className={`chart-x-label${partial ? ' is-incomplete' : ''}`}
+                >
+                  {item.label}
+                  {partial ? '*' : ''}
+                </text>
+              </g>
+            )
+          })}
         </svg>
 
         {hoveredDatum ? (
@@ -186,30 +244,43 @@ export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
               {monthLabel(hoveredDatum.key)}
             </span>
             <span className="chart-tooltip-row">
-              <strong>{formatMoney(hoveredDatum.income)}</strong>
+              <strong>{formatMoney(valueOf(hoveredDatum).income)}</strong>
               <span>
                 <i className="tooltip-key series-income" aria-hidden />
-                收入
+                收入{mode === 'daily' ? '/日' : ''}
               </span>
             </span>
             <span className="chart-tooltip-row">
-              <strong>{formatMoney(hoveredDatum.expense)}</strong>
+              <strong>{formatMoney(valueOf(hoveredDatum).expense)}</strong>
               <span>
                 <i className="tooltip-key series-expense" aria-hidden />
-                支出
+                支出{mode === 'daily' ? '/日' : ''}
               </span>
             </span>
+            {hoveredDatum.coverage !== 'complete' ? (
+              <span className="chart-tooltip-note">
+                {coverageText(hoveredDatum)}
+                {hoveredDatum.coverage === 'current' ? '，尚未结束' : ''}
+              </span>
+            ) : null}
           </div>
         ) : null}
       </div>
 
+      {data.some((item) => item.coverage !== 'complete') ? (
+        <p className="chart-partial-hint">
+          * 首月只统计覆盖天数，本月统计至今；切换到「日均」可直接比较。
+        </p>
+      ) : null}
+
       <ChartTable
-        label="近六个月收支"
-        columns={['月份', '收入', '支出']}
+        label={`近六个月收支（${mode === 'daily' ? '日均' : '总额'}）`}
+        columns={['月份', '收入', '支出', '覆盖']}
         rows={data.map((item) => [
           monthLabel(item.key),
-          formatMoney(item.income),
-          formatMoney(item.expense),
+          formatMoney(valueOf(item).income),
+          formatMoney(valueOf(item).expense),
+          coverageText(item),
         ])}
       />
     </div>

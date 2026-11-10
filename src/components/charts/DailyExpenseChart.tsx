@@ -154,7 +154,7 @@ export function DailyExpenseChart({ data, monthKey }: DailyExpenseChartProps) {
             />
           ) : null}
 
-          {lastDatum.value > 0 && activeIndex === null ? (
+          {lastDatum && lastDatum.value > 0 && activeIndex === null ? (
             <text
               x={xFor(count - 1)}
               y={yFor(lastDatum.value) - 11}

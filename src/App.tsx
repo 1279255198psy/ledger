@@ -29,6 +29,8 @@ import { SyncUndoNotice } from './components/SyncUndoNotice'
 import { useUpdater } from './hooks/useUpdater'
 import { useReminderScheduler } from './hooks/useReminderScheduler'
 import { useCaptureInbox } from './hooks/useCaptureInbox'
+import { resolveLedgerStartDate } from './lib/coverage'
+import { loadCaptureStartDate } from './lib/capture/prefs'
 import { onStorageError } from './lib/storageEvents'
 import { createBackup, maybeCreateAutoBackup } from './lib/backup'
 import type { PendingCapture } from './lib/capture/types'
@@ -61,6 +63,7 @@ import {
   loadCategories,
   loadCurrency,
   loadFontSize,
+  loadLedgerStartDate,
   loadLiabilities,
   loadOnboardingDismissed,
   loadOpeningBalance,
@@ -78,6 +81,7 @@ import {
   saveCategories,
   saveCurrency,
   saveFontSize,
+  saveLedgerStartDate,
   saveLiabilities,
   saveOnboardingDismissed,
   saveOpeningBalance,
@@ -216,6 +220,14 @@ export default function App() {
     useState<RecurringPending[]>(loadRecurringPending)
   const [todayKey, setTodayKey] = useState(localDateKey)
   const [openingBalance, setOpeningBalance] = useState(loadOpeningBalance)
+  // Manual override of the coverage start; null means "use the earliest
+  // transaction". Kept local so two devices cannot fight over the baseline.
+  const [ledgerStartOverride, setLedgerStartOverride] = useState<
+    string | null
+  >(loadLedgerStartDate)
+  const [captureStartDate, setCaptureStartDate] = useState<string | null>(
+    loadCaptureStartDate,
+  )
   const [theme, setTheme] = useState<Theme>(loadTheme)
   const [palette, setPalette] = useState<Palette>(loadPalette)
   const [fontSize, setFontSize] = useState<FontSize>(loadFontSize)
@@ -256,13 +268,17 @@ export default function App() {
   // not enter the synced snapshot until the user annotates and saves one.
   const [annotatingCapture, setAnnotatingCapture] =
     useState<PendingCapture | null>(null)
-  const captureInbox = useCaptureInbox(accounts, (count) => {
-    setToast({
-      id: Date.now(),
-      message: `收到 ${count} 笔待标注记录`,
-      kind: 'success',
-    })
-  })
+  const captureInbox = useCaptureInbox(
+    accounts,
+    (count) => {
+      setToast({
+        id: Date.now(),
+        message: `收到 ${count} 笔待标注记录`,
+        kind: 'success',
+      })
+    },
+    (dateKey) => setCaptureStartDate(dateKey),
+  )
   const pendingCaptures = useMemo(
     () => captureInbox.items.filter((item) => item.status === 'pending'),
     [captureInbox.items],
@@ -308,6 +324,12 @@ export default function App() {
     () => getCountedProjectIds(projects),
     [projects],
   )
+  // Coverage baseline for statistics: a manual override wins, otherwise the
+  // earliest transaction defines where the books begin.
+  const ledgerStartDate = useMemo(
+    () => resolveLedgerStartDate(transactions, ledgerStartOverride),
+    [transactions, ledgerStartOverride],
+  )
   const budgetMetrics = useMemo(
     () =>
       getMonthBudgetMetrics(
@@ -315,8 +337,9 @@ export default function App() {
         monthKey,
         budgets,
         countedProjectIds,
+        { startDate: ledgerStartDate },
       ),
-    [transactions, monthKey, budgets, countedProjectIds],
+    [transactions, monthKey, budgets, countedProjectIds, ledgerStartDate],
   )
   // Each range is scored on its own dates; crossing a month boundary never
   // splits the amount or reconciles it against that month's budget.
@@ -1277,14 +1300,25 @@ export default function App() {
   ) => {
     setBudgets((current) => {
       const resolved = resolveMonthBudget(current, targetMonth).budget
+      const metrics = getMonthBudgetMetrics(
+        transactions,
+        targetMonth,
+        current,
+        countedProjectIds,
+        { startDate: ledgerStartDate },
+      )
+      // The dialog works in the prorated (covered-days) amount that the month
+      // view shows. The budget book always keeps the full-month plan, so undo
+      // the proration before storing; otherwise each adjustment would shrink
+      // the plan again on the next render.
+      const storedAmountCents = metrics.proration
+        ? Math.round(
+            (amountCents * metrics.proration.totalDays) /
+              Math.max(metrics.proration.days, 1),
+          )
+        : amountCents
       let next = resolved
       if (rescheduleDaily && resolved.dailyMode === 'manual') {
-        const metrics = getMonthBudgetMetrics(
-          transactions,
-          targetMonth,
-          current,
-          countedProjectIds,
-        )
         const dailyAmountsCents = rescheduleRemainingDailyAmounts(
           metrics,
           amountCents,
@@ -1292,7 +1326,7 @@ export default function App() {
         if (dailyAmountsCents) next = { ...next, dailyAmountsCents }
       }
       next = applyBudgetAdjustment(next, {
-        amountCents,
+        amountCents: storedAmountCents,
         note,
         kind: 'adjust',
       })
@@ -1341,6 +1375,16 @@ export default function App() {
       nextBalance > 0
         ? `起始资金已设为 ${formatMoney(nextBalance)}`
         : '总结余已改为从零开始',
+    )
+  }
+
+  const handleLedgerStartChange = (dateKey: string | null) => {
+    setLedgerStartOverride(dateKey)
+    saveLedgerStartDate(dateKey)
+    showToast(
+      dateKey
+        ? `统计起点已设为 ${dateKey}`
+        : '统计起点已恢复为按最早流水自动识别',
     )
   }
 
@@ -1691,6 +1735,10 @@ export default function App() {
   }
 
   const applySampleLedger = () => {
+    // A sample ledger defines its own coverage; a leftover manual start would
+    // silently cut the sample's early months out of the statistics.
+    setLedgerStartOverride(null)
+    saveLedgerStartDate(null)
     const sample = createSampleLedger()
     commitCategories(DEFAULT_CATEGORIES)
     // Keep cards the user already named; only add the demo cards that are
@@ -1815,6 +1863,8 @@ export default function App() {
             monthKey={monthKey}
             budgetMetrics={budgetMetrics}
             rangeMetrics={monthRangeMetrics}
+            ledgerStartDate={ledgerStartDate}
+            captureStartDate={captureStartDate}
             openingBalance={openingBalance}
             categories={categories}
             pendingCaptureCount={pendingCaptures.length}
@@ -1896,6 +1946,9 @@ export default function App() {
             monthKey={monthKey}
             budgetMetrics={budgetMetrics}
             rangeMetrics={monthRangeMetrics}
+            ledgerStartDate={ledgerStartDate}
+            captureStartDate={captureStartDate}
+            recurringRules={recurringRules}
             onAdd={openAdd}
             onChangeView={handleChangeView}
             onOpenBudget={() => {
@@ -1929,6 +1982,7 @@ export default function App() {
             countedProjectIds={countedProjectIds}
             openingBalance={openingBalance}
             monthKey={monthKey}
+            ledgerStartDate={ledgerStartDate}
             onAdd={openAdd}
             onLoadSample={handleLoadSample}
             onChangeView={handleChangeView}
@@ -1987,6 +2041,8 @@ export default function App() {
         transactions={transactions}
         countedProjectIds={countedProjectIds}
         openingBalance={openingBalance}
+        ledgerStartDate={ledgerStartDate}
+        ledgerStartOverride={ledgerStartOverride}
         theme={theme}
         palette={palette}
         fontSize={fontSize}
@@ -2006,6 +2062,7 @@ export default function App() {
         onRangeSave={handleRangeSave}
         onRangeDelete={handleRangeDelete}
         onOpeningBalanceSave={handleOpeningBalanceSave}
+        onLedgerStartChange={handleLedgerStartChange}
         onCreateCategory={handleCreateCategory}
         onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}

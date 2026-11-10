@@ -50,6 +50,8 @@ interface IndicesProps {
   countedProjectIds: ReadonlySet<string>
   openingBalance: number
   monthKey: string
+  /** First day the books cover; health averages use complete months only. */
+  ledgerStartDate: string | null
   onAdd: () => void
   onLoadSample: () => void
   onChangeView: (view: View) => void
@@ -162,9 +164,13 @@ const METRICS: MetricConfig[] = [
     formatValue: monthsDisplay,
     formatTick: (value) => `${Math.round(value)}`,
     detailLine: (detail) =>
-      `活期资产 ${formatMoney(
-        detail.liquidAssetsCents / 100,
-      )} · 月均刚需 ${formatMoney(detail.monthlyEssentialCents / 100)}`,
+      detail.monthlyEssentialCents > 0
+        ? `活期资产 ${formatMoney(
+            detail.liquidAssetsCents / 100,
+          )} · 月均刚需 ${formatMoney(detail.monthlyEssentialCents / 100)}`
+        : `活期资产 ${formatMoney(
+            detail.liquidAssetsCents / 100,
+          )} · 完整月不足，暂无法计算月均刚需`,
   },
   {
     key: 'debt',
@@ -389,6 +395,7 @@ export function Indices({
   countedProjectIds,
   openingBalance,
   monthKey,
+  ledgerStartDate,
   onAdd,
   onLoadSample,
   onChangeView,
@@ -414,6 +421,7 @@ export function Indices({
           hidden,
           budgets,
           countedProjectIds,
+          startDate: ledgerStartDate,
         },
       ),
     [
@@ -425,6 +433,7 @@ export function Indices({
       hidden,
       budgets,
       countedProjectIds,
+      ledgerStartDate,
     ],
   )
 
@@ -572,6 +581,18 @@ export function Indices({
           </div>
         </div>
       </div>
+
+      {dashboard.completeMonthCount < 3 ? (
+        <div className="index-note is-soft">
+          <Info size={15} />
+          <span>
+            {ledgerStartDate
+              ? `目前只有 ${dashboard.completeMonthCount} 个完整月（记账首月与本月至今不计入），`
+              : '完整月还不足 3 个，'}
+            月均、波动率、应急金和得分会随记录继续累积而逐渐稳定。
+          </span>
+        </div>
+      ) : null}
 
       {dashboard.unmarkedTotalCount > 0 ? (
         <div className="index-note">

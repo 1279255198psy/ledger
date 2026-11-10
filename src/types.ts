@@ -181,6 +181,28 @@ export interface DailyBudgetStatus {
   daysLeft: number
 }
 
+/**
+ * How much of a month the ledger actually covers. The first month is often
+ * entered from the middle, and the current month is still in progress, so
+ * totals alone cannot tell whether a month is comparable.
+ */
+export type MonthCoverageStatus =
+  | 'complete'
+  | 'first-partial'
+  | 'current'
+  | 'future'
+  | 'before-start'
+
+/** Present when a month's plan was scaled to the days the ledger covers. */
+export interface BudgetProration {
+  /** Covered days in the month (from the ledger start or day 1). */
+  days: number
+  totalDays: number
+  /** The full-month plan before proration. */
+  fullAmountCents: number
+  fullBaseAmountCents: number
+}
+
 export interface MonthBudgetMetrics {
   monthKey: string
   amountCents: number
@@ -199,6 +221,8 @@ export interface MonthBudgetMetrics {
   categoryBudgetTotalCents: number
   unallocatedCents: number
   overBudget: boolean
+  /** Set for the first month when the ledger started after the 1st. */
+  proration?: BudgetProration
 }
 
 export interface RangeBudgetMetrics {
@@ -395,6 +419,12 @@ export interface MonthDatum {
   key: string
   label: string
   value: number
+  /** How complete this month's data is; charts dim partial months. */
+  coverage?: MonthCoverageStatus
+  effectiveDays?: number
+  totalDays?: number
+  /** Average per covered day, so months of different lengths compare. */
+  dailyValue?: number
 }
 
 export interface MonthPairDatum {
@@ -402,6 +432,12 @@ export interface MonthPairDatum {
   label: string
   income: number
   expense: number
+  /** Average per covered day; a fair comparison for the first month / today. */
+  dailyIncome: number
+  dailyExpense: number
+  coverage: MonthCoverageStatus
+  effectiveDays: number
+  totalDays: number
 }
 
 export interface DailyDatum {

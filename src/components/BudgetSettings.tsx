@@ -49,6 +49,8 @@ interface BudgetSettingsProps {
   countedProjectIds: ReadonlySet<string>
   categories: Category[]
   currency: Currency
+  /** First covered day; the first month's preview is prorated. */
+  startDate?: string | null
   /** Opens the range tab when the user came from a range panel. */
   focusTab?: BudgetTab
   onSave: (budget: MonthBudget) => void
@@ -163,6 +165,7 @@ export function BudgetSettings({
   countedProjectIds,
   categories,
   currency,
+  startDate,
   focusTab,
   onSave,
   onRangeSave,
@@ -221,8 +224,16 @@ export function BudgetSettings({
       selectedMonth,
       { ...budgets, [selectedMonth]: built.budget },
       countedProjectIds,
+      { startDate },
     )
-  }, [built.budget, budgets, selectedMonth, transactions, countedProjectIds])
+  }, [
+    built.budget,
+    budgets,
+    selectedMonth,
+    transactions,
+    countedProjectIds,
+    startDate,
+  ])
 
   const categorySpend = useMemo(() => {
     const bounds = monthDateBounds(selectedMonth)
@@ -513,6 +524,12 @@ export function BudgetSettings({
               style={{ width: `${Math.min(preview.ratio * 100, 100)}%` }}
             />
           </div>
+          {preview.proration ? (
+            <p className="budget-proration-note">
+              首月只预览覆盖的 {preview.proration.days}/
+              {preview.proration.totalDays} 天；保存的仍是完整月预算，之后按月自动折算。
+            </p>
+          ) : null}
         </div>
       ) : null}
 

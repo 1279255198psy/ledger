@@ -51,7 +51,9 @@ import {
 import { openExternalUrl } from '../lib/links'
 import { isAndroidApp } from '../lib/platform'
 import { CURRENCIES, getCurrency } from '../lib/currency'
+import { earliestTransactionDate } from '../lib/coverage'
 import { FONT_SIZES } from '../lib/fontSize'
+import { localDateKey } from '../lib/utils'
 import { PALETTES } from '../lib/themes'
 import type { CategoryDraft } from '../lib/categories'
 import type { LastImport } from '../lib/exchange/batch'
@@ -86,6 +88,10 @@ interface SettingsModalProps {
   /** Projects whose spending also counts toward daily budgets. */
   countedProjectIds: ReadonlySet<string>
   openingBalance: number
+  /** Resolved statistical start date (manual override, else earliest entry). */
+  ledgerStartDate: string | null
+  /** Manual override; null means the start follows the earliest transaction. */
+  ledgerStartOverride: string | null
   theme: Theme
   palette: Palette
   fontSize: FontSize
@@ -102,6 +108,7 @@ interface SettingsModalProps {
   onRangeSave: (range: RangeBudget) => void
   onRangeDelete: (id: string) => Promise<boolean>
   onOpeningBalanceSave: (balance: number) => void
+  onLedgerStartChange: (dateKey: string | null) => void
   onCreateCategory: (draft: CategoryDraft) => void
   onUpdateCategory: (id: string, draft: CategoryDraft) => void
   onDeleteCategory: (id: string) => void
@@ -231,6 +238,8 @@ export function SettingsModal({
   transactions,
   countedProjectIds,
   openingBalance,
+  ledgerStartDate,
+  ledgerStartOverride,
   theme,
   palette,
   fontSize,
@@ -247,6 +256,7 @@ export function SettingsModal({
   onRangeSave,
   onRangeDelete,
   onOpeningBalanceSave,
+  onLedgerStartChange,
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
@@ -269,6 +279,10 @@ export function SettingsModal({
   onClear,
 }: SettingsModalProps) {
   const [page, setPage] = useState<SettingsPageId | null>(null)
+  // Moving the start later than the first entry would leave that month's
+  // recorded spending outside its covered days, skewing its daily average.
+  const ledgerStartMax =
+    earliestTransactionDate(transactions) ?? localDateKey()
   const [openingMode, setOpeningMode] = useState<'zero' | 'existing'>(
     openingBalance > 0 ? 'existing' : 'zero',
   )
@@ -737,6 +751,57 @@ export function SettingsModal({
                   ) : null}
                 </section>
 
+                <section
+                  className="settings-section"
+                  aria-labelledby="ledger-start-heading"
+                >
+                  <div className="settings-heading">
+                    <h3 id="ledger-start-heading">统计起点</h3>
+                    <p>
+                      账页用它判断哪些日子真正有记录：首月从这一天开始计算覆盖天数，
+                      首月不计入月均、波动率和应急金，本月按今天为止统计。
+                      默认取最早一笔流水，也可以手动提前，方便之后补记早期支出。
+                    </p>
+                  </div>
+                  <div className="ledger-start-form">
+                    <label className="ledger-start-input">
+                      <span>从</span>
+                      <input
+                        type="date"
+                        value={ledgerStartOverride ?? ledgerStartDate ?? ''}
+                        max={ledgerStartMax}
+                        aria-label="统计起点日期"
+                        onChange={(event) => {
+                          const next = event.target.value
+                          onLedgerStartChange(
+                            !next
+                              ? null
+                              : next > ledgerStartMax
+                                ? ledgerStartMax
+                                : next,
+                          )
+                        }}
+                      />
+                    </label>
+                    {ledgerStartOverride ? (
+                      <button
+                        type="button"
+                        className="button ghost"
+                        onClick={() => onLedgerStartChange(null)}
+                      >
+                        <RotateCcw size={14} />
+                        恢复自动识别
+                      </button>
+                    ) : (
+                      <span className="settings-inline-note">
+                        {ledgerStartDate
+                          ? `当前自动识别为 ${ledgerStartDate}`
+                          : '还没有流水，起点待定'}
+                      </span>
+                    )}
+                  </div>
+                </section>
+
                 <section className="settings-section">
                   <div className="settings-heading">
                     <h3>货币</h3>
@@ -792,6 +857,7 @@ export function SettingsModal({
                   countedProjectIds={countedProjectIds}
                   categories={categories}
                   currency={currency}
+                  startDate={ledgerStartDate}
                   focusTab={
                     focusSection === 'budget-ranges' ? 'range' : undefined
                   }

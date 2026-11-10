@@ -1,4 +1,36 @@
+import { isCoverageDateKey } from '../coverage'
+
 const KEEP_SAMPLES_KEY = 'zhangye.captureKeepSamples.v1'
+const CAPTURE_START_KEY = 'zhangye.captureStart.v1'
+
+/**
+ * The day notification capture first ran on this device. Notifications from
+ * before that day were never seen, so spending statistics for that month need
+ * a note telling the user to backfill manually.
+ */
+export function loadCaptureStartDate(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const stored = window.localStorage.getItem(CAPTURE_START_KEY)
+    return stored && isCoverageDateKey(stored) ? stored : null
+  } catch {
+    return null
+  }
+}
+
+/** Records the first capture day once; later calls leave it untouched. */
+export function ensureCaptureStartDate(dateKey: string): string | null {
+  if (typeof window === 'undefined') return null
+  if (!isCoverageDateKey(dateKey)) return loadCaptureStartDate()
+  try {
+    const existing = window.localStorage.getItem(CAPTURE_START_KEY)
+    if (existing && isCoverageDateKey(existing)) return existing
+    window.localStorage.setItem(CAPTURE_START_KEY, dateKey)
+    return dateKey
+  } catch {
+    return null
+  }
+}
 
 /**
  * Calibration mode: when on, raw notifications are not acknowledged after

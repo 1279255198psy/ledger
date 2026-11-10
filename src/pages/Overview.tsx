@@ -26,12 +26,13 @@ import { RecurringPendingCard } from '../components/RecurringPendingCard'
 import { TransactionRow } from '../components/TransactionRow'
 import { getCountedProjectIds, getMonthSpendCents } from '../lib/allocations'
 import { getBudgetWarnings } from '../lib/budget'
+import { monthCoverage } from '../lib/coverage'
 import { expenseDeltaCents } from '../lib/refunds'
 import {
   buildMonthSeries,
-  daysElapsedInMonth,
   formatMoney,
   formatPercent,
+  formatShortDate,
   getCategoryTotals,
   getDaysLeft,
   getMonthTransactions,
@@ -59,6 +60,10 @@ interface OverviewProps {
   monthKey: string
   budgetMetrics: MonthBudgetMetrics
   rangeMetrics: RangeBudgetMetrics[]
+  /** First day the books cover; the first month may start mid-month. */
+  ledgerStartDate: string | null
+  /** When notification capture started, for the coverage note only. */
+  captureStartDate?: string | null
   openingBalance: number
   pendingCaptureCount: number
   pendingCaptureTotalCents: number
@@ -136,6 +141,8 @@ export function Overview({
   monthKey,
   budgetMetrics,
   rangeMetrics,
+  ledgerStartDate,
+  captureStartDate,
   openingBalance,
   pendingCaptureCount,
   pendingCaptureTotalCents,
@@ -202,18 +209,40 @@ export function Overview({
   const previousKey = shiftMonth(monthKey, -1)
   const todayDay = new Date().getDate()
   const cutoff = isCurrentMonth(monthKey) ? todayDay : 31
-  const previousComparableExpense = getMonthTransactions(
-    transactions,
-    previousKey,
-  )
-    .filter(
-      (item) =>
-        item.type === 'expense' && Number(item.date.slice(8, 10)) <= cutoff,
-    )
-    .reduce((sum, item) => sum + expenseDeltaCents(item) / 100, 0)
-  const expenseChange = percentChange(totals.expense, previousComparableExpense)
+  const coverage = monthCoverage(monthKey, ledgerStartDate)
+  const previousCoverage = monthCoverage(previousKey, ledgerStartDate)
+  // Only a past month covered from day 1 is a fair same-window baseline.
+  const canCompare = previousCoverage.complete
+  const previousComparableExpense = canCompare
+    ? getMonthTransactions(transactions, previousKey)
+        .filter(
+          (item) =>
+            item.type === 'expense' &&
+            Number(item.date.slice(8, 10)) <= cutoff,
+        )
+        .reduce((sum, item) => sum + expenseDeltaCents(item) / 100, 0)
+    : 0
+  const expenseChange = canCompare
+    ? percentChange(totals.expense, previousComparableExpense)
+    : null
   const comparisonLabel = isCurrentMonth(monthKey) ? '较上月同期' : '较上月'
-  const elapsed = Math.max(daysElapsedInMonth(monthKey), 1)
+  const noComparisonLabel =
+    previousCoverage.status === 'first-partial'
+      ? '上月是记账首月，暂时不对比'
+      : previousCoverage.status === 'before-start'
+        ? '还没有更早的账可以比较'
+        : '这是账本里的第一个月'
+  const elapsed = Math.max(coverage.effectiveDays, 1)
+  const coverageNote =
+    coverage.status === 'first-partial'
+      ? `记账首月自 ${coverage.startDay} 日起，共覆盖 ${coverage.effectiveDays}/${coverage.totalDays} 天；月预算按实际覆盖天数折算。`
+      : coverage.status === 'current' && coverage.startDay > 1
+        ? `本月统计自 ${coverage.startDay} 日起，共覆盖 ${coverage.effectiveDays}/${coverage.totalDays} 天；日均按实际覆盖天数计算。`
+        : null
+  const captureNote =
+    captureStartDate && captureStartDate.slice(0, 7) === monthKey
+      ? `自动记账覆盖自 ${formatShortDate(captureStartDate)} 起，开启前的支出需要手动补记。`
+      : null
   const dailyAverage = dailyExpense / elapsed
   const topCategory = categories[0]
   const remaining = budgetMetrics.remainingCents / 100
@@ -242,7 +271,13 @@ export function Overview({
     (item) => item.type === 'expense',
   ).length
   const incomeCount = monthTransactions.length - expenseCount
-  const series = buildMonthSeries(transactions, monthKey, 6, 'expense')
+  const series = buildMonthSeries(
+    transactions,
+    monthKey,
+    6,
+    'expense',
+    ledgerStartDate,
+  )
 
   return (
     <div className="page-stack overview-page">
@@ -314,7 +349,9 @@ export function Overview({
 
           <p className="hero-comparison">
             {expenseChange === null ? (
-              <span className="is-calm">这是账本里的第一个月</span>
+              <span className="is-calm">
+                {canCompare ? '上月同期还没有支出记录' : noComparisonLabel}
+              </span>
             ) : (
               <span className={expenseChange <= 0 ? 'is-good' : 'is-warning'}>
                 {expenseChange <= 0 ? (
@@ -375,6 +412,15 @@ export function Overview({
               {formatMoney(budget)}
             </span>
           </div>
+
+          {budgetMetrics.proration ? (
+            <p className="budget-proration-note">
+              首月按覆盖的 {budgetMetrics.proration.days}/
+              {budgetMetrics.proration.totalDays} 天折算：完整月预算{' '}
+              {formatMoney(budgetMetrics.proration.fullAmountCents / 100)} →{' '}
+              <strong>{formatMoney(budget)}</strong>
+            </p>
+          ) : null}
 
           <p className="budget-adjust-meta">
             原定预算 {formatMoney(budgetMetrics.baseAmountCents / 100)}
@@ -651,6 +697,16 @@ export function Overview({
         </section>
       </div>
 
+      {coverageNote || captureNote ? (
+        <div className="coverage-note" role="note">
+          <CalendarRange size={16} aria-hidden="true" />
+          <div>
+            {coverageNote ? <p>{coverageNote}</p> : null}
+            {captureNote ? <p>{captureNote}</p> : null}
+          </div>
+        </div>
+      ) : null}
+
       <RangeBudgetPanel metrics={rangeMetrics} onEdit={onOpenRangeBudget} />
 
       <BalanceSummary
@@ -669,9 +725,11 @@ export function Overview({
             <strong>{formatMoney(dailyExpense)}</strong>
             <small>
               日均 {formatMoney(dailyAverage)} ·{' '}
-              {isCurrentMonth(monthKey)
-                ? `按已过 ${elapsed} 天计算`
-                : `按 ${elapsed} 天计算`}
+              {coverage.startDay > 1
+                ? `按覆盖的 ${elapsed} 天计算`
+                : isCurrentMonth(monthKey)
+                  ? `按已过 ${elapsed} 天计算`
+                  : `按 ${elapsed} 天计算`}
             </small>
           </div>
         </div>

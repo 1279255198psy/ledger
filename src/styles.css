@@ -12927,3 +12927,150 @@ a {
     max-width: none;
   }
 }
+
+/* Coverage notes and partial-month chart markers */
+
+.coverage-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: calc(10px * var(--font-scale));
+  line-height: 1.6;
+}
+
+.coverage-note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.coverage-note p + p {
+  margin-top: 3px;
+}
+
+.budget-proration-note {
+  margin: -2px 0 10px;
+  color: var(--ink-muted);
+  font-size: calc(9.5px * var(--font-scale));
+  line-height: 1.55;
+}
+
+.budget-proration-note strong {
+  color: var(--ink);
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 5px 0 0;
+}
+
+.chart-legend-row .chart-legend {
+  margin: 0;
+}
+
+.chart-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.chart-toggle button {
+  height: 24px;
+  padding: 0 10px;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font-size: calc(9.5px * var(--font-scale));
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.chart-toggle button.is-active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(30, 36, 31, 0.08);
+  font-weight: 650;
+}
+
+.chart-partial-dot {
+  fill: var(--warning);
+  opacity: 0.8;
+}
+
+.chart-x-label.is-incomplete {
+  fill: var(--ink-faint);
+}
+
+.chart-bar.is-partial {
+  opacity: 0.58;
+}
+
+.chart-tooltip-note {
+  margin-top: 2px;
+  padding-top: 4px;
+  color: var(--tooltip-muted);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: calc(9px * var(--font-scale));
+  white-space: nowrap;
+}
+
+.index-note.is-soft {
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  border-color: var(--line);
+}
+
+.ledger-start-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ledger-start-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: calc(11px * var(--font-scale));
+}
+
+.ledger-start-input input {
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-inline-note {
+  color: var(--ink-faint);
+  font-size: calc(10px * var(--font-scale));
+}
+
+.chart-partial-hint {
+  margin: 2px 0 0;
+  color: var(--ink-faint);
+  font-size: calc(9px * var(--font-scale));
+  line-height: 1.5;
+}

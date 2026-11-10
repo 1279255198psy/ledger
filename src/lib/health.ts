@@ -1,9 +1,13 @@
 import { getCategory, getRootCategoryId } from './categories'
 import { getMonthBudgetMetrics, resolveMonthBudget } from './budget'
+import {
+  completeMonthsUpTo,
+  earliestTransactionDate,
+  monthCoverage,
+} from './coverage'
 import { balanceDeltaCents, expenseDeltaCents } from './refunds'
 import {
   currentMonthKey,
-  daysInMonthOfKey,
   monthLabel,
   monthShortLabel,
   shiftMonth,
@@ -127,6 +131,8 @@ export interface HealthDetail {
   netWorthBaseCents: number | null
   debtFreeMonths: number | null
   score: HealthScore | null
+  /** Complete months available up to the period; low counts lower confidence. */
+  completeMonthCount: number
 }
 
 export interface IndexPoint {
@@ -144,6 +150,8 @@ export interface HealthDashboard {
   series: IndexSeries
   unmarkedTotalCount: number
   unmarkedTotalCents: number
+  /** Complete months since the ledger start; drives the confidence note. */
+  completeMonthCount: number
 }
 
 interface Period {
@@ -291,6 +299,8 @@ interface HealthContext {
   budgets: BudgetBook
   countedProjectIds?: ReadonlySet<string>
   earliestMonth: string | null
+  /** First day the books cover; first-partial months are excluded from averages. */
+  startDate: string | null
   hidden: ReadonlySet<IndexMetricKey>
   /** Monthly aggregates are reused across the twelve period windows. */
   monthTotalsCache: Map<string, RangeTotals>
@@ -319,14 +329,10 @@ function essentialForMonth(
   ctx: HealthContext,
   monthKey: string,
 ): number {
-  const totals = monthTotalsFor(ctx, monthKey)
-  if (monthKey === currentMonthKey()) {
-    const elapsed = Math.max(new Date().getDate(), 1)
-    return Math.round(
-      (totals.essentialCents * daysInMonthOfKey(monthKey)) / elapsed,
-    )
-  }
-  return totals.essentialCents
+  // Only complete months reach this function; the current month is in progress
+  // and the first month may be partial, so both are skipped rather than
+  // extrapolated (fixed costs like rent would distort a daily-rate estimate).
+  return monthTotalsFor(ctx, monthKey).essentialCents
 }
 
 function earliestTransactionMonth(
@@ -344,16 +350,21 @@ function trailingMonthKeys(
   endMonth: string,
   earliestMonth: string | null,
   count: number,
+  startDate: string | null,
 ): string[] {
   const keys: string[] = []
   for (let index = count - 1; index >= 0; index -= 1) {
     const key = shiftMonth(endMonth, -index)
     if (
-      !earliestMonth ||
-      monthIndexOf(key) >= monthIndexOf(earliestMonth)
+      earliestMonth &&
+      monthIndexOf(key) < monthIndexOf(earliestMonth)
     ) {
-      keys.push(key)
+      continue
     }
+    // Averages only consume months covered from day 1. The first month is
+    // often entered mid-month and would otherwise drag every average down.
+    if (!monthCoverage(key, startDate).complete) continue
+    keys.push(key)
   }
   return keys
 }
@@ -366,6 +377,7 @@ function averageMonthlyEssential(
     endMonth,
     ctx.earliestMonth,
     TRAILING_MONTHS,
+    ctx.startDate,
   )
   if (keys.length === 0) return 0
   const total = keys.reduce(
@@ -383,10 +395,11 @@ function averageMonthlyEssential(
 function completedMonthWindow(
   endMonth: string,
   earliestMonth: string | null,
+  startDate: string | null,
 ): string[] {
   const current = currentMonthKey()
   const anchor = endMonth >= current ? shiftMonth(current, -1) : endMonth
-  return trailingMonthKeys(anchor, earliestMonth, TRAILING_MONTHS)
+  return trailingMonthKeys(anchor, earliestMonth, TRAILING_MONTHS, startDate)
 }
 
 function averageAndDeviation(values: number[]): {
@@ -413,7 +426,11 @@ interface FlowStats {
 }
 
 function flowStats(ctx: HealthContext, endMonth: string): FlowStats {
-  const keys = completedMonthWindow(endMonth, ctx.earliestMonth)
+  const keys = completedMonthWindow(
+    endMonth,
+    ctx.earliestMonth,
+    ctx.startDate,
+  )
   if (keys.length < 3) {
     return {
       incomeStability: null,
@@ -469,7 +486,11 @@ function budgetAdherenceStats(
   ctx: HealthContext,
   endMonth: string,
 ): BudgetAdherenceStats {
-  const keys = completedMonthWindow(endMonth, ctx.earliestMonth)
+  const keys = completedMonthWindow(
+    endMonth,
+    ctx.earliestMonth,
+    ctx.startDate,
+  )
   let within = 0
   let total = 0
   for (const key of keys) {
@@ -484,6 +505,7 @@ function budgetAdherenceStats(
               key,
               ctx.budgets,
               ctx.countedProjectIds,
+              { startDate: ctx.startDate },
             ),
       )
     }
@@ -510,6 +532,7 @@ function debtStats(
   liabilities: Liability[],
   monthKey: string,
   earliestMonth: string | null,
+  startDate: string | null,
 ): DebtStats {
   // Use completed months for a stable "fixed monthly repayment" estimate.
   const previousMonth = shiftMonth(monthKey, -1)
@@ -517,18 +540,19 @@ function debtStats(
     previousMonth,
     earliestMonth,
     TRAILING_MONTHS,
+    startDate,
   )
   if (keys.length === 0) keys = [monthKey]
 
   const first = keys[0]
   const last = keys[keys.length - 1]
-  const startDate = `${first}-01`
+  const rangeStart = `${first}-01`
   const endDate = endOfMonthDate(last)
 
   let repayCents = 0
   for (const liability of liabilities) {
     for (const repayment of liability.repayments) {
-      if (repayment.date >= startDate && repayment.date <= endDate) {
+      if (repayment.date >= rangeStart && repayment.date <= endDate) {
         repayCents += repayment.amountCents
       }
     }
@@ -538,7 +562,7 @@ function debtStats(
   for (const transaction of transactions) {
     if (
       transaction.type === 'income' &&
-      transaction.date >= startDate &&
+      transaction.date >= rangeStart &&
       transaction.date <= endDate
     ) {
       incomeCents += transaction.amountCents
@@ -1005,9 +1029,14 @@ function computeDetail(
     ctx.liabilities,
     period.endMonth,
     ctx.earliestMonth,
+    ctx.startDate,
   )
   const flows = flowStats(ctx, period.endMonth)
   const budget = budgetAdherenceStats(ctx, period.endMonth)
+  const completeMonthCount = completeMonthsUpTo(
+    ctx.startDate,
+    period.endMonth,
+  )
 
   const engel =
     totals.expenseCents > 0
@@ -1107,6 +1136,7 @@ function computeDetail(
     netWorthBaseCents,
     debtFreeMonths,
     score,
+    completeMonthCount,
   }
 }
 
@@ -1128,6 +1158,8 @@ export interface HealthDashboardOptions {
   hidden?: ReadonlySet<IndexMetricKey>
   budgets?: BudgetBook
   countedProjectIds?: ReadonlySet<string>
+  /** First day the books cover; inferred from transactions when omitted. */
+  startDate?: string | null
 }
 
 export function buildHealthDashboard(
@@ -1140,12 +1172,15 @@ export function buildHealthDashboard(
 ): HealthDashboard {
   const periods = buildPeriods(monthKey, granularity)
   const earliestMonth = earliestTransactionMonth(transactions)
+  const startDate =
+    options.startDate ?? earliestTransactionDate(transactions)
   const ctx: HealthContext = {
     transactions,
     liabilities,
     budgets: options.budgets ?? {},
     countedProjectIds: options.countedProjectIds,
     earliestMonth,
+    startDate,
     hidden: options.hidden ?? new Set(),
     monthTotalsCache: new Map(),
     budgetCache: new Map(),
@@ -1242,5 +1277,6 @@ export function buildHealthDashboard(
     },
     unmarkedTotalCount,
     unmarkedTotalCents,
+    completeMonthCount: completeMonthsUpTo(startDate, monthKey),
   }
 }

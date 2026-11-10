@@ -18,6 +18,7 @@ import {
 } from './categories'
 import { toPostings } from './allocations'
 import { splitEvenlyCents } from './budgetForm'
+import { monthCoverage } from './coverage'
 import {
   currentMonthKey,
   dateFromKey,
@@ -697,11 +698,19 @@ function buildMonthDailyStatus(
   budget: MonthBudget,
   monthKey: string,
   spentByDate: Map<string, number>,
+  options: { startDate?: string | null; amountCents?: number } = {},
 ): DailyBudgetStatus | null {
   const { startDate, endDate } = monthDateBounds(monthKey)
-  const dates = eachDateInRange(startDate, endDate)
+  // A first month only has a daily plan from the day the ledger started;
+  // days before that were never tracked and should not consume allowances.
+  const coverage = monthCoverage(monthKey, options.startDate)
+  const firstDate =
+    coverage.startDay > 1
+      ? `${monthKey}-${String(coverage.startDay).padStart(2, '0')}`
+      : startDate
+  const dates = eachDateInRange(firstDate, endDate)
   return buildDailyStatus({
-    amountCents: budget.amountCents,
+    amountCents: options.amountCents ?? budget.amountCents,
     mode: budget.dailyMode,
     dates,
     spentByDate,
@@ -714,13 +723,18 @@ function buildMonthDailyStatus(
 function buildCategoryStatuses(
   configured: Record<string, number> | undefined,
   spentByCategory: Map<string, number>,
+  prorationRatio = 1,
 ): CategoryBudgetStatus[] {
   if (!configured) return []
   const categories = getTopLevelCategories('expense')
   const statuses: CategoryBudgetStatus[] = []
   for (const category of categories) {
-    const budgetCents = configured[category.id]
-    if (budgetCents === undefined) continue
+    const configuredCents = configured[category.id]
+    if (configuredCents === undefined) continue
+    const budgetCents =
+      prorationRatio === 1
+        ? configuredCents
+        : Math.round(configuredCents * prorationRatio)
     const spentCents = spentByCategory.get(category.id) ?? 0
     statuses.push({
       categoryId: category.id,
@@ -755,6 +769,7 @@ export function getMonthBudgetMetrics(
   monthKey: string,
   book: BudgetBook,
   countedProjectIds?: ReadonlySet<string>,
+  options: { startDate?: string | null } = {},
 ): MonthBudgetMetrics {
   const resolved = resolveMonthBudget(book, monthKey)
   const budget = resolved.budget
@@ -764,33 +779,63 @@ export function getMonthBudgetMetrics(
   for (const date of eachDateInRange(startDate, endDate)) {
     spentCents += spentByDate.get(date) ?? 0
   }
-  const remainingCents = budget.amountCents - spentCents
+
+  // The first month is prorated to the days the ledger covers. A full monthly
+  // plan compared against half a month of spending would look artificially
+  // comfortable, and the daily allowance would be spread over untracked days.
+  const coverage = monthCoverage(monthKey, options.startDate)
+  const prorationRatio =
+    coverage.startDay > 1 && coverage.effectiveDays > 0
+      ? coverage.effectiveDays / coverage.totalDays
+      : 1
+  const rawBaseAmountCents =
+    budget.baseAmountCents ?? budget.amountCents
+  const amountCents =
+    prorationRatio === 1
+      ? budget.amountCents
+      : Math.round(budget.amountCents * prorationRatio)
+  const baseAmountCents =
+    prorationRatio === 1
+      ? rawBaseAmountCents
+      : Math.round(rawBaseAmountCents * prorationRatio)
+  const remainingCents = amountCents - spentCents
   const categories = buildCategoryStatuses(
     budget.categoryBudgetsCents,
     getDailyCategorySpendCents(transactions, startDate, endDate, countedProjectIds),
+    prorationRatio,
   )
   const categoryBudgetTotalCents = sumCategoryBudgets(categories)
-  const baseAmountCents = budget.baseAmountCents ?? budget.amountCents
 
   return {
     monthKey,
-    amountCents: budget.amountCents,
+    amountCents,
     baseAmountCents,
-    adjustedDeltaCents: budget.amountCents - baseAmountCents,
+    adjustedDeltaCents: amountCents - baseAmountCents,
     adjustments: budget.adjustments ?? [],
     spentCents,
     remainingCents,
     ratio:
-      budget.amountCents > 0
-        ? Math.max(spentCents / budget.amountCents, 0)
-        : 0,
+      amountCents > 0 ? Math.max(spentCents / amountCents, 0) : 0,
     source: resolved.source,
     sourceMonth: resolved.sourceMonth,
-    daily: buildMonthDailyStatus(budget, monthKey, spentByDate),
+    daily: buildMonthDailyStatus(budget, monthKey, spentByDate, {
+      startDate: options.startDate,
+      amountCents,
+    }),
     categories,
     categoryBudgetTotalCents,
-    unallocatedCents: budget.amountCents - categoryBudgetTotalCents,
+    unallocatedCents: amountCents - categoryBudgetTotalCents,
     overBudget: remainingCents < 0,
+    ...(prorationRatio !== 1
+      ? {
+          proration: {
+            days: coverage.effectiveDays,
+            totalDays: coverage.totalDays,
+            fullAmountCents: budget.amountCents,
+            fullBaseAmountCents: rawBaseAmountCents,
+          },
+        }
+      : {}),
   }
 }
 
