@@ -14,12 +14,14 @@ import {
   X,
 } from 'lucide-react'
 import { CategoryIcon } from '../components/CategoryIcon'
+import { ProjectTimingSummary } from '../components/ProjectTimingSummary'
 import { TransactionRow } from '../components/TransactionRow'
 import { getTopLevelCategories } from '../lib/categories'
 import {
   getProjectCategoryCents,
   getProjectSummary,
 } from '../lib/allocations'
+import { getProjectTimingTotals } from '../lib/projectTiming'
 import {
   currentMonthKey,
   daysInMonthOfKey,
@@ -53,6 +55,8 @@ interface ProjectsProps {
 }
 
 type ProjectFilter = 'active' | 'closed' | 'archived' | 'all'
+type ProjectSortKey = 'end' | 'start'
+type SortDirection = 'asc' | 'desc'
 type EditorMode = 'create' | 'edit' | null
 type PickerTarget = 'start' | 'end'
 type ProjectPhase = 'active' | 'closed' | 'expired' | 'archived'
@@ -198,14 +202,28 @@ function formFromProject(project: Project): ProjectFormState {
   }
 }
 
-function sortProjects(left: Project, right: Project): number {
-  const archived =
-    Number(Boolean(left.archivedAt)) - Number(Boolean(right.archivedAt))
-  if (archived !== 0) return archived
-  const status =
-    Number(left.status === 'closed') - Number(right.status === 'closed')
-  if (status !== 0) return status
-  return right.updatedAt.localeCompare(left.updatedAt)
+function projectSortDate(project: Project, key: ProjectSortKey): string {
+  return key === 'end' ? projectLastDate(project) : project.startDate
+}
+
+function sortProjects(
+  left: Project,
+  right: Project,
+  key: ProjectSortKey,
+  direction: SortDirection,
+): number {
+  const leftDate = projectSortDate(left, key)
+  const rightDate = projectSortDate(right, key)
+  if (leftDate !== rightDate) {
+    return direction === 'desc'
+      ? rightDate.localeCompare(leftDate)
+      : leftDate.localeCompare(rightDate)
+  }
+  // Open-ended projects share 9999-12-31; the newer one reads first.
+  return (
+    right.startDate.localeCompare(left.startDate) ||
+    left.name.localeCompare(right.name)
+  )
 }
 
 export function Projects({
@@ -224,6 +242,9 @@ export function Projects({
   const [calendarMonth, setCalendarMonth] = useState(() => currentMonthKey())
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filter, setFilter] = useState<ProjectFilter>('active')
+  // Default matches the project list header: latest ending project first.
+  const [sortKey, setSortKey] = useState<ProjectSortKey>('end')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [editorMode, setEditorMode] = useState<EditorMode>(null)
   const [draft, setDraft] = useState<ProjectFormState>(() => emptyForm())
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>('start')
@@ -248,8 +269,11 @@ export function Projects({
   }, [projects, transactions])
 
   const sortedProjects = useMemo(
-    () => [...projects].sort(sortProjects),
-    [projects],
+    () =>
+      [...projects].sort((left, right) =>
+        sortProjects(left, right, sortKey, sortDirection),
+      ),
+    [projects, sortKey, sortDirection],
   )
 
   const filteredProjects = useMemo(
@@ -734,6 +758,7 @@ export function Projects({
       totalBudgetCents && totalBudgetCents > 0
         ? totalExpenseCents / totalBudgetCents
         : 0
+    const timingTotals = getProjectTimingTotals(transactions, project)
     const categoryRows = getTopLevelCategories('expense').map((category) => ({
       category,
       spentCents: stats?.categoryCents.get(category.id) ?? 0,
@@ -822,6 +847,8 @@ export function Projects({
             <strong>{stats?.count ?? 0} 笔</strong>
           </div>
         </div>
+
+        <ProjectTimingSummary totals={timingTotals} />
 
         {totalBudgetCents ? (
           <div className="project-detail-budget">
@@ -1149,6 +1176,48 @@ export function Projects({
                 <span>{filterCounts[item.id]}</span>
               </button>
             ))}
+          </div>
+
+          <div className="project-sort-row" role="group" aria-label="项目排序">
+            <span>排序</span>
+            {(
+              [
+                ['end', '结束时间'],
+                ['start', '立项时间'],
+              ] as const
+            ).map(([key, label]) => {
+              const active = sortKey === key
+              return (
+                <button
+                  type="button"
+                  key={key}
+                  className={active ? 'is-active' : ''}
+                  aria-pressed={active}
+                  title={
+                    active
+                      ? sortDirection === 'desc'
+                        ? '当前倒序，点击改为正序'
+                        : '当前正序，点击改为倒序'
+                      : `按${label}倒序`
+                  }
+                  onClick={() => {
+                    if (active) {
+                      setSortDirection((current) =>
+                        current === 'desc' ? 'asc' : 'desc',
+                      )
+                    } else {
+                      setSortKey(key)
+                      setSortDirection('desc')
+                    }
+                  }}
+                >
+                  {label}
+                  <span className="project-sort-arrow" aria-hidden>
+                    {active ? (sortDirection === 'desc' ? '↓' : '↑') : '↕'}
+                  </span>
+                </button>
+              )
+            })}
           </div>
 
           {filteredProjects.length === 0 ? (

@@ -8,6 +8,11 @@ import {
   getProjectIds,
   getScope,
 } from '../lib/allocations'
+import {
+  projectPeriodLabel,
+  projectTimingLabel,
+  transactionTimingHits,
+} from '../lib/projectTiming'
 import { isRefund, transactionKindLabel } from '../lib/refunds'
 import { formatMoney, formatShortDate } from '../lib/utils'
 import type { LedgerTransaction, Project } from '../types'
@@ -51,6 +56,14 @@ export function TransactionRow({
   const projectLabel =
     projectNames.length > 0 ? projectNames.join(' / ') : '未命名项目'
   const scope = getScope(transaction)
+  // Dates outside a project's period stay recorded, but carry a visible tag.
+  const timingHits = transactionTimingHits(transaction, projects, projectId)
+  const timingTags = (['pre', 'post'] as const)
+    .map((timing) => ({
+      timing,
+      hits: timingHits.filter((hit) => hit.timing === timing),
+    }))
+    .filter((tag) => tag.hits.length > 0)
 
   return (
     <div className={`transaction-row${compact ? ' is-compact' : ''}`}>
@@ -76,6 +89,20 @@ export function TransactionRow({
               category.name
             )}
           </span>
+          {timingTags.map(({ timing, hits }) => (
+            <span
+              key={timing}
+              className={`timing-pill is-${timing}`}
+              title={hits
+                .map(
+                  (hit) =>
+                    `${hit.project.name}：项目周期 ${projectPeriodLabel(hit.project)}`,
+                )
+                .join('\n')}
+            >
+              {projectTimingLabel(timing, transaction.type)}
+            </span>
+          ))}
           {transaction.note ? (
             <span className="transaction-note">{transaction.note}</span>
           ) : null}

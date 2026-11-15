@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  AlertTriangle,
   Anchor,
   ArrowDownLeft,
   ArrowUpRight,
@@ -38,6 +39,12 @@ import {
   newAllocationId,
 } from '../lib/allocations'
 import { activeCurrencySymbol } from '../lib/currency'
+import {
+  clampDateToProject,
+  projectPeriodLabel,
+  projectTimingForDate,
+  projectTimingLabel,
+} from '../lib/projectTiming'
 import {
   describeFrequency,
   formatRecurringDate,
@@ -607,6 +614,58 @@ export function TransactionModal({
     [projects, editingProjectIds],
   )
 
+  const entryDate = pendingRecurring
+    ? pendingRecurring.date
+    : ruleFormMode
+      ? recurringForm.startDate
+      : date
+
+  // Projects whose period the current date is checked against. A shared entry
+  // checks every project it is split across.
+  const timingProjects = useMemo(() => {
+    const ids =
+      scope === 'project'
+        ? projectId
+          ? [projectId]
+          : []
+        : scope === 'shared'
+          ? [
+              ...new Set(
+                splitRows
+                  .filter((row) => row.target.startsWith('project:'))
+                  .map((row) => row.target.slice('project:'.length)),
+              ),
+            ]
+          : []
+    return ids
+      .map((id) => selectableProjects.find((project) => project.id === id))
+      .filter((project): project is Project => Boolean(project))
+  }, [scope, projectId, splitRows, selectableProjects])
+
+  const timingHits = useMemo(
+    () =>
+      timingProjects.flatMap((project) => {
+        const timing = projectTimingForDate(project, entryDate)
+        return timing ? [{ project, timing }] : []
+      }),
+    [timingProjects, entryDate],
+  )
+
+  /**
+   * Soft default: when a project is picked, keep the date inside its period
+   * unless the user has already chosen something else on purpose. Editing an
+   * existing entry never rewrites its date.
+   */
+  const recommendDateInProject = (project: Project) => {
+    if (editing || pendingRecurring || ruleFormMode || !date) return
+    const next = clampDateToProject(project, date)
+    if (next === date) return
+    setDate(next)
+    setRecurringForm((current) =>
+      current.startDate === date ? { ...current, startDate: next } : current,
+    )
+  }
+
   const totalCents = Math.round(parseDecimal(amount) * 100)
   const splitPreview = useMemo(
     () =>
@@ -755,6 +814,12 @@ export function TransactionModal({
           ? seed.accountId
           : getDefaultAccountId(accounts)
       const entryDate = seed?.date || defaultDate
+      // Coming from a project page: start inside the project period. A seeded
+      // notification keeps its real payment date, even if it is outside.
+      const recommendedDate =
+        preferredProject && !seed?.date
+          ? clampDateToProject(preferredProject, entryDate)
+          : entryDate
 
       setType(seededType)
       setKind(seededType === 'expense' ? seed?.kind : undefined)
@@ -768,7 +833,7 @@ export function TransactionModal({
         seedParentId ? new Set([seedParentId]) : new Set(),
       )
       setAccountId(seededAccountId)
-      setDate(entryDate)
+      setDate(recommendedDate)
       setNote(seed?.note ?? '')
       setSpendingNature(seed?.spendingNature ?? '')
       setScope(preferredProject ? 'project' : 'daily')
@@ -777,7 +842,7 @@ export function TransactionModal({
       )
       setSplitMode('ratio')
       setSplitRows([])
-      setRecurringForm(defaultRecurringForm(entryDate))
+      setRecurringForm(defaultRecurringForm(recommendedDate))
       setEditScope('once')
     }
     setError('')
@@ -823,8 +888,14 @@ export function TransactionModal({
     if (nextScope === scope) return
     setScope(nextScope)
     setError('')
-    if (nextScope === 'project' && !projectId) {
-      setProjectId(selectableProjects[0]?.id ?? '')
+    if (nextScope === 'project') {
+      const nextProject =
+        selectableProjects.find((project) => project.id === projectId) ??
+        selectableProjects[0]
+      if (nextProject) {
+        if (!projectId) setProjectId(nextProject.id)
+        recommendDateInProject(nextProject)
+      }
     }
     if (nextScope === 'shared') {
       setSplitMode('ratio')
@@ -1235,7 +1306,14 @@ export function TransactionModal({
                   <span className="field-label">归属项目</span>
                   <select
                     value={projectId}
-                    onChange={(event) => setProjectId(event.target.value)}
+                    onChange={(event) => {
+                      const nextId = event.target.value
+                      setProjectId(nextId)
+                      const nextProject = selectableProjects.find(
+                        (project) => project.id === nextId,
+                      )
+                      if (nextProject) recommendDateInProject(nextProject)
+                    }}
                   >
                     {selectableProjects.map((project) => (
                       <option key={project.id} value={project.id}>
@@ -1958,6 +2036,37 @@ export function TransactionModal({
               />
             </div>
           </div>
+
+          {!ruleFormMode && timingProjects.length > 0 ? (
+            <div
+              className={`project-timing-note${
+                timingHits.length > 0 ? ' is-warning' : ''
+              }`}
+              role={timingHits.length > 0 ? 'status' : undefined}
+              aria-live={timingHits.length > 0 ? 'polite' : undefined}
+            >
+              {timingHits.length > 0 ? (
+                <AlertTriangle size={14} aria-hidden />
+              ) : (
+                <CalendarDays size={14} aria-hidden />
+              )}
+              <span>
+                {timingHits.length > 0
+                  ? `日期 ${entryDate} 不在项目周期内（${timingHits
+                      .map(
+                        (hit) =>
+                          `${hit.project.name} · ${projectTimingLabel(
+                            hit.timing,
+                            type,
+                          )}`,
+                      )
+                      .join('、')}）。仍可保存，记录会带上这个标记。`
+                  : `项目周期 ${timingProjects
+                      .map(projectPeriodLabel)
+                      .join('、')}；日期建议落在这个区间内。`}
+              </span>
+            </div>
+          ) : null}
 
           <label className="field">
             <span className="field-label">

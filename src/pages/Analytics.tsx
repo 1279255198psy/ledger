@@ -14,13 +14,16 @@ import { DailyExpenseChart } from '../components/charts/DailyExpenseChart'
 import { IncomeExpenseChart } from '../components/charts/IncomeExpenseChart'
 import { CategoryBars } from '../components/charts/CategoryBars'
 import { EmptyLedger } from '../components/EmptyLedger'
+import { ProjectTimingSummary } from '../components/ProjectTimingSummary'
 import { RangeBudgetPanel } from '../components/RangeBudgetPanel'
 import {
   getCountedProjectIds,
   getMonthSpendCents,
+  getProjectIds,
   getProjectMonthRows,
   getProjectSummary,
 } from '../lib/allocations'
+import { getProjectTimingTotals } from '../lib/projectTiming'
 import {
   buildDailyExpenses,
   buildMonthPairSeries,
@@ -247,14 +250,24 @@ export function Analytics({
       row,
     ]),
   )
+  // 前置/后置流水会落在项目周期之外的月份；这些月份也要能看到项目卡片，
+  // 否则周期外的钱会在报表里直接消失。周期覆盖本月的老项目照常保留。
+  const monthProjectIds = new Set(
+    transactions
+      .filter((transaction) => transaction.date.slice(0, 7) === monthKey)
+      .flatMap((transaction) => getProjectIds(transaction)),
+  )
   const projectReports = projects
-    // 项目账单只跟着项目自己的起止日期走：本月不在项目周期里的旧项目
-    // 即使还有流水，也不应混进本月的账单；跨月项目会在每个月出现。
-    .filter((project) => projectCoversMonth(project, monthKey))
+    .filter(
+      (project) =>
+        projectCoversMonth(project, monthKey) ||
+        monthProjectIds.has(project.id),
+    )
     .map((project) => ({
       project,
       summary: getProjectSummary(transactions, project.id),
       monthRow: monthProjectRows.get(project.id),
+      timing: getProjectTimingTotals(transactions, project),
     }))
     .filter(
       (item) =>
@@ -559,9 +572,9 @@ export function Analytics({
               <p className="card-kicker">PROJECT LEDGER</p>
               <h2 id="project-report-heading">项目账单</h2>
               <p>
-                只列出起止日期覆盖本月的项目，跨月项目会在涉及的每个月出现；
-                总额跨月保留，月度数字按交易发生日期归集。独立核算的项目不占生活预算，
-                计入日常的项目同时算在生活支出里。
+                列出起止日期覆盖本月的项目；项目周期之外的前置/后置流水也会在
+                发生的月份列出并标记。总额跨月保留，月度数字按交易发生日期归集。
+                独立核算的项目不占生活预算，计入日常的项目同时算在生活支出里。
               </p>
             </div>
             <span className="chart-scope">
@@ -570,7 +583,7 @@ export function Analytics({
           </div>
 
           <div className="project-report-list">
-            {projectReports.map(({ project, summary, monthRow }) => {
+            {projectReports.map(({ project, summary, monthRow, timing }) => {
               const status = project.archivedAt
                 ? 'archived'
                 : project.status === 'active'
@@ -634,6 +647,8 @@ export function Analytics({
                       </strong>
                     </div>
                   </div>
+
+                  <ProjectTimingSummary totals={timing} />
 
                   {budgetCents ? (
                     <div className="project-budget">
