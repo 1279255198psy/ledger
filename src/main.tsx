@@ -14,6 +14,7 @@ import {
 import './styles.css'
 import './budget.css'
 import './import.css'
+import './goals.css'
 
 async function bootstrap() {
   // Load the IndexedDB cache before anything reads storage, then let the

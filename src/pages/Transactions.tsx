@@ -17,7 +17,9 @@ import { EmptyLedger } from '../components/EmptyLedger'
 import { PendingCaptureCard } from '../components/PendingCaptureCard'
 import { RecurringPendingCard } from '../components/RecurringPendingCard'
 import { SelectMenu } from '../components/SelectMenu'
+import { SavingsTransferRow } from '../components/SavingsTransferRow'
 import { TransactionRow } from '../components/TransactionRow'
+import { getSavingsTransfers } from '../lib/savings'
 import type { PendingCapture } from '../lib/capture/types'
 import { getCategoryPathName } from '../lib/categories'
 import { expenseDeltaCents } from '../lib/refunds'
@@ -41,6 +43,8 @@ import type {
   Project,
   RecurringPending,
   RecurringRule,
+  SavingsHolding,
+  SavingsTransfer,
   TransactionType,
 } from '../types'
 
@@ -50,12 +54,14 @@ interface TransactionsProps {
   categories: Category[]
   accounts: Account[]
   monthKey: string
+  savings: SavingsHolding[]
   pendingCaptures: PendingCapture[]
   recurringRules: RecurringRule[]
   recurringPending: RecurringPending[]
   onAdd: () => void
   onEdit: (transaction: LedgerTransaction) => void
   onDelete: (id: string) => void
+  onDeleteSavingsEntry: (holdingId: string, entryId: string) => void
   onAnnotateCapture: (item: PendingCapture) => void
   onIgnoreCapture: (id: string) => void
   onOpenRules: () => void
@@ -107,7 +113,7 @@ function RecurringBar({
   )
 }
 
-type TypeFilter = 'all' | TransactionType
+type TypeFilter = 'all' | TransactionType | 'transfer'
 
 interface PopoverPosition {
   left: number
@@ -141,15 +147,25 @@ function measurePopover(
   return { left, top, width: clampedWidth, maxHeight }
 }
 
+interface DayGroup {
+  transactions: LedgerTransaction[]
+  transfers: SavingsTransfer[]
+}
+
 function groupByDay(
-  items: LedgerTransaction[],
-): Array<[string, LedgerTransaction[]]> {
-  const groups = new Map<string, LedgerTransaction[]>()
-  for (const item of items) {
-    const list = groups.get(item.date) ?? []
-    list.push(item)
-    groups.set(item.date, list)
+  transactions: LedgerTransaction[],
+  transfers: SavingsTransfer[],
+): Array<[string, DayGroup]> {
+  const groups = new Map<string, DayGroup>()
+  const at = (date: string): DayGroup => {
+    const existing = groups.get(date)
+    if (existing) return existing
+    const created: DayGroup = { transactions: [], transfers: [] }
+    groups.set(date, created)
+    return created
   }
+  for (const item of transactions) at(item.date).transactions.push(item)
+  for (const item of transfers) at(item.date).transfers.push(item)
   return [...groups.entries()].sort(([a], [b]) => b.localeCompare(a))
 }
 
@@ -159,12 +175,14 @@ export function Transactions({
   categories,
   accounts,
   monthKey,
+  savings,
   pendingCaptures,
   recurringRules,
   recurringPending,
   onAdd,
   onEdit,
   onDelete,
+  onDeleteSavingsEntry,
   onAnnotateCapture,
   onIgnoreCapture,
   onOpenRules,
@@ -217,7 +235,7 @@ export function Transactions({
 
   const categoryTree = useMemo(() => {
     const scoped =
-      typeFilter === 'all'
+      typeFilter === 'all' || typeFilter === 'transfer'
         ? categories
         : categories.filter((category) => category.type === typeFilter)
     return scoped
@@ -301,57 +319,124 @@ export function Transactions({
     }
   }, [accounts, accountFilter])
 
-  const filtered = useMemo(
-    () =>
-      filterTransactions(
-        isGlobal ? transactions : monthTransactions,
-        {
-          query,
-          type: typeFilter,
-          categoryId: categoryFilter,
-          accountId: accountFilter,
-          startDate: rangeStart,
-          endDate: rangeEnd,
-        },
-        categories,
-        accounts,
-        projects,
-      ),
-    [
-      transactions,
-      monthTransactions,
-      isGlobal,
-      query,
-      typeFilter,
-      categoryFilter,
-      accountFilter,
-      rangeStart,
-      rangeEnd,
+  const filtered = useMemo(() => {
+    if (typeFilter === 'transfer') return []
+    return filterTransactions(
+      isGlobal ? transactions : monthTransactions,
+      {
+        query,
+        type: typeFilter,
+        categoryId: categoryFilter,
+        accountId: accountFilter,
+        startDate: rangeStart,
+        endDate: rangeEnd,
+      },
       categories,
       accounts,
       projects,
-    ],
-  )
+    )
+  }, [
+    transactions,
+    monthTransactions,
+    isGlobal,
+    query,
+    typeFilter,
+    categoryFilter,
+    accountFilter,
+    rangeStart,
+    rangeEnd,
+    categories,
+    accounts,
+    projects,
+  ])
 
-  const summaryTransactions = isGlobal ? filtered : monthTransactions
+  const allTransfers = useMemo(
+    () => getSavingsTransfers(savings),
+    [savings],
+  )
+  const visibleTransfers = useMemo(() => {
+    if (typeFilter === 'expense' || typeFilter === 'income') return []
+    if (categoryFilter) return []
+    const needle = query.trim().toLowerCase().replace(/\s+/g, '')
+    return allTransfers.filter((transfer) => {
+      const month = transfer.date.slice(0, 7)
+      if (!isGlobal && month !== monthKey) return false
+      if (rangeStart && transfer.date < rangeStart) return false
+      if (rangeEnd && transfer.date > rangeEnd) return false
+      if (accountFilter && transfer.accountId !== accountFilter) return false
+      if (!needle) return true
+      const account = transfer.accountId
+        ? accounts.find((item) => item.id === transfer.accountId)
+        : undefined
+      const haystack = `${transfer.holdingName} ${transfer.note ?? ''} ${
+        account?.name ?? ''
+      }`
+        .toLowerCase()
+        .replace(/\s+/g, '')
+      if (haystack.includes(needle)) return true
+      const plain = needle.replace(/[¥￥,，]/g, '')
+      return (
+        /^\d+(\.\d{1,2})?$/.test(plain) &&
+        Math.round(Number(plain) * 100) === transfer.amountCents
+      )
+    })
+  }, [
+    allTransfers,
+    typeFilter,
+    categoryFilter,
+    query,
+    isGlobal,
+    monthKey,
+    rangeStart,
+    rangeEnd,
+    accountFilter,
+    accounts,
+  ])
+
+  const summaryTransactions =
+    typeFilter === 'transfer'
+      ? []
+      : isGlobal
+        ? filtered
+        : monthTransactions
   const summaryTotals = useMemo(
     () => getTotals(summaryTransactions),
     [summaryTransactions],
   )
+  const summaryTransferCount = isGlobal
+    ? visibleTransfers.length
+    : visibleTransfers.filter((transfer) =>
+        transfer.date.startsWith(`${monthKey}-`),
+      ).length
+  const resultCount =
+    typeFilter === 'transfer'
+      ? visibleTransfers.length
+      : summaryTransactions.length + summaryTransferCount
 
   const monthGroups = useMemo(() => {
     if (!isGlobal) return []
-    const months = new Map<string, LedgerTransaction[]>()
+    const months = new Map<string, DayGroup>()
+    const at = (month: string): DayGroup => {
+      const existing = months.get(month)
+      if (existing) return existing
+      const created: DayGroup = { transactions: [], transfers: [] }
+      months.set(month, created)
+      return created
+    }
     for (const item of filtered) {
-      const key = item.date.slice(0, 7)
-      const list = months.get(key) ?? []
-      list.push(item)
-      months.set(key, list)
+      at(item.date.slice(0, 7)).transactions.push(item)
+    }
+    for (const item of visibleTransfers) {
+      at(item.date.slice(0, 7)).transfers.push(item)
     }
     return [...months.entries()]
       .sort(([a], [b]) => b.localeCompare(a))
-      .map(([month, items]) => ({ month, items, totals: getTotals(items) }))
-  }, [filtered, isGlobal])
+      .map(([month, group]) => ({
+        month,
+        ...group,
+        totals: getTotals(group.transactions),
+      }))
+  }, [filtered, visibleTransfers, isGlobal])
 
   const hasFilters = hasActiveFilters({
     query,
@@ -505,51 +590,71 @@ export function Transactions({
     </div>
   )
 
-  const renderDayGroups = (items: LedgerTransaction[]) => (
+  const renderDayGroups = (
+    transactions: LedgerTransaction[],
+    transfers: SavingsTransfer[],
+  ) => (
     <div className="day-groups">
-      {groupByDay(items).map(([date, dayItems]) => {
-        const dayExpense = dayItems
-          .filter((item) => item.type === 'expense')
-          .reduce((sum, item) => sum + expenseDeltaCents(item), 0) / 100
-        const dayIncome = dayItems
-          .filter((item) => item.type === 'income')
-          .reduce((sum, item) => sum + item.amountCents, 0) / 100
-        return (
-          <section className="day-group" key={date}>
-            <header className="day-heading">
-              <div>
-                <h2>{formatDayHeading(date)}</h2>
-                <span>{dayItems.length} 笔</span>
-              </div>
-              <div className="day-total">
-                {dayExpense > 0 ? (
-                  <span>支出 {formatMoney(dayExpense)}</span>
-                ) : null}
-                {dayIncome > 0 ? (
-                  <span className="is-income">
-                    收入 {formatMoney(dayIncome)}
+      {groupByDay(transactions, transfers).map(
+        ([date, { transactions: dayTransactions, transfers: dayTransfers }]) => {
+          const dayExpense =
+            dayTransactions
+              .filter((item) => item.type === 'expense')
+              .reduce((sum, item) => sum + expenseDeltaCents(item), 0) / 100
+          const dayIncome =
+            dayTransactions
+              .filter((item) => item.type === 'income')
+              .reduce((sum, item) => sum + item.amountCents, 0) / 100
+          return (
+            <section className="day-group" key={date}>
+              <header className="day-heading">
+                <div>
+                  <h2>{formatDayHeading(date)}</h2>
+                  <span>
+                    {dayTransactions.length + dayTransfers.length} 笔
                   </span>
-                ) : null}
+                </div>
+                <div className="day-total">
+                  {dayExpense > 0 ? (
+                    <span>支出 {formatMoney(dayExpense)}</span>
+                  ) : null}
+                  {dayIncome > 0 ? (
+                    <span className="is-income">
+                      收入 {formatMoney(dayIncome)}
+                    </span>
+                  ) : null}
+                  {dayTransfers.length > 0 ? (
+                    <span>转账 {dayTransfers.length} 笔</span>
+                  ) : null}
+                </div>
+              </header>
+              <div className="card day-card">
+                {dayTransactions.map((transaction) => (
+                  <TransactionRow
+                    key={transaction.id}
+                    transaction={transaction}
+                    projects={projects}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                  />
+                ))}
+                {dayTransfers.map((transfer) => (
+                  <SavingsTransferRow
+                    key={`transfer-${transfer.id}`}
+                    transfer={transfer}
+                    accounts={accounts}
+                    onDelete={onDeleteSavingsEntry}
+                  />
+                ))}
               </div>
-            </header>
-            <div className="card day-card">
-              {dayItems.map((transaction) => (
-                <TransactionRow
-                  key={transaction.id}
-                  transaction={transaction}
-                  projects={projects}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                />
-              ))}
-            </div>
-          </section>
-        )
-      })}
+            </section>
+          )
+        },
+      )}
     </div>
   )
 
-  if (transactions.length === 0) {
+  if (transactions.length === 0 && allTransfers.length === 0) {
     return (
       <div className="page-stack transactions-page">
         <PendingCaptureCard
@@ -703,7 +808,7 @@ export function Transactions({
         </div>
         <div className="summary-cell summary-cell--count">
           <span>{isGlobal ? '结果' : '记录'}</span>
-          <strong>{summaryTransactions.length} 笔</strong>
+          <strong>{resultCount} 笔</strong>
         </div>
       </section>
 
@@ -715,6 +820,7 @@ export function Transactions({
                 ['all', '全部'],
                 ['expense', '支出'],
                 ['income', '收入'],
+                ['transfer', '转账'],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -738,8 +844,11 @@ export function Transactions({
               aria-haspopup="dialog"
               aria-expanded={categoryMenuOpen}
               aria-label={`筛选分类：${categoryFilterLabel}`}
+              disabled={typeFilter === 'transfer'}
             >
-              <span>{categoryFilterLabel}</span>
+              <span>
+                {typeFilter === 'transfer' ? '转账无分类' : categoryFilterLabel}
+              </span>
               <ChevronDown
                 size={13}
                 aria-hidden
@@ -823,10 +932,15 @@ export function Transactions({
             ? `${globalScopeLabel} · ${query.trim() ? '搜索结果' : '筛选结果'}`
             : `${monthLabel(monthKey)} · ${hasFilters ? '筛选结果' : '全部流水'}`}
         </span>
-        <span>共 {filtered.length} 笔</span>
+        <span>
+          共 {filtered.length + visibleTransfers.length} 笔
+          {visibleTransfers.length > 0
+            ? `（含转账 ${visibleTransfers.length} 笔）`
+            : ''}
+        </span>
       </div>
 
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && visibleTransfers.length === 0 ? (
         <section className="card empty-state">
           <div className="empty-mark" aria-hidden="true">
             <Search size={22} />
@@ -839,7 +953,9 @@ export function Transactions({
               ? '换个关键词或日期范围再试试。'
               : hasFilters
                 ? '换一个关键词，或清空筛选再看看。'
-                : '从一笔早餐、一趟地铁开始，账本就有了生活的形状。'}
+                : allTransfers.length > 0
+                  ? `这个月没有流水，但另有 ${allTransfers.length} 笔储蓄划转在其他月份，可以在上方搜索存单名或选择日期范围查看。`
+                  : '从一笔早餐、一趟地铁开始，账本就有了生活的形状。'}
           </p>
           {hasFilters ? (
             <button type="button" className="button secondary" onClick={resetFilters}>
@@ -859,7 +975,9 @@ export function Transactions({
               <header className="month-heading">
                 <div>
                   <h2>{monthLabel(group.month)}</h2>
-                  <span>{group.items.length} 笔</span>
+                  <span>
+                    {group.transactions.length + group.transfers.length} 笔
+                  </span>
                 </div>
                 <div className="day-total">
                   {group.totals.expense > 0 ? (
@@ -872,12 +990,12 @@ export function Transactions({
                   ) : null}
                 </div>
               </header>
-              {renderDayGroups(group.items)}
+              {renderDayGroups(group.transactions, group.transfers)}
             </section>
           ))}
         </div>
       ) : (
-        renderDayGroups(filtered)
+        renderDayGroups(filtered, visibleTransfers)
       )}
     </div>
   )

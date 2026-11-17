@@ -1,4 +1,8 @@
-import type { ReminderSettings } from '../types'
+import type {
+  ReminderSettings,
+  SavingsHolding,
+  SavingsReminderSettings,
+} from '../types'
 import { isDesktopApp } from './desktop'
 import { isMobileApp } from './platform'
 import {
@@ -7,6 +11,14 @@ import {
   REMINDER_TITLE,
   buildMobileSchedules,
 } from './reminders'
+import {
+  SAVINGS_REMINDER_CHANNEL,
+  SAVINGS_REMINDER_TITLE,
+  buildSavingsMilestones,
+  parseSavingsReminderTime,
+} from './savingsReminders'
+import { getSavingsSummary } from './savings'
+import { localDateKey } from './utils'
 
 export type ReminderPermission =
   | 'granted'
@@ -79,6 +91,28 @@ async function ensureMobilePermission(): Promise<ReminderPermission> {
   return toPermission((await plugin.requestPermissions()).display)
 }
 
+/**
+ * Asks for notification permission at the moment the user turns a reminder on.
+ * Shared by both reminder settings sections so the prompt is tied to a click.
+ */
+export async function requestReminderPermission(): Promise<ReminderPermission> {
+  if (isMobileApp()) {
+    try {
+      return await ensureMobilePermission()
+    } catch {
+      return 'unsupported'
+    }
+  }
+  if (isDesktopApp()) return getReminderPermission()
+  if (typeof window === 'undefined' || typeof Notification === 'undefined') {
+    return 'unsupported'
+  }
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission().catch(() => undefined)
+  }
+  return Notification.permission === 'granted' ? 'granted' : 'denied'
+}
+
 async function ensureChannel(): Promise<void> {
   if (channelReady) return
   const { LocalNotifications: plugin } = await loadMobileModule()
@@ -143,6 +177,220 @@ export async function applyReminderSchedule(
   if (isDesktopApp()) {
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('sync_reminder_settings', { settings })
+  }
+}
+
+const SAVINGS_NOTIFICATION_BASE = 6600
+const SAVINGS_NOTIFICATION_LIMIT = 60
+const SAVINGS_IDS_KEY = 'zhangye.savingsReminderIds.v1'
+
+interface DesktopSavingsReminderItem {
+  id: string
+  name: string
+  maturityDate: string
+  expectedCents: number
+}
+
+function savingsReminderItems(
+  holdings: SavingsHolding[],
+): DesktopSavingsReminderItem[] {
+  return holdings
+    .filter((holding) => !holding.closedAt && holding.maturityDate)
+    .map((holding) => ({
+      id: holding.id,
+      name: holding.name,
+      maturityDate: holding.maturityDate as string,
+      expectedCents: getSavingsSummary(holding).expectedMaturityCents,
+    }))
+}
+
+function readScheduledSavingsIds(): number[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(SAVINGS_IDS_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (value): value is number =>
+            typeof value === 'number' && Number.isInteger(value),
+        )
+      : []
+  } catch {
+    return []
+  }
+}
+
+function writeScheduledSavingsIds(ids: number[]): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(SAVINGS_IDS_KEY, JSON.stringify(ids))
+  } catch {
+    // The schedule still fires; only the cleanup list is lost.
+  }
+}
+
+async function ensureSavingsChannel(): Promise<void> {
+  const { LocalNotifications: plugin } = await loadMobileModule()
+  await plugin.createChannel({
+    id: SAVINGS_REMINDER_CHANNEL,
+    name: '储蓄到期提醒',
+    description: '定期存款到期前 3 天与到期当天提醒',
+    importance: 4,
+    visibility: 1,
+    vibration: true,
+    lights: true,
+  })
+}
+
+async function clearMobileSavingsReminders(): Promise<void> {
+  const ids = readScheduledSavingsIds()
+  if (ids.length === 0) return
+  const { LocalNotifications: plugin } = await loadMobileModule()
+  await plugin.cancel({
+    notifications: ids.map((id) => ({ id })),
+  })
+  writeScheduledSavingsIds([])
+}
+
+function milestoneDate(fireDate: string, time: string): Date | null {
+  const [year, month, day] = fireDate.split('-').map(Number)
+  if (!year || !month || !day) return null
+  const { hour, minute } = parseSavingsReminderTime(time)
+  return new Date(year, month - 1, day, hour, minute, 0, 0)
+}
+
+async function applyMobileSavings(
+  settings: SavingsReminderSettings,
+  holdings: SavingsHolding[],
+): Promise<void> {
+  if (!settings.enabled) {
+    await clearMobileSavingsReminders()
+    return
+  }
+  const permission = await ensureMobilePermission()
+  if (permission !== 'granted') {
+    await clearMobileSavingsReminders()
+    return
+  }
+  await clearMobileSavingsReminders()
+  await ensureSavingsChannel()
+  const now = Date.now()
+  const milestones = buildSavingsMilestones(
+    holdings,
+    localDateKey(),
+    SAVINGS_NOTIFICATION_LIMIT,
+  )
+  const scheduled: Array<{ id: number; fireAt: Date; title: string; body: string }> = []
+  for (const milestone of milestones) {
+    const fireAt = milestoneDate(milestone.fireDate, settings.time)
+    if (!fireAt || fireAt.getTime() <= now) continue
+    scheduled.push({
+      id: SAVINGS_NOTIFICATION_BASE + scheduled.length,
+      fireAt,
+      title: milestone.title,
+      body: milestone.body,
+    })
+    if (scheduled.length >= SAVINGS_NOTIFICATION_LIMIT) break
+  }
+  if (scheduled.length === 0) {
+    writeScheduledSavingsIds([])
+    return
+  }
+  const { LocalNotifications: plugin } = await loadMobileModule()
+  await plugin.schedule({
+    notifications: scheduled.map((item) => ({
+      id: item.id,
+      title: item.title,
+      body: item.body,
+      channelId: SAVINGS_REMINDER_CHANNEL,
+      isExactNotification: false,
+      schedule: {
+        at: item.fireAt,
+        allowWhileIdle: true,
+      },
+    })),
+  })
+  writeScheduledSavingsIds(scheduled.map((item) => item.id))
+}
+
+/**
+ * Applies the savings maturity schedule on the current platform. Desktop
+ * evaluates the dates in Rust every 15 seconds; Android uses one-shot local
+ * notifications; the browser hook checks while the page is open.
+ */
+export async function applySavingsReminderSchedule(
+  settings: SavingsReminderSettings,
+  holdings: SavingsHolding[],
+): Promise<void> {
+  if (isMobileApp()) {
+    await applyMobileSavings(settings, holdings)
+    return
+  }
+  if (isDesktopApp()) {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('sync_savings_reminders', {
+      settings,
+      items: savingsReminderItems(holdings),
+    })
+  }
+}
+
+export async function sendTestSavingsReminder(): Promise<ReminderActionResult> {
+  const title = SAVINGS_REMINDER_TITLE
+  const body = '这是一条测试提醒。定期存款会在到期前 3 天和到期当天各提醒一次。'
+  if (isMobileApp()) {
+    try {
+      const permission = await ensureMobilePermission()
+      if (permission !== 'granted') {
+        return {
+          ok: false,
+          message: '通知权限未开启，请到系统设置里允许账页发送通知。',
+        }
+      }
+      await ensureSavingsChannel()
+      const { LocalNotifications: plugin } = await loadMobileModule()
+      await plugin.schedule({
+        notifications: [
+          {
+            id: SAVINGS_NOTIFICATION_BASE + 999,
+            title,
+            body,
+            channelId: SAVINGS_REMINDER_CHANNEL,
+            isExactNotification: false,
+            schedule: { at: new Date(Date.now() - 1000) },
+          },
+        ],
+      })
+      return { ok: true, message: '测试通知已发送，请看看通知栏。' }
+    } catch {
+      return { ok: false, message: '测试通知发送失败，请检查通知权限后重试。' }
+    }
+  }
+  if (isDesktopApp()) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('send_test_savings_notification')
+      return { ok: true, message: '测试通知已发送。' }
+    } catch {
+      return { ok: false, message: '测试通知发送失败，请检查系统通知权限。' }
+    }
+  }
+  if (typeof window === 'undefined' || typeof Notification === 'undefined') {
+    return { ok: false, message: '当前环境不支持系统通知。' }
+  }
+  try {
+    let permission = Notification.permission
+    if (permission === 'default') {
+      permission = await Notification.requestPermission()
+    }
+    if (permission !== 'granted') {
+      return { ok: false, message: '浏览器通知权限未开启。' }
+    }
+    new Notification(title, { body })
+    return { ok: true, message: '测试通知已发送。' }
+  } catch {
+    return { ok: false, message: '测试通知发送失败。' }
   }
 }
 

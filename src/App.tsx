@@ -38,7 +38,7 @@ import { Overview } from './pages/Overview'
 import { Transactions } from './pages/Transactions'
 import { Projects } from './pages/Projects'
 import { Analytics } from './pages/Analytics'
-import { Liabilities } from './pages/Liabilities'
+import { AssetsDebts } from './pages/AssetsDebts'
 import { Indices } from './pages/Indices'
 import { newProjectId, newTransactionId, sortTransactions } from './lib/data'
 import { createSampleLedger } from './lib/sample'
@@ -72,6 +72,8 @@ import {
   loadRecurringPending,
   loadRecurringRules,
   loadReminders,
+  loadSavings,
+  loadSavingsReminders,
   loadTheme,
   loadTransactions,
   parseBackup,
@@ -90,6 +92,8 @@ import {
   saveRecurringPending,
   saveRecurringRules,
   saveReminders,
+  saveSavings,
+  saveSavingsReminders,
   saveTheme,
   saveTransactions,
 } from './lib/storage'
@@ -111,6 +115,20 @@ import {
   newLiabilityId,
   sortLiabilities,
 } from './lib/liabilities'
+import {
+  savingsLiquidNetCents,
+  buildGoalSettlement,
+  getSavingsSummary,
+  getSavingsTransfers,
+  goalCoveredCents,
+  newSavingsEntryId,
+  newSavingsId,
+  renewSavingsHolding,
+  savingsBalance,
+  sortSavingsHoldings,
+} from './lib/savings'
+import { averageMonthlySurplusCents } from './lib/goalPlans'
+import { useSavingsReminderScheduler } from './hooks/useSavingsReminderScheduler'
 import type { CategoryDraft } from './lib/categories'
 import { getCurrency, setActiveCurrency } from './lib/currency'
 import {
@@ -132,6 +150,7 @@ import {
   currentMonthKey,
   defaultDateForMonth,
   formatMoney,
+  getTotals,
   localDateKey,
   monthLabel,
   monthOfDateKey,
@@ -157,6 +176,12 @@ import type {
   RecurringTemplate,
   ReminderSettings,
   RepaymentDraft,
+  SavingsDraft,
+  SavingsEntryDraft,
+  SavingsGoalDraft,
+  SavingsGoalUpdateDraft,
+  SavingsHolding,
+  SavingsReminderSettings,
   Theme,
   TransactionDraft,
   TransactionDraftSeed,
@@ -211,6 +236,9 @@ export default function App() {
     useState<LedgerTransaction[]>(loadTransactions)
   const [projects, setProjects] = useState<Project[]>(loadProjects)
   const [liabilities, setLiabilities] = useState<Liability[]>(loadLiabilities)
+  const [savings, setSavings] = useState<SavingsHolding[]>(loadSavings)
+  const [savingsReminders, setSavingsReminders] =
+    useState<SavingsReminderSettings>(loadSavingsReminders)
   const [budgets, setBudgets] = useState<BudgetBook>(loadBudgets)
   const [budgetRanges, setBudgetRanges] =
     useState<RangeBudget[]>(loadBudgetRanges)
@@ -350,6 +378,37 @@ export default function App() {
       ),
     [budgetRanges, transactions, countedProjectIds],
   )
+  // Liquid money after ledger-funded savings transfers. External savings and
+  // interest never touch this pool, so they are not subtracted here. Goal
+  // spending is credited back because the project transaction already paid it.
+  const liquidBalanceCents = useMemo(
+    () =>
+      Math.round(openingBalance * 100) +
+      Math.round(getTotals(transactions).balance * 100) -
+      savingsLiquidNetCents(savings, todayKey) +
+      goalCoveredCents(savings, transactions, todayKey),
+    [openingBalance, transactions, savings, todayKey],
+  )
+
+  // Recent complete months, used to recommend a monthly saving amount.
+  const monthlySurplusCents = useMemo(() => {
+    const current = currentMonthKey()
+    const months: Array<{ incomeCents: number; expenseCents: number }> = []
+    for (let offset = 1; offset <= 6; offset += 1) {
+      const key = shiftMonth(current, -offset)
+      const monthTransactions = transactions.filter((transaction) =>
+        transaction.date.startsWith(`${key}-`),
+      )
+      if (monthTransactions.length === 0) continue
+      const totals = getTotals(monthTransactions)
+      months.push({
+        incomeCents: Math.round(totals.income * 100),
+        expenseCents: Math.round(totals.expense * 100),
+      })
+    }
+    return averageMonthlySurplusCents(months)
+  }, [transactions])
+
   // The month views only surface ranges that actually touch the shown month.
   const monthRangeMetrics = useMemo(
     () =>
@@ -372,8 +431,17 @@ export default function App() {
     for (const item of transactions) {
       usage[item.accountId] = (usage[item.accountId] ?? 0) + 1
     }
+    // Savings transfers reference a liquid account too; a card still used by
+    // one must not disappear from under the transfer row.
+    for (const holding of savings) {
+      for (const entry of holding.entries) {
+        if (entry.accountId) {
+          usage[entry.accountId] = (usage[entry.accountId] ?? 0) + 1
+        }
+      }
+    }
     return usage
-  }, [transactions])
+  }, [transactions, savings])
 
   const categoryProjectUsage = useMemo(() => {
     const usage: Record<string, number> = {}
@@ -406,6 +474,14 @@ export default function App() {
   useEffect(() => {
     saveLiabilities(sortLiabilities(liabilities))
   }, [liabilities])
+
+  useEffect(() => {
+    saveSavings(sortSavingsHoldings(savings))
+  }, [savings])
+
+  useEffect(() => {
+    saveSavingsReminders(savingsReminders)
+  }, [savingsReminders])
 
   useEffect(() => {
     saveBudgets(budgets)
@@ -526,6 +602,8 @@ export default function App() {
       setTransactions(loadTransactions())
       setProjects(loadProjects())
       setLiabilities(loadLiabilities())
+      setSavings(loadSavings())
+      setSavingsReminders(loadSavingsReminders())
       setBudgets(loadBudgets())
       setBudgetRanges(loadBudgetRanges())
       setRecurringRules(loadRecurringRules())
@@ -561,6 +639,7 @@ export default function App() {
   }, [reminders])
 
   useReminderScheduler(reminders)
+  useSavingsReminderScheduler(savingsReminders, savings)
 
   useEffect(() => {
     document.documentElement.dataset.palette = palette
@@ -836,6 +915,450 @@ export default function App() {
       ),
     )
     showToast('还款记录已删除')
+  }
+
+  const handleCreateSavings = (draft: SavingsDraft) => {
+    const now = new Date().toISOString()
+    const entry = {
+      id: newSavingsEntryId(),
+      kind: 'deposit' as const,
+      amountCents: draft.principalCents,
+      date: draft.startDate,
+      source: draft.source,
+      ...(draft.accountId ? { accountId: draft.accountId } : {}),
+      note: draft.source === 'ledger' ? '从流动资金转入' : '账外已有储蓄',
+      createdAt: now,
+    }
+    const holding: SavingsHolding = {
+      id: newSavingsId(),
+      name: draft.name.trim(),
+      kind: draft.kind,
+      ...(draft.institution ? { institution: draft.institution } : {}),
+      principalCents: draft.principalCents,
+      ...(draft.annualRateBps
+        ? { annualRateBps: draft.annualRateBps }
+        : {}),
+      startDate: draft.startDate,
+      ...(draft.maturityDate ? { maturityDate: draft.maturityDate } : {}),
+      ...(draft.autoRenew ? { autoRenew: true } : {}),
+      ...(draft.note ? { note: draft.note } : {}),
+      entries: [entry],
+      createdAt: now,
+      updatedAt: now,
+    }
+    setSavings((current) =>
+      sortSavingsHoldings([holding, ...current]),
+    )
+    showToast(
+      draft.source === 'ledger'
+        ? `已从流动资金转入储蓄「${holding.name}」`
+        : `储蓄「${holding.name}」已记录`,
+    )
+  }
+
+  const handleUpdateSavings = (id: string, draft: SavingsDraft) => {
+    const now = new Date().toISOString()
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current.map((holding) =>
+          holding.id === id
+            ? {
+                ...holding,
+                name: draft.name.trim(),
+                kind: draft.kind,
+                institution: draft.institution,
+                annualRateBps: draft.annualRateBps,
+                startDate: draft.startDate,
+                maturityDate: draft.maturityDate,
+                autoRenew: draft.autoRenew || undefined,
+                note: draft.note,
+                updatedAt: now,
+              }
+            : holding,
+        ),
+      ),
+    )
+    showToast(`储蓄「${draft.name.trim()}」已更新`)
+  }
+
+  const handleDeleteSavings = async (id: string) => {
+    const holding = savings.find((item) => item.id === id)
+    if (!holding) return
+    if (
+      holding.kind === 'goal' &&
+      !holding.closedAt &&
+      (holding.goalStatus === 'using' || savingsBalance(holding) > 0)
+    ) {
+      showToast('这个目标还有余额或正在使用，请先结算或取消目标', 'error')
+      return
+    }
+    const liquidNet = savingsLiquidNetCents([holding])
+    const confirmed = await confirmDesktopAction(
+      liquidNet !== 0
+        ? `确定删除储蓄「${holding.name}」吗？其中包含与流动资金相关的记录，删除后可用流动资金会${
+            liquidNet > 0 ? '增加' : '减少'
+          } ${formatMoney(Math.abs(liquidNet) / 100)}；此操作无法撤销。`
+        : `确定删除储蓄「${holding.name}」吗？存入和利息记录也会一并删除，此操作无法撤销。`,
+      '删除储蓄',
+    )
+    if (!confirmed) return
+    setSavings((current) => current.filter((item) => item.id !== id))
+    showToast(`储蓄「${holding.name}」已删除`)
+  }
+
+  const handleAddSavingsEntry = (
+    holdingId: string,
+    draft: SavingsEntryDraft,
+  ) => {
+    const holding = savings.find((item) => item.id === holdingId)
+    if (!holding) return
+    if (holding.closedAt) {
+      showToast('已关闭的储蓄不能再添加记录', 'error')
+      return
+    }
+    const summary = getSavingsSummary(holding, todayKey, transactions)
+    if (draft.kind === 'adjust') {
+      if (summary.balanceCents + draft.amountCents < 0) {
+        showToast('调整后的余额不能小于 0', 'error')
+        return
+      }
+    } else if (draft.kind === 'withdraw') {
+      if (draft.amountCents > summary.balanceCents) {
+        showToast('取出金额不能超过当前余额', 'error')
+        return
+      }
+    }
+    const now = new Date().toISOString()
+    const closesHolding =
+      draft.kind === 'withdraw' && draft.amountCents === summary.balanceCents
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current.map((item) =>
+          item.id === holdingId
+            ? {
+                ...item,
+                entries: [
+                  ...item.entries,
+                  {
+                    id: newSavingsEntryId(),
+                    kind: draft.kind,
+                    amountCents: draft.amountCents,
+                    date: draft.date,
+                    ...(draft.source ? { source: draft.source } : {}),
+                    ...(draft.accountId ? { accountId: draft.accountId } : {}),
+                    ...(draft.note ? { note: draft.note } : {}),
+                    createdAt: now,
+                  },
+                ],
+                ...(closesHolding ? { closedAt: draft.date } : {}),
+                updatedAt: now,
+              }
+            : item,
+        ),
+      ),
+    )
+    const labels: Record<SavingsEntryDraft['kind'], string> = {
+      deposit:
+        draft.source === 'ledger'
+          ? '已从流动资金存入'
+          : '已记下账外存入',
+      withdraw: closesHolding ? '已取出全部余额，储蓄已关闭' : '已记下取出',
+      interest: '已记下利息',
+      adjust: '余额已更新',
+    }
+    showToast(
+      draft.kind === 'withdraw'
+        ? `${labels.withdraw}，资金已回到流动资金`
+        : labels[draft.kind],
+    )
+  }
+
+  const handleDeleteSavingsEntry = async (
+    holdingId: string,
+    entryId: string,
+  ) => {
+    const holding = savings.find((item) => item.id === holdingId)
+    const entry = holding?.entries.find((item) => item.id === entryId)
+    if (!holding || !entry) return
+    if (holding.closedAt) {
+      showToast('已关闭的储蓄只保留历史记录，不能再修改明细', 'error')
+      return
+    }
+    const remaining = {
+      ...holding,
+      entries: holding.entries.filter((item) => item.id !== entryId),
+    }
+    if (savingsBalance(remaining) < 0) {
+      showToast(
+        '删除后余额会变成负数，请先删除这笔之后产生的取出记录',
+        'error',
+      )
+      return
+    }
+    const affectsLiquid =
+      (entry.kind === 'deposit' && entry.source === 'ledger') ||
+      entry.kind === 'withdraw'
+    const confirmed = await confirmDesktopAction(
+      affectsLiquid
+        ? '确定删除这条储蓄记录吗？它会同时改变可用流动资金，此操作无法撤销。'
+        : '确定删除这条储蓄记录吗？此操作无法撤销。',
+      '删除储蓄记录',
+    )
+    if (!confirmed) return
+    const now = new Date().toISOString()
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current.map((item) =>
+          item.id === holdingId
+            ? {
+                ...item,
+                entries: item.entries.filter((item) => item.id !== entryId),
+                updatedAt: now,
+              }
+            : item,
+        ),
+      ),
+    )
+    showToast('储蓄记录已删除')
+  }
+
+  const handleRenewSavings = async (holdingId: string) => {
+    const holding = savings.find((item) => item.id === holdingId)
+    if (!holding) return
+    const renewed = renewSavingsHolding(holding)
+    if (!renewed) {
+      showToast('只有已到期的定期储蓄可以续存', 'error')
+      return
+    }
+    const confirmed = await confirmDesktopAction(
+      `确定按本息续存「${holding.name}」吗？旧存单会保留为已关闭，新存单从 ${renewed.created.startDate} 开始，续存本金 ${formatMoney(
+        renewed.created.principalCents / 100,
+      )}。`,
+      '续存',
+    )
+    if (!confirmed) return
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current
+          .map((item) => (item.id === holdingId ? renewed.closed : item))
+          .concat(renewed.created),
+      ),
+    )
+    showToast(
+      `已按本息续存至 ${renewed.created.maturityDate ?? renewed.created.startDate}`,
+    )
+  }
+
+  const handleCreateGoal = (draft: SavingsGoalDraft) => {
+    const now = new Date().toISOString()
+    const entries = draft.initialCents > 0
+      ? [
+          {
+            id: newSavingsEntryId(),
+            kind: 'deposit' as const,
+            amountCents: draft.initialCents,
+            date: draft.startDate,
+            source: draft.source,
+            ...(draft.source === 'ledger' && draft.accountId
+              ? { accountId: draft.accountId }
+              : {}),
+            note:
+              draft.source === 'ledger'
+                ? '从流动资金转入目标'
+                : '账外已有资金',
+            createdAt: now,
+          },
+        ]
+      : []
+    const goal: SavingsHolding = {
+      id: newSavingsId(),
+      name: draft.name.trim(),
+      kind: 'goal',
+      principalCents: draft.initialCents,
+      startDate: draft.startDate,
+      entries,
+      goalTargetCents: draft.targetCents,
+      ...(draft.targetDate ? { goalDate: draft.targetDate } : {}),
+      ...(draft.projectId ? { goalProjectId: draft.projectId } : {}),
+      goalStatus: 'saving',
+      ...(draft.note ? { note: draft.note } : {}),
+      createdAt: now,
+      updatedAt: now,
+    }
+    setSavings((current) => sortSavingsHoldings([goal, ...current]))
+    showToast(`目标储蓄「${goal.name}」已创建`)
+  }
+
+  const handleUpdateGoal = (
+    id: string,
+    draft: SavingsGoalUpdateDraft,
+  ) => {
+    const now = new Date().toISOString()
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current.map((holding) => {
+          if (holding.id !== id) return holding
+          const keepProject =
+            holding.goalStatus === 'using'
+              ? holding.goalProjectId
+              : draft.projectId
+          return {
+            ...holding,
+            name: draft.name.trim(),
+            goalTargetCents: draft.targetCents,
+            goalDate: draft.targetDate,
+            goalProjectId: keepProject,
+            note: draft.note,
+            updatedAt: now,
+          }
+        }),
+      ),
+    )
+    showToast(`目标储蓄「${draft.name.trim()}」已更新`)
+  }
+
+  const handleStartGoal = async (id: string) => {
+    const goal = savings.find((item) => item.id === id)
+    if (!goal || goal.kind !== 'goal' || goal.closedAt) return
+    if (goal.goalStatus === 'using') return
+    const summary = getSavingsSummary(goal, todayKey, transactions)
+    const target = goal.goalTargetCents ?? 0
+    const confirmed = await confirmDesktopAction(
+      summary.balanceCents < target
+        ? `目标「${goal.name}」还差 ${formatMoney(
+            (target - summary.balanceCents) / 100,
+          )} 才达标。现在开始使用后，关联项目的支出会从这笔储蓄里扣；确定开始吗？`
+        : `开始使用目标「${goal.name}」吗？关联项目之后的支出会从这笔储蓄里支付。`,
+      '开始使用',
+    )
+    if (!confirmed) return
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current.map((holding) =>
+          holding.id === id
+            ? {
+                ...holding,
+                goalStatus: 'using',
+                goalStartedAt: todayKey,
+                updatedAt: new Date().toISOString(),
+              }
+            : holding,
+        ),
+      ),
+    )
+    showToast(`目标「${goal.name}」开始使用`)
+  }
+
+  const handleSettleGoal = (
+    id: string,
+    options: {
+      spentCents: number
+      writeToFlow: boolean
+      categoryId: string
+      accountId: string
+    },
+  ) => {
+    const goal = savings.find((item) => item.id === id)
+    if (!goal || goal.kind !== 'goal') return
+    const now = new Date().toISOString()
+    const settlement = buildGoalSettlement(goal, transactions, {
+      spentCents: options.spentCents,
+      writeToFlow: options.writeToFlow,
+      date: todayKey,
+      now,
+    })
+    if (!settlement) {
+      showToast('这个目标已经结算过了', 'error')
+      return
+    }
+
+    let expense: LedgerTransaction | null = null
+    if (
+      !goal.goalProjectId &&
+      options.writeToFlow &&
+      settlement.spentCents > 0
+    ) {
+      const category =
+        categories.find(
+          (item) =>
+            item.id === options.categoryId && item.type === 'expense',
+        ) ??
+        categories.find((item) => item.id === 'other_expense') ??
+        categories.find((item) => item.type === 'expense')
+      if (!category) {
+        showToast('没有可用的支出分类，暂时无法写入流水', 'error')
+        return
+      }
+      const accountId =
+        options.accountId || accounts[0]?.id || 'cash'
+      const txId = newTransactionId()
+      expense = {
+        id: txId,
+        schemaVersion: 2,
+        type: 'expense',
+        amountCents: settlement.spentCents,
+        categoryId: category.id,
+        accountId,
+        date: todayKey,
+        note: `目标储蓄「${goal.name}」支出`,
+        allocations: [makeDailyAllocation(settlement.spentCents)],
+        createdAt: now,
+      }
+    }
+
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current.map((holding) =>
+          holding.id === id ? settlement.closed : holding,
+        ),
+      ),
+    )
+    if (expense) {
+      setTransactions((current) =>
+        sortTransactions([expense as LedgerTransaction, ...current]),
+      )
+    }
+    const overage =
+      settlement.overageCents > 0
+        ? `，其中 ${formatMoney(
+            settlement.overageCents / 100,
+          )} 由流动资金承担`
+        : ''
+    showToast(
+      `目标「${goal.name}」已结算：储蓄支出 ${formatMoney(
+        settlement.coveredCents / 100,
+      )}，剩余 ${formatMoney(settlement.remainingCents / 100)} 已返还${overage}`,
+    )
+  }
+
+  const handleCancelGoal = async (id: string) => {
+    const goal = savings.find((item) => item.id === id)
+    if (!goal || goal.kind !== 'goal' || goal.closedAt) return
+    const confirmed = await confirmDesktopAction(
+      `取消目标「${goal.name}」吗？已存入的剩余金额会返还流动资金${goal.goalProjectId ? '，关联项目已经发生的支出仍会从储蓄里结算' : ''}。`,
+      '取消目标',
+    )
+    if (!confirmed) return
+    const now = new Date().toISOString()
+    const settlement = buildGoalSettlement(goal, transactions, {
+      spentCents: 0,
+      writeToFlow: false,
+      date: todayKey,
+      now,
+    })
+    if (!settlement) return
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current.map((holding) =>
+          holding.id === id ? settlement.closed : holding,
+        ),
+      ),
+    )
+    showToast(
+      `目标已取消，剩余 ${formatMoney(
+        settlement.remainingCents / 100,
+      )} 已返还流动资金`,
+    )
   }
 
   const openAdd = () => {
@@ -1495,9 +2018,20 @@ export default function App() {
           line.targetType === 'project' && line.projectId === id,
       ),
     ).length
+    const linkedGoals = savings.filter(
+      (holding) => holding.goalProjectId === id && !holding.closedAt,
+    ).length
     const confirmed = await confirmDesktopAction(
-      linkedCount > 0
-        ? `确定删除项目「${project.name}」吗？归入该项目的 ${linkedCount} 笔流水会转回日常支出，此操作无法撤销。`
+      linkedCount > 0 || linkedGoals > 0
+        ? `确定删除项目「${project.name}」吗？${
+            linkedCount > 0
+              ? `归入该项目的 ${linkedCount} 笔流水会转回日常支出；`
+              : ''
+          }${
+            linkedGoals > 0
+              ? `${linkedGoals} 个目标储蓄会解除与项目的关联；`
+              : ''
+          }此操作无法撤销。`
         : `确定删除项目「${project.name}」吗？此操作无法撤销。`,
       '删除项目',
     )
@@ -1516,6 +2050,22 @@ export default function App() {
       }),
     )
     setProjects((current) => current.filter((item) => item.id !== id))
+    setSavings((current) =>
+      current.map((holding) =>
+        holding.goalProjectId === id && !holding.closedAt
+          ? {
+              ...holding,
+              goalProjectId: undefined,
+              goalStartedAt: undefined,
+              goalStatus:
+                holding.goalStatus === 'using'
+                  ? 'saving'
+                  : holding.goalStatus,
+              updatedAt: now,
+            }
+          : holding,
+      ),
+    )
     showToast(`项目「${project.name}」已删除`)
   }
 
@@ -1540,6 +2090,7 @@ export default function App() {
       accounts,
       projects,
       liabilities,
+      savings,
       recurringRules,
       recurringPending,
       transactions,
@@ -1565,6 +2116,7 @@ export default function App() {
       categories,
       accounts,
       projects,
+      getSavingsTransfers(savings),
     )}`
     try {
       const saved = await saveTextFile({
@@ -1610,6 +2162,9 @@ export default function App() {
       setProjects(imported.projects)
       if (imported.liabilities !== null) {
         setLiabilities(imported.liabilities)
+      }
+      if (imported.savings !== null) {
+        setSavings(imported.savings)
       }
       if (imported.budgets !== null) setBudgets(imported.budgets)
       if (imported.budgetRanges !== null) {
@@ -1747,6 +2302,7 @@ export default function App() {
     setTransactions(sample.transactions)
     setProjects(sample.projects)
     setLiabilities(sample.liabilities)
+    setSavings(sortSavingsHoldings(sample.savings))
     setBudgets(sample.budgets)
     setBudgetRanges(sample.budgetRanges)
     setRecurringRules([])
@@ -1782,7 +2338,7 @@ export default function App() {
       ? '同步已开启，另一台设备上的账目也会被清除。'
       : ''
     const confirmed = await confirmDesktopAction(
-      `确定清除现有账本吗？全部流水、项目、负债与周期规则会被删除，预算和起始资金会重置。分类与外观设置保留。此操作无法撤销，建议先导出备份。${syncHint}`,
+      `确定清除现有账本吗？全部流水、项目、负债、储蓄与周期规则会被删除，预算和起始资金会重置。分类与外观设置保留。此操作无法撤销，建议先导出备份。${syncHint}`,
       '清除现有账本',
     )
     if (!confirmed) return
@@ -1790,6 +2346,7 @@ export default function App() {
     setTransactions([])
     setProjects([])
     setLiabilities([])
+    setSavings([])
     setBudgets({})
     setBudgetRanges([])
     setRecurringRules([])
@@ -1866,6 +2423,7 @@ export default function App() {
             ledgerStartDate={ledgerStartDate}
             captureStartDate={captureStartDate}
             openingBalance={openingBalance}
+            savings={savings}
             categories={categories}
             pendingCaptureCount={pendingCaptures.length}
             pendingCaptureTotalCents={pendingCaptureTotalCents}
@@ -1908,12 +2466,14 @@ export default function App() {
             categories={categories}
             accounts={accounts}
             monthKey={monthKey}
+            savings={savings}
             pendingCaptures={pendingCaptures}
             recurringRules={sortedRecurringRules}
             recurringPending={recurringPending}
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={handleDeleteTransaction}
+            onDeleteSavingsEntry={handleDeleteSavingsEntry}
             onAnnotateCapture={openCaptureAnnotation}
             onIgnoreCapture={handleIgnoreCapture}
             onOpenRules={() => setRulesModalOpen(true)}
@@ -1964,13 +2524,37 @@ export default function App() {
         ) : null}
 
         {view === 'liabilities' ? (
-          <Liabilities
+          <AssetsDebts
             liabilities={liabilities}
-            onCreate={handleCreateLiability}
-            onUpdate={handleUpdateLiability}
-            onDelete={handleDeleteLiability}
+            savings={savings}
+            accounts={accounts}
+            categories={categories}
+            projects={projects}
+            transactions={transactions}
+            liquidBalanceCents={liquidBalanceCents}
+            monthlySurplusCents={monthlySurplusCents}
+            savingsRemindersEnabled={savingsReminders.enabled}
+            onCreateLiability={handleCreateLiability}
+            onUpdateLiability={handleUpdateLiability}
+            onDeleteLiability={handleDeleteLiability}
             onAddRepayment={handleAddRepayment}
             onDeleteRepayment={handleDeleteRepayment}
+            onCreateSavings={handleCreateSavings}
+            onUpdateSavings={handleUpdateSavings}
+            onDeleteSavings={handleDeleteSavings}
+            onAddSavingsEntry={handleAddSavingsEntry}
+            onDeleteSavingsEntry={handleDeleteSavingsEntry}
+            onRenewSavings={handleRenewSavings}
+            onCreateGoal={handleCreateGoal}
+            onUpdateGoal={handleUpdateGoal}
+            onStartGoal={handleStartGoal}
+            onSettleGoal={handleSettleGoal}
+            onCancelGoal={handleCancelGoal}
+            onCreateProject={handleCreateProject}
+            onOpenSavingsReminderSettings={() => {
+              setSettingsFocus('reminders')
+              setSettingsOpen(true)
+            }}
           />
         ) : null}
 
@@ -1978,6 +2562,7 @@ export default function App() {
           <Indices
             transactions={transactions}
             liabilities={liabilities}
+            savings={savings}
             budgets={budgets}
             countedProjectIds={countedProjectIds}
             openingBalance={openingBalance}
@@ -2048,6 +2633,7 @@ export default function App() {
         fontSize={fontSize}
         currency={currency}
         reminders={reminders}
+        savingsReminders={savingsReminders}
         categories={categories}
         accounts={accounts}
         categoryTransactionUsage={categoryTransactionUsage}
@@ -2074,6 +2660,7 @@ export default function App() {
         onFontSizeChange={setFontSize}
         onCurrencyChange={handleCurrencyChange}
         onRemindersChange={setReminders}
+        onSavingsRemindersChange={setSavingsReminders}
         onNotify={showToast}
         onExportJson={handleExportJson}
         onExportCsv={handleExportCsv}

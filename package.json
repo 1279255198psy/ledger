@@ -1,7 +1,7 @@
 {
   "name": "zhangye-ledger",
   "private": true,
-  "version": "3.11.0",
+  "version": "3.12.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -16,6 +16,7 @@
     "test:project-timing": "esbuild scripts/test-project-timing.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/project-timing-test.mjs && node node_modules/.cache/project-timing-test.mjs",
     "test:exchange": "esbuild scripts/test-exchange.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/exchange-test.mjs && node node_modules/.cache/exchange-test.mjs",
     "test:sync": "esbuild scripts/test-sync.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/sync-test.mjs && node node_modules/.cache/sync-test.mjs",
+    "test:savings": "esbuild scripts/test-savings.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/savings-test.mjs && node node_modules/.cache/savings-test.mjs",
     "changelog": "node scripts/build-changelog.mjs",
     "release": "node scripts/release.mjs"
   },

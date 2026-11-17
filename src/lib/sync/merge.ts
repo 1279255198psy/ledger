@@ -2,6 +2,7 @@ import { DEFAULT_ACCOUNTS } from '../accounts'
 import { DEFAULT_CATEGORIES } from '../categories'
 import { sortTransactions } from '../data'
 import { sortLiabilities } from '../liabilities'
+import { sortSavingsHoldings } from '../savings'
 import type {
   Account,
   BudgetBook,
@@ -14,6 +15,8 @@ import type {
   RangeBudget,
   RecurringPending,
   RecurringRule,
+  SavingsEntry,
+  SavingsHolding,
 } from '../../types'
 import type {
   LedgerDataSnapshot,
@@ -101,6 +104,12 @@ function canonicalSnapshot(snapshot: LedgerDataSnapshot): unknown {
       ...liability,
       repayments: sortById(liability.repayments),
     })),
+    savings: snapshot.savings
+      ? sortById(snapshot.savings).map((holding) => ({
+          ...holding,
+          entries: sortById(holding.entries),
+        }))
+      : snapshot.savings,
     budgetRanges: sortById(snapshot.budgetRanges),
     recurringRules: snapshot.recurringRules
       ? sortById(snapshot.recurringRules)
@@ -443,6 +452,99 @@ function mergeLiabilities(
   return { items, conflicts, stats }
 }
 
+function stripSavingsEntries(holding: SavingsHolding): SavingsHolding {
+  return { ...holding, entries: [] }
+}
+
+function mergeSavingsHoldings(
+  baseItems: SavingsHolding[] | null,
+  localItems: SavingsHolding[],
+  remoteItems: SavingsHolding[],
+  favor: MergeOptions['favor'],
+): CollectionResult<SavingsHolding> {
+  const base = baseItems ? keyed(baseItems) : null
+  const local = keyed(localItems)
+  const remote = keyed(remoteItems)
+  const ids = new Set<string>([
+    ...localItems.map((item) => item.id),
+    ...remoteItems.map((item) => item.id),
+    ...(baseItems ?? []).map((item) => item.id),
+  ])
+
+  const items: SavingsHolding[] = []
+  const conflicts: SyncConflict[] = []
+  const stats = emptyStats()
+
+  for (const id of ids) {
+    const baseItem = base?.get(id)
+    const localItem = local.get(id)
+    const remoteItem = remote.get(id)
+
+    if (localItem && remoteItem) {
+      const entries = mergeCollection<SavingsEntry>(
+        baseItem?.entries ?? null,
+        localItem.entries,
+        remoteItem.entries,
+        'savingsEntry',
+        { stamp: stampOf, favor },
+      )
+      conflicts.push(...entries.conflicts)
+
+      const localMain = stripSavingsEntries(localItem)
+      const remoteMain = stripSavingsEntries(remoteItem)
+      const baseMain = baseItem ? stripSavingsEntries(baseItem) : undefined
+      let main: SavingsHolding
+      if (sameValue(localMain, remoteMain)) {
+        main = localMain
+      } else if (baseMain && sameValue(localMain, baseMain)) {
+        main = remoteMain
+      } else if (baseMain && sameValue(remoteMain, baseMain)) {
+        main = localMain
+      } else {
+        const side = chooseBothChanged(localItem, remoteItem, stampOf, favor)
+        main = side === 'local' ? localMain : remoteMain
+        conflicts.push({ kind: 'savings', id, choice: side })
+      }
+
+      const merged: SavingsHolding = {
+        ...main,
+        entries: entries.items,
+        updatedAt:
+          localItem.updatedAt >= remoteItem.updatedAt
+            ? localItem.updatedAt
+            : remoteItem.updatedAt,
+      }
+      if (!baseItem) stats.added += 1
+      else if (!sameValue(merged, baseItem)) stats.updated += 1
+      items.push(merged)
+    } else if (localItem) {
+      if (!baseItem) {
+        items.push(localItem)
+        stats.added += 1
+      } else if (sameValue(localItem, baseItem)) {
+        stats.removed += 1
+      } else {
+        items.push(localItem)
+        stats.updated += 1
+        conflicts.push({ kind: 'savings', id, choice: 'local' })
+      }
+    } else if (remoteItem) {
+      if (!baseItem) {
+        items.push(remoteItem)
+        stats.added += 1
+      } else if (sameValue(remoteItem, baseItem)) {
+        stats.removed += 1
+      } else {
+        items.push(remoteItem)
+        stats.updated += 1
+        conflicts.push({ kind: 'savings', id, choice: 'remote' })
+      }
+    }
+  }
+
+  return { items, conflicts, stats }
+}
+
 interface BudgetEntry extends MonthBudget {
   id: string
 }
@@ -678,6 +780,16 @@ export function mergeSnapshots(
     remote.liabilities,
     favor,
   )
+  // A peer on an older build sends no savings. Treating that as the local
+  // list keeps the holdings instead of reading the silence as a deletion.
+  const localSavings = local.savings ?? []
+  const remoteSavings = remote.savings ?? localSavings
+  const savings = mergeSavingsHoldings(
+    base?.savings ?? null,
+    localSavings,
+    remoteSavings,
+    favor,
+  )
   const categories = mergeCollection<Category>(
     base?.categories ?? null,
     local.categories,
@@ -739,6 +851,7 @@ export function mergeSnapshots(
     transactions,
     projects,
     liabilities,
+    savings,
     categories,
     accounts,
     budgets,
@@ -786,6 +899,11 @@ export function mergeSnapshots(
     transactions: sortTransactions(transactions.items),
     projects: projects.items,
     liabilities: sortLiabilities(liabilities.items),
+    ...(local.savings !== undefined ||
+    remote.savings !== undefined ||
+    base?.savings !== undefined
+      ? { savings: sortSavingsHoldings(savings.items) }
+      : {}),
     budgets: fromBudgetEntries(budgets.items),
     budgetRanges: ranges.items,
     recurringRules: recurringRules.items,

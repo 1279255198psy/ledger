@@ -1,4 +1,4 @@
-use chrono::{Datelike, Local, NaiveTime, TimeZone};
+use chrono::{Datelike, Duration as ChronoDuration, Local, NaiveDate, NaiveTime, TimeZone};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -80,6 +80,42 @@ struct ReminderRuntime {
     settings: Mutex<ReminderSettings>,
     /// "<YYYY-MM-DD> <HH:mm>" of the last reminder, so a tick cannot repeat it.
     last_fired: Mutex<String>,
+}
+
+/// Mirrors `SavingsReminderSettings` in the frontend.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavingsReminderSettings {
+    enabled: bool,
+    /// Local wall-clock time, "HH:mm".
+    time: String,
+}
+
+impl Default for SavingsReminderSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            time: "09:00".to_string(),
+        }
+    }
+}
+
+/// One open holding with a maturity date. The frontend sends the current list
+/// whenever savings or the reminder setting changes.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavingsReminderItem {
+    id: String,
+    name: String,
+    maturity_date: String,
+    expected_cents: i64,
+}
+
+struct SavingsReminderRuntime {
+    settings: Mutex<SavingsReminderSettings>,
+    items: Mutex<Vec<SavingsReminderItem>>,
+    /// Already-delivered milestone keys, e.g. "savings:<id>:today".
+    fired: Mutex<HashSet<String>>,
 }
 
 fn ledger_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -418,6 +454,109 @@ fn show_reminder(app: &tauri::AppHandle) -> Result<(), String> {
         .map_err(|error| format!("发送提醒失败：{error}"))
 }
 
+fn show_savings_reminder(app: &tauri::AppHandle, body: &str) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+    app.notification()
+        .builder()
+        .title("账页 · 储蓄到期提醒")
+        .body(body)
+        .show()
+        .map_err(|error| format!("发送储蓄提醒失败：{error}"))
+}
+
+fn savings_reminder_due(
+    settings: &SavingsReminderSettings,
+    items: &[SavingsReminderItem],
+    now: chrono::DateTime<Local>,
+) -> Vec<(String, String)> {
+    if !settings.enabled {
+        return Vec::new();
+    }
+    let Some(target_time) =
+        NaiveTime::parse_from_str(&settings.time, "%H:%M").ok()
+    else {
+        return Vec::new();
+    };
+    let today = now.date_naive();
+    let elapsed = now
+        .naive_local()
+        .signed_duration_since(today.and_time(target_time))
+        .num_seconds();
+    if !(0..=300).contains(&elapsed) {
+        return Vec::new();
+    }
+
+    let mut due = Vec::new();
+    for item in items {
+        let Ok(maturity) = NaiveDate::parse_from_str(&item.maturity_date, "%Y-%m-%d")
+        else {
+            continue;
+        };
+        let soon = maturity - ChronoDuration::days(3);
+        let (kind, body) = if today == maturity {
+            (
+                "today",
+                format!(
+                    "「{}」今天到期，预计本息 ¥{:.2}。记得转存或转回流动资金。",
+                    item.name,
+                    item.expected_cents as f64 / 100.0
+                ),
+            )
+        } else if today == soon {
+            (
+                "soon",
+                format!(
+                    "「{}」还有 3 天到期（{}），预计本息 ¥{:.2}。",
+                    item.name,
+                    item.maturity_date,
+                    item.expected_cents as f64 / 100.0
+                ),
+            )
+        } else {
+            continue;
+        };
+        due.push((
+            format!("savings:{}:{}:{}", item.id, kind, item.maturity_date),
+            body,
+        ));
+    }
+    due
+}
+
+fn savings_reminder_tick(app: &tauri::AppHandle) {
+    let Some(runtime) = app.try_state::<SavingsReminderRuntime>() else {
+        return;
+    };
+    let settings = match runtime.settings.lock() {
+        Ok(settings) => settings.clone(),
+        Err(_) => return,
+    };
+    let items = match runtime.items.lock() {
+        Ok(items) => items.clone(),
+        Err(_) => return,
+    };
+    let due = savings_reminder_due(&settings, &items, Local::now());
+    if due.is_empty() {
+        return;
+    }
+
+    for (key, body) in due {
+        let already_fired = runtime
+            .fired
+            .lock()
+            .map(|fired| fired.contains(&key))
+            .unwrap_or(true);
+        if already_fired {
+            continue;
+        }
+        if show_savings_reminder(app, &body).is_ok() {
+            if let Ok(mut fired) = runtime.fired.lock() {
+                fired.insert(key);
+            }
+        }
+    }
+}
+
 fn apply_autostart(app: &tauri::AppHandle, enabled: bool) {
     // 测试版和正式版共用同一个自启注册表项名（产品名），测试版写入会覆盖
     // 正式版的路径。测试版一律不碰开机自启。
@@ -484,6 +623,7 @@ fn spawn_reminder_scheduler(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(15));
         reminder_tick(&app);
+        savings_reminder_tick(&app);
     });
 }
 
@@ -595,8 +735,40 @@ fn sync_reminder_settings(
 }
 
 #[tauri::command]
+fn sync_savings_reminders(
+    app: tauri::AppHandle,
+    settings: SavingsReminderSettings,
+    items: Vec<SavingsReminderItem>,
+) -> Result<(), String> {
+    let runtime = app.state::<SavingsReminderRuntime>();
+    {
+        let mut current = runtime
+            .settings
+            .lock()
+            .map_err(|_| "储蓄提醒设置不可用".to_string())?;
+        *current = settings;
+    }
+    {
+        let mut current = runtime
+            .items
+            .lock()
+            .map_err(|_| "储蓄提醒列表不可用".to_string())?;
+        *current = items;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn send_test_notification(app: tauri::AppHandle) -> Result<(), String> {
     show_reminder(&app)
+}
+
+#[tauri::command]
+fn send_test_savings_notification(app: tauri::AppHandle) -> Result<(), String> {
+    show_savings_reminder(
+        &app,
+        "这是一条测试提醒。定期存款会在到期前 3 天和到期当天各提醒一次。",
+    )
 }
 
 #[tauri::command]
@@ -638,6 +810,11 @@ pub fn run() {
                 settings: Mutex::new(ReminderSettings::default()),
                 last_fired: Mutex::new(String::new()),
             });
+            let _ = app.manage(SavingsReminderRuntime {
+                settings: Mutex::new(SavingsReminderSettings::default()),
+                items: Mutex::new(Vec::new()),
+                fired: Mutex::new(HashSet::new()),
+            });
             let _ = app.manage(sync::SyncServerState::new());
             if TEST_BUILD {
                 if let Some(window) = app.get_webview_window("main") {
@@ -662,7 +839,9 @@ pub fn run() {
             read_ledger_backup,
             delete_ledger_backup,
             sync_reminder_settings,
+            sync_savings_reminders,
             send_test_notification,
+            send_test_savings_notification,
             reminder_permission_state,
             sync::sync_server_start,
             sync::sync_server_stop,
@@ -754,5 +933,47 @@ mod tests {
             reminder_due(&settings, at(23, 21, 3, 0)).unwrap(),
             "2026-10-23 21:00"
         );
+    }
+
+    fn savings_item() -> SavingsReminderItem {
+        SavingsReminderItem {
+            id: "s1".into(),
+            name: "三年定期".into(),
+            maturity_date: "2026-10-26".into(),
+            expected_cents: 100_000,
+        }
+    }
+
+    #[test]
+    fn savings_fires_three_days_before_and_on_the_day() {
+        let settings = SavingsReminderSettings {
+            enabled: true,
+            time: "09:00".into(),
+        };
+        let items = vec![savings_item()];
+        let soon = savings_reminder_due(&settings, &items, at(23, 9, 0, 0));
+        assert_eq!(soon.len(), 1);
+        assert!(soon[0].0.ends_with(":soon:2026-10-26"));
+        assert!(soon[0].1.contains("还有 3 天到期"));
+
+        let today = savings_reminder_due(&settings, &items, at(26, 9, 0, 0));
+        assert_eq!(today.len(), 1);
+        assert!(today[0].0.ends_with(":today:2026-10-26"));
+        assert!(today[0].1.contains("今天到期"));
+
+        assert!(savings_reminder_due(&settings, &items, at(26, 9, 6, 0)).is_empty());
+    }
+
+    #[test]
+    fn savings_respects_disabled_and_bad_time() {
+        let items = vec![savings_item()];
+        let mut settings = SavingsReminderSettings {
+            enabled: false,
+            time: "09:00".into(),
+        };
+        assert!(savings_reminder_due(&settings, &items, at(26, 9, 0, 0)).is_empty());
+        settings.enabled = true;
+        settings.time = "9am".into();
+        assert!(savings_reminder_due(&settings, &items, at(26, 9, 0, 0)).is_empty());
     }
 }

@@ -3,6 +3,7 @@ import type {
   Category,
   LedgerTransaction,
   Project,
+  SavingsTransfer,
 } from '../../types'
 import { formatCents, toCsv } from './csv'
 
@@ -53,8 +54,36 @@ export function transactionsToExchangeCsv(
   categories: Category[],
   accounts: Account[],
   projects: Project[],
+  transfers: SavingsTransfer[] = [],
 ): string {
   const rows: Array<Array<string | number>> = [[...EXCHANGE_CSV_HEADER]]
+
+  for (const transfer of transfers) {
+    const label =
+      transfer.direction === 'toSavings'
+        ? `转入储蓄 · ${transfer.holdingName}`
+        : `从储蓄转回 · ${transfer.holdingName}`
+    rows.push([
+      transfer.date,
+      '',
+      '转账',
+      label,
+      transfer.accountId
+        ? accountName(accounts, transfer.accountId)
+        : '储蓄',
+      formatCents(transfer.amountCents),
+      transfer.note ?? '',
+      '',
+      '',
+      '',
+      JSON.stringify({
+        savings: {
+          holdingId: transfer.holdingId,
+          direction: transfer.direction,
+        },
+      }),
+    ])
+  }
 
   for (const transaction of transactions) {
     const projectAllocations = transaction.allocations.filter(
@@ -92,5 +121,10 @@ export function transactionsToExchangeCsv(
     ])
   }
 
-  return toCsv(rows)
+  if (transfers.length === 0) return toCsv(rows)
+  const [header, ...body] = rows
+  body.sort((left, right) =>
+    String(right[0]).localeCompare(String(left[0])),
+  )
+  return toCsv([header, ...body])
 }

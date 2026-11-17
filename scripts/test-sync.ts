@@ -286,6 +286,65 @@ function testRepaymentMerge() {
   assert.equal(same.snapshot.liabilities[0].repayments.length, 1)
 }
 
+function testSavingsMerge() {
+  const holding = (
+    entries: Array<{
+      id: string
+      kind: 'deposit' | 'withdraw' | 'interest' | 'adjust'
+      amountCents: number
+      date: string
+      createdAt: string
+    }>,
+  ) => ({
+    id: 's1',
+    name: '三年定期',
+    kind: 'fixed' as const,
+    principalCents: 100000,
+    startDate: '2026-10-01',
+    maturityDate: '2029-10-01',
+    entries,
+    createdAt: '2026-10-01T00:00:00.000Z',
+    updatedAt: '2026-10-01T00:00:00.000Z',
+  })
+  const base = snapshot({ savings: [holding([])] })
+  const local = snapshot({
+    savings: [
+      holding([
+        {
+          id: 'e1',
+          kind: 'deposit',
+          amountCents: 100000,
+          date: '2026-10-01',
+          createdAt: '2026-10-01T00:00:00.000Z',
+        },
+      ]),
+    ],
+  })
+  const remote = snapshot({
+    savings: [
+      holding([
+        {
+          id: 'e2',
+          kind: 'interest',
+          amountCents: 500,
+          date: '2026-10-20',
+          createdAt: '2026-10-20T00:00:00.000Z',
+        },
+      ]),
+    ],
+  })
+  const result = mergeSnapshots(base, local, remote)
+  assert.deepEqual(
+    result.snapshot.savings?.[0].entries.map((item) => item.id).sort(),
+    ['e1', 'e2'],
+  )
+
+  // An older peer without a savings field must not delete the local holdings.
+  const olderPeer = snapshot()
+  const kept = mergeSnapshots(base, local, olderPeer)
+  assert.equal(kept.snapshot.savings?.length, 1)
+}
+
 function testBudgetMerge() {
   const base = snapshot()
   const local = snapshot({
@@ -495,6 +554,7 @@ async function main() {
   testOpeningBalanceConvergesWithoutBase()
   testIdempotent()
   testRepaymentMerge()
+  testSavingsMerge()
   testBudgetMerge()
   testBudgetAdjustmentLogSurvivesConflict()
   testBudgetAdjustmentSupersetWins()

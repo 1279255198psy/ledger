@@ -8,6 +8,7 @@ import type {
   RangeBudget,
   RecurringPending,
   RecurringRule,
+  SavingsHolding,
 } from '../../types'
 
 /**
@@ -24,6 +25,8 @@ export interface LedgerDataSnapshot {
   transactions: LedgerTransaction[]
   projects: Project[]
   liabilities: Liability[]
+  /** Absent in snapshots created before the savings module existed. */
+  savings?: SavingsHolding[]
   budgets: BudgetBook
   budgetRanges: RangeBudget[]
   /** Absent in snapshots created before recurring entries existed. */
@@ -84,6 +87,8 @@ export type SyncConflictKind =
   | 'project'
   | 'liability'
   | 'repayment'
+  | 'savings'
+  | 'savingsEntry'
   | 'category'
   | 'account'
   | 'budget'

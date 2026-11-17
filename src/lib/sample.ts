@@ -5,6 +5,7 @@ import type {
   Liability,
   Project,
   RangeBudget,
+  SavingsHolding,
 } from '../types'
 import {
   makeDailyAllocation,
@@ -36,6 +37,7 @@ export interface SampleLedger {
   transactions: LedgerTransaction[]
   projects: Project[]
   liabilities: Liability[]
+  savings: SavingsHolding[]
   budgets: BudgetBook
   budgetRanges: RangeBudget[]
   openingBalanceCents: number
@@ -725,11 +727,111 @@ export function createSampleLedger(now = new Date()): SampleLedger {
     },
   ]
 
+  const savings: SavingsHolding[] = [
+    {
+      id: 'sample-savings-fixed',
+      name: '招行 3 年定期',
+      kind: 'fixed',
+      institution: '招商银行',
+      principalCents: 5000000,
+      annualRateBps: 260,
+      startDate: shiftKey(today, -400),
+      maturityDate: shiftKey(today, 695),
+      autoRenew: true,
+      note: '到期前记得比较一下大额存单利率',
+      entries: [
+        {
+          id: 'sample-savings-fixed-in',
+          kind: 'deposit',
+          amountCents: 5000000,
+          date: shiftKey(today, -400),
+          source: 'external',
+          note: '账外已有定期',
+          createdAt: `${shiftKey(today, -400)}T00:00:00.000Z`,
+        },
+      ],
+      createdAt: `${shiftKey(today, -400)}T00:00:00.000Z`,
+      updatedAt: `${shiftKey(today, -400)}T00:00:00.000Z`,
+    },
+    {
+      id: 'sample-savings-fund',
+      name: '货币基金',
+      kind: 'fund',
+      institution: '余额宝',
+      principalCents: 1000000,
+      annualRateBps: 150,
+      startDate: shiftKey(today, -45),
+      note: '随用随取，先放在这里过渡',
+      entries: [
+        {
+          id: 'sample-savings-fund-in',
+          kind: 'deposit',
+          amountCents: 1000000,
+          date: shiftKey(today, -45),
+          source: 'ledger',
+          accountId: 'bank',
+          note: '从活期转入',
+          createdAt: `${shiftKey(today, -45)}T00:00:00.000Z`,
+        },
+      ],
+      createdAt: `${shiftKey(today, -45)}T00:00:00.000Z`,
+      updatedAt: `${shiftKey(today, -45)}T00:00:00.000Z`,
+    },
+    {
+      id: 'sample-savings-housing',
+      name: '住房公积金',
+      kind: 'housing',
+      principalCents: 3500000,
+      startDate: shiftKey(today, -730),
+      note: '单位每月缴存，暂不打算提取',
+      entries: [
+        {
+          id: 'sample-savings-housing-in',
+          kind: 'deposit',
+          amountCents: 3500000,
+          date: shiftKey(today, -730),
+          source: 'external',
+          note: '已有余额',
+          createdAt: `${shiftKey(today, -730)}T00:00:00.000Z`,
+        },
+      ],
+      createdAt: `${shiftKey(today, -730)}T00:00:00.000Z`,
+      updatedAt: `${shiftKey(today, -730)}T00:00:00.000Z`,
+    },
+    {
+      id: 'sample-savings-goal',
+      name: '家庭健身角',
+      kind: 'goal',
+      principalCents: 1200000,
+      startDate: shiftKey(today, -60),
+      note: '跑步机和几件力量器械，关联健身项目',
+      entries: [
+        {
+          id: 'sample-savings-goal-in',
+          kind: 'deposit',
+          amountCents: 1200000,
+          date: shiftKey(today, -60),
+          source: 'ledger',
+          accountId: 'bank',
+          note: '从流动资金转入目标',
+          createdAt: `${shiftKey(today, -60)}T00:00:00.000Z`,
+        },
+      ],
+      goalTargetCents: 3000000,
+      goalDate: shiftKey(today, 120),
+      goalProjectId: FITNESS_PROJECT_ID,
+      goalStatus: 'saving',
+      createdAt: `${shiftKey(today, -60)}T00:00:00.000Z`,
+      updatedAt: `${shiftKey(today, -60)}T00:00:00.000Z`,
+    },
+  ]
+
   return {
     accounts: SAMPLE_ACCOUNTS,
     transactions: sortTransactions(transactions),
     projects,
     liabilities,
+    savings,
     budgets,
     budgetRanges,
     openingBalanceCents: 1200000,

@@ -38,6 +38,7 @@ import { CategorySettings } from './CategorySettings'
 import { BudgetSettings } from './BudgetSettings'
 import { ChangelogSection } from './ChangelogSection'
 import { ReminderSettingsSection } from './ReminderSettingsSection'
+import { SavingsReminderSection } from './SavingsReminderSection'
 import { GuideSection } from './GuideSection'
 import { CaptureDebugSection } from './CaptureDebugSection'
 import { SyncSettingsSection } from './SyncSettingsSection'
@@ -68,6 +69,7 @@ import type {
   Palette,
   RangeBudget,
   ReminderSettings,
+  SavingsReminderSettings,
   Theme,
 } from '../types'
 import type { LedgerTransaction } from '../types'
@@ -97,6 +99,7 @@ interface SettingsModalProps {
   fontSize: FontSize
   currency: Currency
   reminders: ReminderSettings
+  savingsReminders: SavingsReminderSettings
   categories: Category[]
   categoryTransactionUsage: Record<string, number>
   categoryProjectUsage: Record<string, number>
@@ -120,6 +123,7 @@ interface SettingsModalProps {
   onFontSizeChange: (fontSize: FontSize) => void
   onCurrencyChange: (currency: Currency) => void
   onRemindersChange: (reminders: ReminderSettings) => void
+  onSavingsRemindersChange: (settings: SavingsReminderSettings) => void
   onNotify: (message: string, kind: 'success' | 'error') => void
   onExportJson: () => void
   onExportCsv: () => void
@@ -167,8 +171,8 @@ const SETTINGS_PAGES: SettingsPageMeta[] = [
   },
   {
     id: 'reminders',
-    label: '记账提醒',
-    detail: '定时提醒，别漏掉当天的账',
+    label: '提醒',
+    detail: '记账提醒与储蓄到期提醒',
     icon: BellRing,
   },
   {
@@ -245,6 +249,7 @@ export function SettingsModal({
   fontSize,
   currency,
   reminders,
+  savingsReminders,
   categories,
   categoryTransactionUsage,
   categoryProjectUsage,
@@ -268,6 +273,7 @@ export function SettingsModal({
   onFontSizeChange,
   onCurrencyChange,
   onRemindersChange,
+  onSavingsRemindersChange,
   onNotify,
   onExportJson,
   onExportCsv,
@@ -625,11 +631,18 @@ export function SettingsModal({
             ) : null}
 
             {activePage === 'reminders' ? (
-              <ReminderSettingsSection
-                settings={reminders}
-                onChange={onRemindersChange}
-                onNotify={onNotify}
-              />
+              <>
+                <ReminderSettingsSection
+                  settings={reminders}
+                  onChange={onRemindersChange}
+                  onNotify={onNotify}
+                />
+                <SavingsReminderSection
+                  settings={savingsReminders}
+                  onChange={onSavingsRemindersChange}
+                  onNotify={onNotify}
+                />
+              </>
             ) : null}
 
             {activePage === 'capture' ? <CaptureDebugSection /> : null}
@@ -981,7 +994,7 @@ export function SettingsModal({
                     <span className="data-row-text">
                       <strong>清除现有账本</strong>
                       <small>
-                        删除全部流水、项目与负债，预算和起始资金重置
+                        删除全部流水、项目、储蓄与负债，预算和起始资金重置
                       </small>
                     </span>
                   </button>

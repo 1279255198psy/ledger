@@ -7,6 +7,11 @@ import {
 } from './coverage'
 import { balanceDeltaCents, expenseDeltaCents } from './refunds'
 import {
+  goalCoveredCents,
+  savingsBalanceAt,
+  savingsLiquidNetCents,
+} from './savings'
+import {
   currentMonthKey,
   monthLabel,
   monthShortLabel,
@@ -18,15 +23,17 @@ import type {
   IndexMetricKey,
   LedgerTransaction,
   Liability,
+  SavingsHolding,
   SpendingNature,
 } from '../types'
 
 /**
  * 财务健康指数。
  *
- * 所有数字都从本地流水与负债记录推导：
+ * 所有数字都从本地流水、负债与储蓄记录推导：
  * - 流量指标（恩格尔、储蓄率、必要/弹性占比）按所选周期汇总；
- * - 存量指标（活期资产、净资产）取周期末的余额；
+ * - 存量指标（流动资金、储蓄、净资产）取周期末的余额；净资产按
+ *   「流动资金 + 储蓄 − 负债」计算，账内转入储蓄不改变净资产；
  * - 稳定性指标（收入、支出）与预算执行率按近 6 个完整月份滚动计算；
  * - 应急金按月均必要支出折算；
  * - 负债收入比按近 6 个月还款记录估算“每月固定还款”，清零月数用剩余
@@ -106,6 +113,7 @@ export interface HealthDetail {
   debtRatio: number | null
   netWorthCents: number
   liquidAssetsCents: number
+  savingsCents: number
   totalAssetsCents: number
   totalLiabilitiesCents: number
   totalIncomeCents: number
@@ -296,6 +304,7 @@ function liabilitiesAtEnd(
 interface HealthContext {
   transactions: LedgerTransaction[]
   liabilities: Liability[]
+  savings: SavingsHolding[]
   budgets: BudgetBook
   countedProjectIds?: ReadonlySet<string>
   earliestMonth: string | null
@@ -1010,16 +1019,33 @@ function computeDetail(
     period.startDate,
     period.endDate,
   )
-  const liquidAssetsCents = assetsAtEnd(
+  // Ledger-funded savings deposits are not transactions, so the raw ledger
+  // balance still includes money that has moved out to a fixed deposit.
+  const ledgerBalanceCents = assetsAtEnd(
     ctx.transactions,
     openingBalanceCents,
     period.endDate,
   )
+  const goalCovered = goalCoveredCents(
+    ctx.savings,
+    ctx.transactions,
+    period.endDate,
+  )
+  const liquidAssetsCents =
+    ledgerBalanceCents -
+    savingsLiquidNetCents(ctx.savings, period.endDate) +
+    goalCovered
+  const savingsCents = savingsBalanceAt(
+    ctx.savings,
+    period.endDate,
+    ctx.transactions,
+  )
+  const totalAssetsCents = liquidAssetsCents + savingsCents
   const totalLiabilitiesCents = liabilitiesAtEnd(
     ctx.liabilities,
     period.endDate,
   )
-  const netWorthCents = liquidAssetsCents - totalLiabilitiesCents
+  const netWorthCents = totalAssetsCents - totalLiabilitiesCents
   const monthlyEssentialCents = averageMonthlyEssential(
     ctx,
     period.endMonth,
@@ -1111,7 +1137,8 @@ function computeDetail(
     debtRatio: debt.ratio,
     netWorthCents,
     liquidAssetsCents,
-    totalAssetsCents: liquidAssetsCents,
+    savingsCents,
+    totalAssetsCents,
     totalLiabilitiesCents,
     totalIncomeCents: totals.incomeCents,
     totalExpenseCents: totals.expenseCents,
@@ -1158,6 +1185,8 @@ export interface HealthDashboardOptions {
   hidden?: ReadonlySet<IndexMetricKey>
   budgets?: BudgetBook
   countedProjectIds?: ReadonlySet<string>
+  /** Fixed deposits and other savings assets kept outside the liquid balance. */
+  savings?: SavingsHolding[]
   /** First day the books cover; inferred from transactions when omitted. */
   startDate?: string | null
 }
@@ -1174,9 +1203,11 @@ export function buildHealthDashboard(
   const earliestMonth = earliestTransactionMonth(transactions)
   const startDate =
     options.startDate ?? earliestTransactionDate(transactions)
+  const savings = options.savings ?? []
   const ctx: HealthContext = {
     transactions,
     liabilities,
+    savings,
     budgets: options.budgets ?? {},
     countedProjectIds: options.countedProjectIds,
     earliestMonth,
@@ -1194,6 +1225,9 @@ export function buildHealthDashboard(
     )
     const netWorthBaseCents =
       assetsAtEnd(transactions, openingBalanceCents, baseEndDate) -
+      savingsLiquidNetCents(savings, baseEndDate) +
+      goalCoveredCents(savings, transactions, baseEndDate) +
+      savingsBalanceAt(savings, baseEndDate, transactions) -
       liabilitiesAtEnd(liabilities, baseEndDate)
     return computeDetail(
       ctx,

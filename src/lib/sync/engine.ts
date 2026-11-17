@@ -51,6 +51,7 @@ import type {
   RangeBudget,
   RecurringPending,
   RecurringRule,
+  SavingsHolding,
 } from '../../types'
 
 const CONFIG_KEY = 'zhangye.sync.config.v1'
@@ -147,6 +148,7 @@ interface UndoPayload {
   transactions: LedgerTransaction[]
   projects: Project[]
   liabilities: Liability[]
+  savings: SavingsHolding[]
   categories: Category[]
   accounts: Account[]
   budgetRanges: RangeBudget[]
@@ -283,6 +285,7 @@ function lostFrom(
     transactions: missingById(before.transactions, after.transactions),
     projects: missingById(before.projects, after.projects),
     liabilities: missingById(before.liabilities, after.liabilities),
+    savings: missingById(before.savings ?? [], after.savings),
     categories: missingById(before.categories, after.categories),
     accounts: missingById(before.accounts ?? [], after.accounts),
     budgetRanges: missingById(before.budgetRanges, after.budgetRanges),
@@ -302,6 +305,7 @@ function undoCount(undo: UndoPayload): number {
     undo.transactions.length +
     undo.projects.length +
     undo.liabilities.length +
+    undo.savings.length +
     undo.categories.length +
     undo.accounts.length +
     undo.budgetRanges.length +
@@ -356,6 +360,7 @@ export async function undoSyncDeletion(): Promise<void> {
     transactions: restore(current.transactions, undo.transactions, true),
     projects: restore(current.projects, undo.projects, true),
     liabilities: restore(current.liabilities, undo.liabilities, true),
+    savings: restore(current.savings ?? [], undo.savings, true),
     categories: restore(current.categories, undo.categories, false),
     accounts: restore(current.accounts ?? [], undo.accounts, false),
     budgetRanges: restore(current.budgetRanges, undo.budgetRanges, false),
@@ -570,6 +575,7 @@ function hasLedgerData(snapshot: LedgerDataSnapshot): boolean {
     snapshot.transactions.length > 0 ||
     snapshot.projects.length > 0 ||
     snapshot.liabilities.length > 0 ||
+    (snapshot.savings?.length ?? 0) > 0 ||
     snapshot.budgetRanges.length > 0 ||
     Object.keys(snapshot.budgets).length > 0
   )
@@ -579,7 +585,8 @@ function recordCount(snapshot: LedgerDataSnapshot): number {
   return (
     snapshot.transactions.length +
     snapshot.projects.length +
-    snapshot.liabilities.length
+    snapshot.liabilities.length +
+    (snapshot.savings?.length ?? 0)
   )
 }
 

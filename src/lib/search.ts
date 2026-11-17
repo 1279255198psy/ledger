@@ -8,7 +8,7 @@ import type {
   TransactionType,
 } from '../types'
 
-export type TransactionTypeFilter = 'all' | TransactionType
+export type TransactionTypeFilter = 'all' | TransactionType | 'transfer'
 
 export interface TransactionFilters {
   query: string

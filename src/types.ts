@@ -399,6 +399,172 @@ export interface LiabilitySummary {
   overdue: boolean
 }
 
+export type SavingsKind =
+  | 'fixed'
+  | 'large'
+  | 'bond'
+  | 'wealth'
+  | 'fund'
+  | 'housing'
+  | 'goal'
+  | 'other'
+
+export type SavingsGoalStatus = 'saving' | 'using' | 'settled'
+
+export type SavingsEntryKind = 'deposit' | 'withdraw' | 'interest' | 'adjust'
+
+/**
+ * Where a deposit came from. `ledger` means the money left the liquid balance
+ * tracked by the transaction ledger; `external` means it was already outside
+ * the ledger (an old fixed deposit, a housing fund contribution, and so on).
+ */
+export type SavingsSource = 'ledger' | 'external'
+
+export interface SavingsEntry {
+  id: string
+  kind: SavingsEntryKind
+  amountCents: number
+  date: string
+  /** Only meaningful for a deposit; withdrawals always return to liquid. */
+  source?: SavingsSource
+  /** Optional card the money left from or returned to. */
+  accountId?: string
+  note?: string
+  createdAt: string
+}
+
+export interface SavingsHolding {
+  id: string
+  name: string
+  kind: SavingsKind
+  institution?: string
+  /**
+   * The amount that opened this term. It is the base for the interest
+   * estimate and does not participate in the balance calculation; entries do.
+   */
+  principalCents: number
+  /** Annual rate in basis points: 275 = 2.75%. */
+  annualRateBps?: number
+  startDate: string
+  maturityDate?: string
+  autoRenew?: boolean
+  note?: string
+  entries: SavingsEntry[]
+  /** Closed or renewed holdings stay in history but not in current totals. */
+  closedAt?: string
+  renewedFromId?: string
+  /** Present only on kind === 'goal'. */
+  goalTargetCents?: number
+  goalDate?: string
+  goalProjectId?: string
+  /** The day project spending starts being paid from this goal. */
+  goalStartedAt?: string
+  goalStatus?: SavingsGoalStatus
+  goalSettledAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SavingsDraft {
+  name: string
+  kind: SavingsKind
+  institution?: string
+  principalCents: number
+  annualRateBps?: number
+  startDate: string
+  maturityDate?: string
+  autoRenew?: boolean
+  note?: string
+  source: SavingsSource
+  accountId?: string
+}
+
+export interface SavingsGoalDraft {
+  name: string
+  targetCents: number
+  targetDate?: string
+  projectId?: string
+  startDate: string
+  initialCents: number
+  source: SavingsSource
+  accountId?: string
+  note?: string
+}
+
+export interface GoalSettlement {
+  spentCents: number
+  coveredCents: number
+  overageCents: number
+  remainingCents: number
+  closed: SavingsHolding
+}
+
+export interface SavingsGoalUpdateDraft {
+  name: string
+  targetCents: number
+  targetDate?: string
+  projectId?: string
+  note?: string
+}
+
+export interface GoalPlan {
+  key: 'deadline' | 'steady' | 'balanced' | 'fast'
+  label: string
+  monthlyCents: number
+  months: number
+  finishMonth: string
+  detail: string
+}
+
+export interface GoalUsage {
+  /** Project spending since the goal started. */
+  rawSpendCents: number
+  /** The part covered by the goal pot; never more than its balance. */
+  coveredCents: number
+  /** Spending beyond the pot, paid from liquid funds. */
+  overageCents: number
+}
+
+export interface SavingsEntryDraft {
+  kind: SavingsEntryKind
+  amountCents: number
+  date: string
+  source?: SavingsSource
+  accountId?: string
+  note?: string
+}
+
+export interface SavingsSummary {
+  balanceCents: number
+  depositedCents: number
+  withdrawnCents: number
+  interestCents: number
+  expectedInterestCents: number
+  expectedMaturityCents: number
+  termProgress: number
+  daysToMaturity: number | null
+  matured: boolean
+  closed: boolean
+}
+
+/** A row shown in the transaction list; not stored separately. */
+export interface SavingsTransfer {
+  id: string
+  holdingId: string
+  holdingName: string
+  direction: 'toSavings' | 'fromSavings'
+  amountCents: number
+  date: string
+  accountId?: string
+  note?: string
+}
+
+export interface SavingsReminderSettings {
+  enabled: boolean
+  /** Local wall-clock time, "HH:mm". */
+  time: string
+}
+
 export type AccountType = 'wechat' | 'alipay' | 'cash' | 'bank'
 
 export interface Account {

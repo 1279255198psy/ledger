@@ -39,12 +39,14 @@ import type {
   IndexPreferences,
   LedgerTransaction,
   Liability,
+  SavingsHolding,
   View,
 } from '../types'
 
 interface IndicesProps {
   transactions: LedgerTransaction[]
   liabilities: Liability[]
+  savings: SavingsHolding[]
   budgets: BudgetBook
   /** Projects set to「计入日常」 also spend from the daily budget. */
   countedProjectIds: ReadonlySet<string>
@@ -155,9 +157,9 @@ const METRICS: MetricConfig[] = [
     label: '应急金覆盖月数',
     kicker: 'EMERGENCY FUND',
     icon: ShieldCheck,
-    formula: '可快速动用活期资产 ÷ 月均必要支出',
+    formula: '可快速动用的流动资金 ÷ 月均必要支出',
     reference:
-      '参考 3–6 个月；活期资产 = 起始资金 + 累计收入 − 累计支出。',
+      '参考 3–6 个月；流动资金 = 起始资金 + 累计收入 − 累计支出 − 转入储蓄净额。定期存款不计入，避免高估随时可用的钱。',
     color: 'var(--tone-teal)',
     value: (detail) => detail.emergencyMonths,
     display: monthsDisplay,
@@ -165,10 +167,10 @@ const METRICS: MetricConfig[] = [
     formatTick: (value) => `${Math.round(value)}`,
     detailLine: (detail) =>
       detail.monthlyEssentialCents > 0
-        ? `活期资产 ${formatMoney(
+        ? `流动资金 ${formatMoney(
             detail.liquidAssetsCents / 100,
           )} · 月均刚需 ${formatMoney(detail.monthlyEssentialCents / 100)}`
-        : `活期资产 ${formatMoney(
+        : `流动资金 ${formatMoney(
             detail.liquidAssetsCents / 100,
           )} · 完整月不足，暂无法计算月均刚需`,
   },
@@ -194,9 +196,9 @@ const METRICS: MetricConfig[] = [
     label: '净资产',
     kicker: 'NET WORTH',
     icon: Scale,
-    formula: '总资产 − 总负债',
+    formula: '流动资金 + 储蓄 − 总负债',
     reference:
-      '参考为正且持续增长；资产按活期余额估算，负债取未还本金。',
+      '参考为正且持续增长；资产包含流动资金与储蓄模块里的定期存款等资产，负债取未还本金。',
     color: 'var(--tone-indigo)',
     allowNegative: true,
     value: (detail) => detail.netWorthCents / 100,
@@ -204,8 +206,10 @@ const METRICS: MetricConfig[] = [
     formatValue: (value) => formatSignedMoney(value),
     formatTick: (value) => formatAxisNumber(value),
     detailLine: (detail) =>
-      `资产 ${formatMoney(
-        detail.totalAssetsCents / 100,
+      `流动资金 ${formatMoney(
+        detail.liquidAssetsCents / 100,
+      )} + 储蓄 ${formatMoney(
+        detail.savingsCents / 100,
       )} · 负债 ${formatMoney(detail.totalLiabilitiesCents / 100)}`,
   },
   {
@@ -391,6 +395,7 @@ function statusFor(
 export function Indices({
   transactions,
   liabilities,
+  savings,
   budgets,
   countedProjectIds,
   openingBalance,
@@ -421,12 +426,14 @@ export function Indices({
           hidden,
           budgets,
           countedProjectIds,
+          savings,
           startDate: ledgerStartDate,
         },
       ),
     [
       transactions,
       liabilities,
+      savings,
       openingBalance,
       monthKey,
       preferences.granularity,
@@ -465,7 +472,11 @@ export function Indices({
     updatePreferences({ ...preferences, hidden: nextHidden })
   }
 
-  if (transactions.length === 0 && liabilities.length === 0) {
+  if (
+    transactions.length === 0 &&
+    liabilities.length === 0 &&
+    savings.length === 0
+  ) {
     return (
       <div className="page-stack indices-page">
         <EmptyLedger onAdd={onAdd} onLoadSample={onLoadSample} />

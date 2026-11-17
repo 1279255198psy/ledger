@@ -24,6 +24,7 @@ export interface BackupCounts {
   transactions: number
   projects: number
   liabilities: number
+  savings: number
   categories: number
   accounts: number
   recurringRules: number
@@ -108,6 +109,7 @@ function countsOf(snapshot: LedgerDataSnapshot): BackupCounts {
     transactions: snapshot.transactions.length,
     projects: snapshot.projects.length,
     liabilities: snapshot.liabilities.length,
+    savings: snapshot.savings?.length ?? 0,
     categories: snapshot.categories.length,
     accounts: snapshot.accounts?.length ?? 0,
     recurringRules: snapshot.recurringRules?.length ?? 0,
@@ -131,6 +133,7 @@ export function hasLedgerContent(snapshot: LedgerDataSnapshot): boolean {
     snapshot.transactions.length > 0 ||
     snapshot.projects.length > 0 ||
     snapshot.liabilities.length > 0 ||
+    (snapshot.savings?.length ?? 0) > 0 ||
     (snapshot.recurringRules?.length ?? 0) > 0 ||
     snapshot.budgetRanges.length > 0 ||
     Object.keys(snapshot.budgets).length > 0 ||

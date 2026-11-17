@@ -15,6 +15,8 @@ import type {
   RecurringPending,
   RecurringRule,
   ReminderSettings,
+  SavingsHolding,
+  SavingsReminderSettings,
   Theme,
 } from '../types'
 import {
@@ -39,6 +41,14 @@ import {
   isValidLiability,
   sortLiabilities,
 } from './liabilities'
+import {
+  isValidSavingsHolding,
+  sortSavingsHoldings,
+} from './savings'
+import {
+  DEFAULT_SAVINGS_REMINDERS,
+  normalizeSavingsReminders,
+} from './savingsReminders'
 import { makeDailyAllocation } from './allocations'
 import { isCoverageDateKey } from './coverage'
 import { isCurrency, normalizeCurrency } from './currency'
@@ -73,6 +83,8 @@ const KEYS = {
   accounts: 'zhangye.accounts.v1',
   projects: 'zhangye.projects.v1',
   liabilities: 'zhangye.liabilities.v1',
+  savings: 'zhangye.savings.v1',
+  savingsReminders: 'zhangye.savingsReminders.v1',
   budget: 'zhangye.budget.v2',
   budgetV1: 'zhangye.budget.v1',
   budgets: 'zhangye.budgets.v3',
@@ -126,6 +138,8 @@ interface DesktopLedgerSnapshot {
   accounts?: Account[]
   projects: Project[]
   liabilities: Liability[]
+  /** Absent in files written before savings existed. */
+  savings?: SavingsHolding[]
   transactions: LedgerTransaction[]
   budgetCents: number
   budgets: BudgetBook
@@ -140,6 +154,7 @@ interface DesktopLedgerSnapshot {
   currency: Currency
   indexPrefs: IndexPreferences
   reminders: ReminderSettings
+  savingsReminders?: SavingsReminderSettings
   seeded: boolean
 }
 
@@ -301,6 +316,30 @@ function readStoredLiabilities(): Liability[] {
   return []
 }
 
+function readStoredSavings(): SavingsHolding[] {
+  const raw = safeGet(KEYS.savings)
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.every(isValidSavingsHolding)) {
+      return sortSavingsHoldings(parsed)
+    }
+  } catch {
+    // A broken savings list must not block the rest of the ledger.
+  }
+  return []
+}
+
+function readStoredSavingsReminders(): SavingsReminderSettings {
+  const raw = safeGet(KEYS.savingsReminders)
+  if (raw === null) return { ...DEFAULT_SAVINGS_REMINDERS }
+  try {
+    return normalizeSavingsReminders(JSON.parse(raw))
+  } catch {
+    return { ...DEFAULT_SAVINGS_REMINDERS }
+  }
+}
+
 function readOpeningBalanceCents(): number {
   const raw = safeGet(KEYS.openingBalance)
   if (raw === null) return 0
@@ -449,6 +488,13 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
     }
   }
 
+  if (Array.isArray(snapshot.savings)) {
+    const savings = snapshot.savings.filter(isValidSavingsHolding)
+    if (savings.length === snapshot.savings.length) {
+      safeSet(KEYS.savings, JSON.stringify(sortSavingsHoldings(savings)))
+    }
+  }
+
   if (Array.isArray(snapshot.transactions)) {
     const normalized = snapshot.transactions.map((item) =>
       normalizeTransaction(item, categories),
@@ -562,6 +608,12 @@ function applyDesktopSnapshot(snapshot: Record<string, unknown>): void {
   if (snapshot.reminders !== undefined) {
     safeSet(KEYS.reminders, JSON.stringify(normalizeReminders(snapshot.reminders)))
   }
+  if (snapshot.savingsReminders !== undefined) {
+    safeSet(
+      KEYS.savingsReminders,
+      JSON.stringify(normalizeSavingsReminders(snapshot.savingsReminders)),
+    )
+  }
   if (typeof snapshot.seeded === 'boolean') {
     safeSet(KEYS.seeded, String(snapshot.seeded))
   }
@@ -589,6 +641,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     accounts: readStoredAccounts(),
     projects: readStoredProjects(categories),
     liabilities: readStoredLiabilities(),
+    savings: readStoredSavings(),
     transactions,
     budgetCents: currentBudgetCents,
     budgets,
@@ -602,6 +655,7 @@ function readDesktopSnapshot(): DesktopLedgerSnapshot {
     currency: normalizeCurrency(safeGet(KEYS.currency)),
     indexPrefs: loadIndexPreferences(),
     reminders: readStoredReminders(),
+    savingsReminders: readStoredSavingsReminders(),
     seeded: safeGet(KEYS.seeded) === 'true',
   }
 }
@@ -622,6 +676,7 @@ export function readLedgerDataSnapshot(): LedgerDataSnapshot {
     transactions,
     projects: readStoredProjects(categories),
     liabilities: readStoredLiabilities(),
+    savings: readStoredSavings(),
     budgets: readStoredBudgets(),
     budgetRanges: readStoredBudgetRanges(),
     recurringRules: readStoredRecurringRules(categories),
@@ -680,6 +735,15 @@ export function validateLedgerDataSnapshot(
     throw new Error(`${source}中的负债无法识别`)
   }
 
+  // A peer on an older build sends no savings; keeping the local list avoids
+  // reading that silence as "delete every savings holding".
+  const rawSavings =
+    snapshot.savings === undefined ? readStoredSavings() : snapshot.savings
+  const savings = rawSavings.filter(isValidSavingsHolding)
+  if (savings.length !== rawSavings.length) {
+    throw new Error(`${source}中的储蓄无法识别`)
+  }
+
   const budgets = normalizeBudgetBook(snapshot.budgets)
   if (!budgets) {
     throw new Error(`${source}中的预算无法识别`)
@@ -734,6 +798,7 @@ export function validateLedgerDataSnapshot(
     transactions: sortTransactions(validTransactions),
     projects,
     liabilities: sortLiabilities(liabilities),
+    savings: sortSavingsHoldings(savings),
     budgets,
     budgetRanges,
     recurringRules,
@@ -765,6 +830,7 @@ export function applyLedgerDataSnapshot(
   safeSet(KEYS.seeded, 'true')
   safeSet(KEYS.projects, JSON.stringify(normalized.projects))
   safeSet(KEYS.liabilities, JSON.stringify(normalized.liabilities))
+  safeSet(KEYS.savings, JSON.stringify(normalized.savings ?? []))
   safeSet(KEYS.budgets, JSON.stringify(normalized.budgets))
   const currentBudget = resolveMonthBudget(
     normalized.budgets,
@@ -928,6 +994,27 @@ export function saveLiabilities(liabilities: Liability[]): void {
   safeSet(KEYS.liabilities, JSON.stringify(liabilities))
   scheduleDesktopPersist()
   notifyLedgerChanged()
+}
+
+export function loadSavings(): SavingsHolding[] {
+  return readStoredSavings()
+}
+
+export function saveSavings(savings: SavingsHolding[]): void {
+  safeSet(KEYS.savings, JSON.stringify(savings))
+  scheduleDesktopPersist()
+  notifyLedgerChanged()
+}
+
+export function loadSavingsReminders(): SavingsReminderSettings {
+  return readStoredSavingsReminders()
+}
+
+export function saveSavingsReminders(
+  settings: SavingsReminderSettings,
+): void {
+  safeSet(KEYS.savingsReminders, JSON.stringify(settings))
+  scheduleDesktopPersist()
 }
 
 export function loadBudgets(): BudgetBook {
@@ -1160,6 +1247,8 @@ export interface ImportedBackup {
   openingBalance: number | null
   /** null when the backup predates liability export and the local list should stay. */
   liabilities: Liability[] | null
+  /** null when the backup predates savings export and the local list should stay. */
+  savings: SavingsHolding[] | null
   /** null when the backup predates category export and the local list should stay. */
   categories: Category[] | null
   /** null when the backup predates account export and the local cards stay. */
@@ -1249,6 +1338,19 @@ export function parseBackup(text: string): ImportedBackup {
       throw new ImportError('负债数据格式不兼容，请使用账页导出的备份文件')
     }
     liabilities = sortLiabilities(valid)
+  }
+
+  let savings: SavingsHolding[] | null = null
+  if (record.savings !== undefined) {
+    const rawSavings = Array.isArray(record.savings) ? record.savings : null
+    if (!rawSavings) {
+      throw new ImportError('储蓄数据格式不兼容，请使用账页导出的备份文件')
+    }
+    const valid = rawSavings.filter(isValidSavingsHolding)
+    if (valid.length !== rawSavings.length) {
+      throw new ImportError('储蓄数据格式不兼容，请使用账页导出的备份文件')
+    }
+    savings = sortSavingsHoldings(valid)
   }
 
   let budgets: BudgetBook | null = null
@@ -1360,6 +1462,7 @@ export function parseBackup(text: string): ImportedBackup {
     budgetRanges,
     openingBalance,
     liabilities,
+    savings,
     categories: hasCategoryData ? categories : null,
     accounts,
     recurringRules,

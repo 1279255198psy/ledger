@@ -29,6 +29,11 @@ import { getBudgetWarnings } from '../lib/budget'
 import { monthCoverage } from '../lib/coverage'
 import { expenseDeltaCents } from '../lib/refunds'
 import {
+  getInterestThisYear,
+  getSavingsTotals,
+  getWeightedAnnualRateBps,
+} from '../lib/savings'
+import {
   buildMonthSeries,
   formatMoney,
   formatPercent,
@@ -50,6 +55,7 @@ import type {
   Project,
   RangeBudgetMetrics,
   RecurringPending,
+  SavingsHolding,
   View,
 } from '../types'
 
@@ -65,6 +71,7 @@ interface OverviewProps {
   /** When notification capture started, for the coverage note only. */
   captureStartDate?: string | null
   openingBalance: number
+  savings: SavingsHolding[]
   pendingCaptureCount: number
   pendingCaptureTotalCents: number
   recurringPending: RecurringPending[]
@@ -89,6 +96,58 @@ interface OverviewProps {
   hasCategoryBudget: boolean
   onOpenGuide: () => void
   onDismissOnboarding: () => void
+}
+
+function SavingsOverviewCard({
+  balanceCents,
+  rateBps,
+  interestCents,
+  dueCount,
+  onOpen,
+}: {
+  balanceCents: number
+  rateBps: number | null
+  interestCents: number
+  dueCount: number
+  onOpen: () => void
+}) {
+  return (
+    <section className="card savings-overview-card" aria-label="储蓄摘要">
+      <div className="savings-overview-head">
+        <div>
+          <p className="card-kicker">SAVINGS</p>
+          <h2>储蓄资产</h2>
+          <p className="card-sub">
+            定期存款与其他账外储蓄，不计入上方流动资金。
+          </p>
+        </div>
+        <button type="button" className="button ghost" onClick={onOpen}>
+          查看资债
+          <ArrowRight size={14} />
+        </button>
+      </div>
+      <div className="savings-overview-metrics">
+        <div>
+          <span>储蓄总额</span>
+          <strong>{formatMoney(balanceCents / 100)}</strong>
+        </div>
+        <div>
+          <span>加权年化</span>
+          <strong>
+            {rateBps === null ? '—' : `${(rateBps / 100).toFixed(2)}%`}
+          </strong>
+        </div>
+        <div>
+          <span>今年利息</span>
+          <strong>{formatMoney(interestCents / 100)}</strong>
+        </div>
+        <div>
+          <span>待处理到期</span>
+          <strong>{dueCount} 笔</strong>
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function PendingCaptureBanner({
@@ -144,6 +203,7 @@ export function Overview({
   ledgerStartDate,
   captureStartDate,
   openingBalance,
+  savings,
   pendingCaptureCount,
   pendingCaptureTotalCents,
   recurringPending,
@@ -165,6 +225,10 @@ export function Overview({
   onDismissOnboarding,
 }: OverviewProps) {
   const [adjustOpen, setAdjustOpen] = useState(false)
+  const savingsTotals = getSavingsTotals(savings, undefined, transactions)
+  const savingsRate = getWeightedAnnualRateBps(savings)
+  const savingsInterest = getInterestThisYear(savings)
+  const hasSavings = savings.some((holding) => !holding.closedAt)
 
   if (transactions.length === 0) {
     return (
@@ -186,7 +250,17 @@ export function Overview({
           transactions={transactions}
           monthKey={monthKey}
           openingBalance={openingBalance}
+          savings={savings}
         />
+        {hasSavings ? (
+          <SavingsOverviewCard
+            balanceCents={savingsTotals.balanceCents}
+            rateBps={savingsRate}
+            interestCents={savingsInterest}
+            dueCount={savingsTotals.dueSoonCount + savingsTotals.maturedCount}
+            onOpen={() => onChangeView('liabilities')}
+          />
+        ) : null}
         <EmptyLedger onAdd={onAdd} onLoadSample={onLoadSample} />
       </div>
     )
@@ -713,7 +787,18 @@ export function Overview({
         transactions={transactions}
         monthKey={monthKey}
         openingBalance={openingBalance}
+        savings={savings}
       />
+
+      {hasSavings ? (
+        <SavingsOverviewCard
+          balanceCents={savingsTotals.balanceCents}
+          rateBps={savingsRate}
+          interestCents={savingsInterest}
+          dueCount={savingsTotals.dueSoonCount + savingsTotals.maturedCount}
+          onOpen={() => onChangeView('liabilities')}
+        />
+      ) : null}
 
       <section className="card metric-strip" aria-label="本月摘要">
         <div className="metric-item">

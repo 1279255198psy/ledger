@@ -5,7 +5,8 @@ import {
   monthLabel,
   shiftMonth,
 } from '../lib/utils'
-import type { LedgerTransaction } from '../types'
+import { goalCoveredCents, savingsLiquidNetCents } from '../lib/savings'
+import type { LedgerTransaction, SavingsHolding } from '../types'
 
 type RangeMode = 'month' | 'recent6' | 'year' | 'all' | 'custom'
 
@@ -21,12 +22,15 @@ interface BalanceSummaryProps {
   transactions: LedgerTransaction[]
   monthKey: string
   openingBalance: number
+  /** Optional so older callers keep the plain transaction-derived balance. */
+  savings?: SavingsHolding[]
 }
 
 export function BalanceSummary({
   transactions,
   monthKey,
   openingBalance,
+  savings = [],
 }: BalanceSummaryProps) {
   const [mode, setMode] = useState<RangeMode>('month')
   const [customStart, setCustomStart] = useState(() =>
@@ -89,8 +93,30 @@ export function BalanceSummary({
     [transactions, monthKey],
   )
   const totals = getTotals(filtered)
-  const startingBalance = openingBalance + totalsBeforeMonth.balance
-  const total = startingBalance + totalsForMonth.balance
+  // Ledger-funded savings deposits leave the liquid balance without creating
+  // an expense. Only the stock balance is adjusted; income and expense stay as
+  // they are, so budgets and savings rate keep their meaning.
+  const savingsBeforeMonth =
+    savingsLiquidNetCents(savings, `${shiftMonth(monthKey, -1)}-31`) / 100
+  const savingsThroughMonth =
+    savingsLiquidNetCents(savings, `${monthKey}-31`) / 100
+  const savingsDuringMonth = savingsThroughMonth - savingsBeforeMonth
+  const goalCoveredBefore =
+    goalCoveredCents(savings, transactions, `${shiftMonth(monthKey, -1)}-31`) /
+    100
+  const goalCoveredThrough =
+    goalCoveredCents(savings, transactions, `${monthKey}-31`) / 100
+  const goalCoveredDuring = goalCoveredThrough - goalCoveredBefore
+  const startingBalance =
+    openingBalance +
+    totalsBeforeMonth.balance -
+    savingsBeforeMonth +
+    goalCoveredBefore
+  const total =
+    startingBalance +
+    totalsForMonth.balance -
+    savingsDuringMonth +
+    goalCoveredDuring
 
   // 区间统计的期初结余：所选区间开始之前的累计结余；「全部」就是起始资金。
   const rangeOpeningBalance = useMemo(() => {
@@ -101,9 +127,12 @@ export function BalanceSummary({
         transactions.filter(
           (transaction) => transaction.date.slice(0, 7) < start,
         ),
-      ).balance
+      ).balance -
+      savingsLiquidNetCents(savings, `${shiftMonth(start, -1)}-31`) / 100 +
+      goalCoveredCents(savings, transactions, `${shiftMonth(start, -1)}-31`) /
+        100
     )
-  }, [transactions, openingBalance, start])
+  }, [transactions, openingBalance, start, savings])
 
   let rangeLabel = '全部月份'
   if (mode === 'month') {
@@ -207,6 +236,24 @@ export function BalanceSummary({
             <b aria-hidden="true">−</b>
             <span>该月支出 {formatMoney(totalsForMonth.expense)}</span>
           </p>
+          {savingsThroughMonth !== 0 ? (
+            <p className="balance-formula balance-savings-note">
+              <span>
+                {savingsThroughMonth > 0
+                  ? `已扣除转入储蓄 ${formatMoney(savingsThroughMonth)}`
+                  : `已转回流动资金 ${formatMoney(
+                      Math.abs(savingsThroughMonth),
+                    )}`}
+              </span>
+            </p>
+          ) : null}
+          {goalCoveredThrough !== 0 ? (
+            <p className="balance-formula balance-savings-note">
+              <span>
+                目标储蓄已支付 {formatMoney(goalCoveredThrough)}，已从储蓄余额扣除
+              </span>
+            </p>
+          ) : null}
         </div>
 
         <div className="balance-breakdown">
