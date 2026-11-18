@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { CalendarRange, Plus, Trash2 } from 'lucide-react'
 import { CategoryIcon } from './CategoryIcon'
+import { DateInput } from './DateInput'
 import { getCurrency } from '../lib/currency'
 import {
   MAX_RANGE_DAYS,
@@ -595,24 +596,18 @@ export function RangeBudgetSettings({
             <div className="range-date-row">
               <label className="range-date-field">
                 <span>开始日期</span>
-                <input
-                  type="date"
+                <DateInput
                   value={draft.startDate}
-                  onChange={(event) =>
-                    updateDates({ startDate: event.target.value })
-                  }
-                  aria-label="区间开始日期"
+                  onChange={(next) => updateDates({ startDate: next })}
+                  ariaLabel="区间开始日期"
                 />
               </label>
               <label className="range-date-field">
                 <span>结束日期</span>
-                <input
-                  type="date"
+                <DateInput
                   value={draft.endDate}
-                  onChange={(event) =>
-                    updateDates({ endDate: event.target.value })
-                  }
-                  aria-label="区间结束日期"
+                  onChange={(next) => updateDates({ endDate: next })}
+                  ariaLabel="区间结束日期"
                 />
               </label>
               <div className="range-date-summary">

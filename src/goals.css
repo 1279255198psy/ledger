@@ -306,6 +306,28 @@
   align-items: center;
 }
 
+.goal-inline-form-row .select-field,
+.savings-entry-form .select-field {
+  flex: 0 1 118px;
+  height: 33px;
+  min-width: 0;
+  padding: 0 4px 0 8px;
+}
+
+.goal-inline-form-row .date-input,
+.savings-entry-form .date-input {
+  flex: 1 1 130px;
+}
+
+.goal-project-create > .button {
+  align-self: flex-start;
+}
+
+.goal-inline-form-row .select-field .category-filter-trigger,
+.savings-entry-form .select-field .category-filter-trigger {
+  font-size: calc(10px * var(--font-scale));
+}
+
 .goal-inline-form-row input,
 .goal-inline-form-row select,
 .goal-settle-fields input,
@@ -348,6 +370,11 @@
   flex: 1 1 130px;
 }
 
+.goal-settle-fields .select-field {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+
 .goal-checkbox {
   display: inline-flex;
   align-items: center;
@@ -377,8 +404,102 @@
   line-height: 1.6;
 }
 
+.savings-term-hint {
+  margin: 0;
+  padding: 9px 11px;
+  color: var(--ink-muted);
+  background: var(--surface-soft);
+  border-radius: 9px;
+  font-size: calc(9px * var(--font-scale));
+  line-height: 1.6;
+}
+
+/* Date fields: hide Chromium's yyyy/mm/dd hint and show a stable label. */
+.date-input {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  font-size: calc(11px * var(--font-scale));
+}
+
+.date-input input[type='date'] {
+  width: 100%;
+  min-width: 0;
+}
+
+.date-input input[type='date']::-webkit-datetime-edit {
+  color: transparent;
+}
+
+.date-input input[type='date']:focus::-webkit-datetime-edit {
+  color: var(--ink);
+}
+
+.date-input-display {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  overflow: hidden;
+  max-width: calc(100% - 34px);
+  color: var(--ink);
+  font-size: inherit;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.date-input.is-empty .date-input-display {
+  color: var(--ink-faint);
+}
+
+.date-input:focus-within .date-input-display {
+  display: none;
+}
+
+.date-input.is-disabled {
+  opacity: 0.72;
+}
+
+.date-input.is-disabled .date-input-display {
+  color: var(--ink-muted);
+}
+
+.field .date-input {
+  width: 100%;
+}
+
+.ledger-start-input .date-input {
+  width: auto;
+  flex: 1 1 auto;
+}
+
+.ledger-start-input .date-input-display {
+  left: 0;
+}
+
+.repayment-form .date-input,
+.savings-entry-form .date-input,
+.goal-inline-form-row .date-input,
+.range-date-field .date-input {
+  font-size: calc(10px * var(--font-scale));
+}
+
 .goal-editor .savings-form-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.goal-editor-modal {
+  width: min(780px, calc(100vw - 32px));
+  max-height: min(88vh, 940px);
+  overflow-y: auto;
+}
+
+.goal-editor-modal .goal-editor {
+  padding: 0;
+  background: transparent;
+  border: 0;
 }
 
 .goal-project-create {
@@ -465,6 +586,115 @@
   margin: 0;
   color: var(--ink-muted);
   font-size: calc(8.5px * var(--font-scale));
+}
+
+.goal-plan {
+  cursor: pointer;
+}
+
+.goal-plan:hover {
+  border-color: var(--accent-mid);
+}
+
+.goal-plan.is-selected {
+  border-color: var(--accent-mid);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.goal-plan-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--accent-ink);
+}
+
+.goal-plan em {
+  color: var(--negative);
+  font-size: calc(8px * var(--font-scale));
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.goal-custom-plan {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-muted);
+  font-size: calc(9px * var(--font-scale));
+}
+
+.goal-custom-plan input {
+  flex: 1 1 90px;
+  min-width: 0;
+  height: 31px;
+  padding: 0 8px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: calc(10px * var(--font-scale));
+}
+
+.goal-applied-plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-ink);
+  font-size: calc(9px * var(--font-scale));
+}
+
+.goal-applied-plan span {
+  flex: 1;
+}
+
+.goal-plan-badge {
+  padding: 2px 7px;
+  color: var(--positive);
+  background: var(--positive-soft);
+  border-radius: 999px;
+  font-size: calc(8px * var(--font-scale));
+  font-weight: 600;
+}
+
+.goal-recommendation-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.goal-recommendation-row .goal-recommendation {
+  flex: 1;
+}
+
+.goal-apply-plan {
+  flex: 0 0 auto;
+  height: 30px;
+  font-size: calc(9px * var(--font-scale));
+}
+
+.goal-recommendation--applied {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.goal-recommendation--applied > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+
+.goal-text-action {
+  padding: 0;
+  color: var(--accent-ink);
+  background: transparent;
+  border: 0;
+  font-size: calc(9px * var(--font-scale));
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .goal-closed {

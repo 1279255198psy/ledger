@@ -127,7 +127,8 @@ import {
   savingsBalance,
   sortSavingsHoldings,
 } from './lib/savings'
-import { averageMonthlySurplusCents } from './lib/goalPlans'
+import type { GoalPlanContext } from './lib/goalPlans'
+import { expenseDeltaCents } from './lib/refunds'
 import { useSavingsReminderScheduler } from './hooks/useSavingsReminderScheduler'
 import type { CategoryDraft } from './lib/categories'
 import { getCurrency, setActiveCurrency } from './lib/currency'
@@ -179,6 +180,7 @@ import type {
   SavingsDraft,
   SavingsEntryDraft,
   SavingsGoalDraft,
+  SavingsGoalPlanDraft,
   SavingsGoalUpdateDraft,
   SavingsHolding,
   SavingsReminderSettings,
@@ -390,24 +392,89 @@ export default function App() {
     [openingBalance, transactions, savings, todayKey],
   )
 
-  // Recent complete months, used to recommend a monthly saving amount.
-  const monthlySurplusCents = useMemo(() => {
+  // Recent complete months, used to score and recommend a savings pace.
+  const goalPlanContext = useMemo<GoalPlanContext>(() => {
     const current = currentMonthKey()
-    const months: Array<{ incomeCents: number; expenseCents: number }> = []
+    const monthKeys: string[] = []
+    const months: Array<{
+      incomeCents: number
+      expenseCents: number
+      essentialCents: number
+      netCents: number
+    }> = []
     for (let offset = 1; offset <= 6; offset += 1) {
       const key = shiftMonth(current, -offset)
       const monthTransactions = transactions.filter((transaction) =>
         transaction.date.startsWith(`${key}-`),
       )
       if (monthTransactions.length === 0) continue
+      monthKeys.push(key)
       const totals = getTotals(monthTransactions)
+      const essentialCents = monthTransactions
+        .filter(
+          (transaction) =>
+            transaction.type === 'expense' &&
+            transaction.spendingNature === 'essential',
+        )
+        .reduce(
+          (sum, transaction) => sum + expenseDeltaCents(transaction),
+          0,
+        )
+      const incomeCents = Math.round(totals.income * 100)
+      const expenseCents = Math.round(totals.expense * 100)
       months.push({
-        incomeCents: Math.round(totals.income * 100),
-        expenseCents: Math.round(totals.expense * 100),
+        incomeCents,
+        expenseCents,
+        essentialCents,
+        netCents: incomeCents - expenseCents,
       })
     }
-    return averageMonthlySurplusCents(months)
-  }, [transactions])
+    const divisor = Math.max(months.length, 1)
+    const averageIncomeCents = Math.round(
+      months.reduce((sum, month) => sum + month.incomeCents, 0) / divisor,
+    )
+    const averageExpenseCents = Math.round(
+      months.reduce((sum, month) => sum + month.expenseCents, 0) / divisor,
+    )
+    const averageEssentialCents = Math.round(
+      months.reduce((sum, month) => sum + month.essentialCents, 0) / divisor,
+    )
+    const meanNet =
+      months.reduce((sum, month) => sum + month.netCents, 0) / divisor
+    const variance =
+      months.length > 1
+        ? months.reduce(
+            (sum, month) => sum + (month.netCents - meanNet) ** 2,
+            0,
+          ) / months.length
+        : 0
+    const surplusVolatility =
+      meanNet !== 0
+        ? Math.min(Math.sqrt(variance) / Math.abs(meanNet), 2)
+        : variance > 0
+          ? 1
+          : 0
+    let debtCents = 0
+    if (monthKeys.length > 0) {
+      for (const liability of liabilities) {
+        for (const repayment of liability.repayments) {
+          if (monthKeys.includes(repayment.date.slice(0, 7))) {
+            debtCents += repayment.amountCents
+          }
+        }
+      }
+      debtCents = Math.round(debtCents / monthKeys.length)
+    }
+    return {
+      averageIncomeCents,
+      averageExpenseCents,
+      averageEssentialCents,
+      monthCount: months.length,
+      surplusVolatility,
+      monthlyDebtCents: debtCents,
+      liquidBalanceCents,
+    }
+  }, [transactions, liabilities, liquidBalanceCents])
 
   // The month views only surface ranges that actually touch the shown month.
   const monthRangeMetrics = useMemo(
@@ -1017,6 +1084,18 @@ export default function App() {
       return
     }
     const summary = getSavingsSummary(holding, todayKey, transactions)
+    const isTerm =
+      holding.kind === 'fixed' ||
+      holding.kind === 'large' ||
+      holding.kind === 'bond'
+    if (isTerm && draft.kind === 'deposit') {
+      showToast('定期存款不能中途追加存入，请到期后续存或新建存单', 'error')
+      return
+    }
+    if (isTerm && !summary.matured && draft.kind === 'withdraw') {
+      showToast('定期存款到期前不能中途取出', 'error')
+      return
+    }
     if (draft.kind === 'adjust') {
       if (summary.balanceCents + draft.amountCents < 0) {
         showToast('调整后的余额不能小于 0', 'error')
@@ -1182,6 +1261,15 @@ export default function App() {
       ...(draft.projectId ? { goalProjectId: draft.projectId } : {}),
       goalStatus: 'saving',
       ...(draft.note ? { note: draft.note } : {}),
+      ...(draft.plan
+        ? {
+            goalMonthlyCents: draft.plan.monthlyCents,
+            goalPlanLabel: draft.plan.label,
+            goalPlanFinishMonth: draft.plan.finishMonth,
+            goalPlanSource: draft.plan.source,
+            goalPlanKey: draft.plan.key,
+          }
+        : {}),
       createdAt: now,
       updatedAt: now,
     }
@@ -1209,12 +1297,46 @@ export default function App() {
             goalDate: draft.targetDate,
             goalProjectId: keepProject,
             note: draft.note,
+            goalMonthlyCents: draft.plan?.monthlyCents,
+            goalPlanLabel: draft.plan?.label,
+            goalPlanFinishMonth: draft.plan?.finishMonth,
+            goalPlanSource: draft.plan?.source,
+            goalPlanKey: draft.plan?.key,
             updatedAt: now,
           }
         }),
       ),
     )
     showToast(`目标储蓄「${draft.name.trim()}」已更新`)
+  }
+
+  const handleApplyGoalPlan = (
+    id: string,
+    plan: SavingsGoalPlanDraft,
+  ) => {
+    const now = new Date().toISOString()
+    setSavings((current) =>
+      sortSavingsHoldings(
+        current.map((holding) =>
+          holding.id === id
+            ? {
+                ...holding,
+                goalMonthlyCents: plan.monthlyCents,
+                goalPlanLabel: plan.label,
+                goalPlanFinishMonth: plan.finishMonth,
+                goalPlanSource: plan.source,
+                goalPlanKey: plan.key,
+                updatedAt: now,
+              }
+            : holding,
+        ),
+      ),
+    )
+    showToast(
+      `已应用「${plan.label}」计划：每月 ${formatMoney(
+        plan.monthlyCents / 100,
+      )}`,
+    )
   }
 
   const handleStartGoal = async (id: string) => {
@@ -2532,7 +2654,7 @@ export default function App() {
             projects={projects}
             transactions={transactions}
             liquidBalanceCents={liquidBalanceCents}
-            monthlySurplusCents={monthlySurplusCents}
+            goalPlanContext={goalPlanContext}
             savingsRemindersEnabled={savingsReminders.enabled}
             onCreateLiability={handleCreateLiability}
             onUpdateLiability={handleUpdateLiability}
@@ -2547,6 +2669,7 @@ export default function App() {
             onRenewSavings={handleRenewSavings}
             onCreateGoal={handleCreateGoal}
             onUpdateGoal={handleUpdateGoal}
+            onApplyGoalPlan={handleApplyGoalPlan}
             onStartGoal={handleStartGoal}
             onSettleGoal={handleSettleGoal}
             onCancelGoal={handleCancelGoal}

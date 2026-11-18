@@ -32,6 +32,9 @@ import {
   shiftMonth,
 } from '../lib/utils'
 import { Goals } from './Goals'
+import { DateInput } from '../components/DateInput'
+import { SelectMenu } from '../components/SelectMenu'
+import type { GoalPlanContext } from '../lib/goalPlans'
 import type {
   Account,
   Category,
@@ -41,6 +44,7 @@ import type {
   SavingsDraft,
   SavingsEntryDraft,
   SavingsGoalDraft,
+  SavingsGoalPlanDraft,
   SavingsGoalUpdateDraft,
   SavingsHolding,
   SavingsKind,
@@ -52,7 +56,7 @@ interface SavingsProps {
   projects: Project[]
   transactions: LedgerTransaction[]
   categories: Category[]
-  monthlySurplusCents: number
+  goalPlanContext: GoalPlanContext
   remindersEnabled: boolean
   onCreate: (draft: SavingsDraft) => void
   onUpdate: (id: string, draft: SavingsDraft) => void
@@ -62,6 +66,7 @@ interface SavingsProps {
   onRenew: (holdingId: string) => void
   onCreateGoal: (draft: SavingsGoalDraft) => void
   onUpdateGoal: (id: string, draft: SavingsGoalUpdateDraft) => void
+  onApplyGoalPlan: (id: string, plan: SavingsGoalPlanDraft) => void
   onStartGoal: (id: string) => void
   onSettleGoal: (
     id: string,
@@ -138,7 +143,7 @@ export function Savings({
   projects,
   transactions,
   categories,
-  monthlySurplusCents,
+  goalPlanContext,
   remindersEnabled,
   onCreate,
   onUpdate,
@@ -148,6 +153,7 @@ export function Savings({
   onRenew,
   onCreateGoal,
   onUpdateGoal,
+  onApplyGoalPlan,
   onStartGoal,
   onSettleGoal,
   onCancelGoal,
@@ -276,9 +282,9 @@ export function Savings({
     onDelete(holding.id)
   }
 
-  const toggleExpanded = (id: string) => {
+  const toggleExpanded = (id: string, term = false) => {
     setExpandedId((current) => (current === id ? null : id))
-    setEntryKind('deposit')
+    setEntryKind(term ? 'withdraw' : 'deposit')
     setEntryAmount('')
     setEntryDate(localDateKey())
     setEntrySource('ledger')
@@ -518,9 +524,10 @@ export function Savings({
           accounts={accounts}
           categories={categories}
           transactions={transactions}
-          monthlySurplusCents={monthlySurplusCents}
+          goalPlanContext={goalPlanContext}
           onCreate={onCreateGoal}
           onUpdate={onUpdateGoal}
+          onApplyPlan={onApplyGoalPlan}
           onStart={onStartGoal}
           onSettle={onSettleGoal}
           onCancel={onCancelGoal}
@@ -574,22 +581,22 @@ export function Savings({
                   maxLength={40}
                 />
               </label>
-              <label className="field">
+              <div className="field">
                 <span className="field-label">类型</span>
-                <select
+                <SelectMenu
                   value={kind}
-                  onChange={(event) => {
-                    setKind(event.target.value as SavingsKind)
+                  options={KINDS.map((item) => ({
+                    value: item,
+                    label: SAVINGS_KIND_LABELS[item],
+                  }))}
+                  onChange={(next) => {
+                    setKind(next as SavingsKind)
                     setFormError('')
                   }}
-                >
-                  {KINDS.map((item) => (
-                    <option key={item} value={item}>
-                      {SAVINGS_KIND_LABELS[item]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  ariaLabel="储蓄类型"
+                  elevated
+                />
+              </div>
               <label className="field">
                 <span className="field-label">
                   机构 <span className="optional">选填</span>
@@ -638,12 +645,12 @@ export function Savings({
               </label>
               <label className="field">
                 <span className="field-label">起存日</span>
-                <input
-                  type="date"
+                <DateInput
                   value={startDate}
                   max={localDateKey()}
-                  onChange={(event) => {
-                    setStartDate(event.target.value)
+                  ariaLabel="起存日"
+                  onChange={(next) => {
+                    setStartDate(next)
                     setFormError('')
                   }}
                 />
@@ -655,12 +662,12 @@ export function Savings({
                     <span className="optional">选填</span>
                   )}
                 </span>
-                <input
-                  type="date"
+                <DateInput
                   value={maturityDate}
                   min={startDate || undefined}
-                  onChange={(event) => {
-                    setMaturityDate(event.target.value)
+                  ariaLabel="到期日"
+                  onChange={(next) => {
+                    setMaturityDate(next)
                     setFormError('')
                   }}
                 />
@@ -669,36 +676,39 @@ export function Savings({
 
             {editor.mode === 'create' ? (
               <div className="savings-form-grid">
-                <label className="field">
+                <div className="field">
                   <span className="field-label">资金来源</span>
-                  <select
+                  <SelectMenu
                     value={source}
-                    onChange={(event) => {
-                      setSource(event.target.value as 'ledger' | 'external')
+                    options={[
+                      { value: 'ledger', label: '从账本流动资金转入' },
+                      { value: 'external', label: '账外已有储蓄' },
+                    ]}
+                    onChange={(next) => {
+                      setSource(next as 'ledger' | 'external')
                       setFormError('')
                     }}
-                  >
-                    <option value="ledger">从账本流动资金转入</option>
-                    <option value="external">账外已有储蓄</option>
-                  </select>
-                </label>
+                    ariaLabel="资金来源"
+                    elevated
+                  />
+                </div>
                 {source === 'ledger' ? (
-                  <label className="field">
+                  <div className="field">
                     <span className="field-label">
                       流动资金账户 <span className="optional">选填</span>
                     </span>
-                    <select
+                    <SelectMenu
                       value={accountId}
-                      onChange={(event) => setAccountId(event.target.value)}
-                    >
-                      <option value="">不指定</option>
-                      {accounts.map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      options={accounts.map((account) => ({
+                        value: account.id,
+                        label: account.name,
+                      }))}
+                      onChange={setAccountId}
+                      ariaLabel="流动资金账户"
+                      allLabel="不指定"
+                      elevated
+                    />
+                  </div>
                 ) : null}
                 <label className="field field--checkbox">
                   <input
@@ -772,6 +782,7 @@ export function Savings({
               const summary = getSavingsSummary(holding, today)
               const status = statusOf(summary)
               const expanded = expandedId === holding.id
+              const term = isTermKind(holding.kind)
               const entries = sortedSavingsEntries(holding)
               const termDays = holding.maturityDate
                 ? daysBetween(holding.startDate, holding.maturityDate)
@@ -878,7 +889,11 @@ export function Savings({
                   </div>
 
                   {!summary.closed ? (
-                    expanded ? (
+                    term && !summary.matured ? (
+                      <p className="savings-term-hint">
+                        定期存款在到期前不能中途存入或取出；到期后可记利息、取出或续存。
+                      </p>
+                    ) : expanded ? (
                       <>
                         <form
                           className="repayment-form savings-entry-form"
@@ -886,11 +901,21 @@ export function Savings({
                             handleEntrySubmit(event, holding)
                           }
                         >
-                          <select
+                          <SelectMenu
                             value={entryKind}
-                            onChange={(event) => {
+                            options={[
+                              ...(!term
+                                ? [{ value: 'deposit', label: '存入' }]
+                                : []),
+                              { value: 'withdraw', label: '取出' },
+                              { value: 'interest', label: '利息' },
+                              ...(!term && !holding.maturityDate
+                                ? [{ value: 'adjust', label: '更新余额' }]
+                                : []),
+                            ]}
+                            onChange={(next) => {
                               setEntryKind(
-                                event.target.value as
+                                next as
                                   | 'deposit'
                                   | 'withdraw'
                                   | 'interest'
@@ -898,15 +923,9 @@ export function Savings({
                               )
                               setEntryError('')
                             }}
-                            aria-label="记录类型"
-                          >
-                            <option value="deposit">存入</option>
-                            <option value="withdraw">取出</option>
-                            <option value="interest">利息</option>
-                            {!holding.maturityDate ? (
-                              <option value="adjust">更新余额</option>
-                            ) : null}
-                          </select>
+                            ariaLabel="记录类型"
+                            className="savings-entry-select"
+                          />
                           <input
                             type="text"
                             inputMode="decimal"
@@ -928,48 +947,42 @@ export function Savings({
                               entryKind === 'adjust' ? '最新余额' : '金额'
                             }
                           />
-                          <input
-                            type="date"
+                          <DateInput
                             value={entryDate}
                             max={localDateKey()}
-                            onChange={(event) => {
-                              setEntryDate(event.target.value)
+                            ariaLabel="日期"
+                            onChange={(next) => {
+                              setEntryDate(next)
                               setEntryError('')
                             }}
-                            aria-label="日期"
                           />
                           {entryKind === 'deposit' ? (
-                            <select
+                            <SelectMenu
                               value={entrySource}
-                              onChange={(event) =>
-                                setEntrySource(
-                                  event.target.value as
-                                    | 'ledger'
-                                    | 'external',
-                                )
+                              options={[
+                                { value: 'ledger', label: '从流动资金转入' },
+                                { value: 'external', label: '账外资金' },
+                              ]}
+                              onChange={(next) =>
+                                setEntrySource(next as 'ledger' | 'external')
                               }
-                              aria-label="资金来源"
-                            >
-                              <option value="ledger">从流动资金转入</option>
-                              <option value="external">账外资金</option>
-                            </select>
+                              ariaLabel="资金来源"
+                              className="savings-entry-select"
+                            />
                           ) : null}
                           {entryKind === 'deposit' ||
                           entryKind === 'withdraw' ? (
-                            <select
+                            <SelectMenu
                               value={entryAccount}
-                              onChange={(event) =>
-                                setEntryAccount(event.target.value)
-                              }
-                              aria-label="流动资金账户"
-                            >
-                              <option value="">不指定账户</option>
-                              {accounts.map((account) => (
-                                <option key={account.id} value={account.id}>
-                                  {account.name}
-                                </option>
-                              ))}
-                            </select>
+                              options={accounts.map((account) => ({
+                                value: account.id,
+                                label: account.name,
+                              }))}
+                              onChange={setEntryAccount}
+                              ariaLabel="流动资金账户"
+                              allLabel="不指定账户"
+                              className="savings-entry-select"
+                            />
                           ) : null}
                           <input
                             type="text"
@@ -986,17 +999,19 @@ export function Savings({
                           </button>
                         </form>
                         <p className="repayment-hint">
-                          存入和取出是转账，不计入收入或支出；取出后如果用于消费，请再到流水里记一笔支出。
+                          {term
+                            ? '定期到期后可以记录利息或取出；取出后如需继续存，请在卡片上点续存。'
+                            : '存入和取出是转账，不计入收入或支出；取出后如果用于消费，请再到流水里记一笔支出。'}
                         </p>
                       </>
                     ) : (
                       <button
                         type="button"
                         className="liability-repay-trigger"
-                        onClick={() => toggleExpanded(holding.id)}
+                        onClick={() => toggleExpanded(holding.id, term)}
                       >
                         <Plus size={14} />
-                        记一笔存入或取出
+                        {term ? '记利息或取出' : '记一笔存入或取出'}
                       </button>
                     )
                   ) : null}
@@ -1010,7 +1025,7 @@ export function Savings({
                   <button
                     type="button"
                     className="liability-history-toggle"
-                    onClick={() => toggleExpanded(holding.id)}
+                    onClick={() => toggleExpanded(holding.id, term)}
                     aria-expanded={expanded}
                   >
                     {expanded ? (

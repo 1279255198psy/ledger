@@ -181,6 +181,47 @@ export function isValidSavingsHolding(value: unknown): value is SavingsHolding {
     if (item.goalSettledAt !== undefined && !isDateKey(item.goalSettledAt)) {
       return false
     }
+    if (item.goalMonthlyCents !== undefined) {
+      if (
+        !Number.isInteger(item.goalMonthlyCents) ||
+        Number(item.goalMonthlyCents) <= 0
+      ) {
+        return false
+      }
+    }
+    if (item.goalPlanLabel !== undefined) {
+      if (
+        typeof item.goalPlanLabel !== 'string' ||
+        item.goalPlanLabel.length > 40
+      ) {
+        return false
+      }
+    }
+    if (item.goalPlanFinishMonth !== undefined) {
+      if (
+        typeof item.goalPlanFinishMonth !== 'string' ||
+        !/^\d{4}-\d{2}$/.test(item.goalPlanFinishMonth)
+      ) {
+        return false
+      }
+    }
+    if (
+      item.goalPlanSource !== undefined &&
+      item.goalPlanSource !== 'recommended' &&
+      item.goalPlanSource !== 'custom'
+    ) {
+      return false
+    }
+    if (
+      item.goalPlanKey !== undefined &&
+      item.goalPlanKey !== 'deadline' &&
+      item.goalPlanKey !== 'balanced' &&
+      item.goalPlanKey !== 'steady' &&
+      item.goalPlanKey !== 'fast' &&
+      item.goalPlanKey !== 'custom'
+    ) {
+      return false
+    }
   } else if (
     item.goalTargetCents !== undefined ||
     item.goalProjectId !== undefined ||

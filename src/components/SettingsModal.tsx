@@ -33,6 +33,7 @@ import {
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
+import { DateInput } from './DateInput'
 import { AccountSettings } from './AccountSettings'
 import { CategorySettings } from './CategorySettings'
 import { BudgetSettings } from './BudgetSettings'
@@ -779,13 +780,11 @@ export function SettingsModal({
                   <div className="ledger-start-form">
                     <label className="ledger-start-input">
                       <span>从</span>
-                      <input
-                        type="date"
+                      <DateInput
                         value={ledgerStartOverride ?? ledgerStartDate ?? ''}
                         max={ledgerStartMax}
-                        aria-label="统计起点日期"
-                        onChange={(event) => {
-                          const next = event.target.value
+                        ariaLabel="统计起点日期"
+                        onChange={(next) => {
                           onLedgerStartChange(
                             !next
                               ? null

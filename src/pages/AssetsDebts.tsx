@@ -7,6 +7,7 @@ import {
   getLiabilityTotals,
 } from '../lib/liabilities'
 import { getSavingsTotals } from '../lib/savings'
+import type { GoalPlanContext } from '../lib/goalPlans'
 import { formatMoney, formatSignedMoney } from '../lib/utils'
 import type {
   Account,
@@ -20,6 +21,7 @@ import type {
   SavingsDraft,
   SavingsEntryDraft,
   SavingsGoalDraft,
+  SavingsGoalPlanDraft,
   SavingsGoalUpdateDraft,
   SavingsHolding,
 } from '../types'
@@ -33,7 +35,7 @@ interface AssetsDebtsProps {
   transactions: LedgerTransaction[]
   /** Liquid balance after ledger-funded savings transfers. */
   liquidBalanceCents: number
-  monthlySurplusCents: number
+  goalPlanContext: GoalPlanContext
   savingsRemindersEnabled: boolean
   onCreateLiability: (draft: LiabilityDraft) => void
   onUpdateLiability: (id: string, draft: LiabilityDraft) => void
@@ -48,6 +50,7 @@ interface AssetsDebtsProps {
   onRenewSavings: (holdingId: string) => void
   onCreateGoal: (draft: SavingsGoalDraft) => void
   onUpdateGoal: (id: string, draft: SavingsGoalUpdateDraft) => void
+  onApplyGoalPlan: (id: string, plan: SavingsGoalPlanDraft) => void
   onStartGoal: (id: string) => void
   onSettleGoal: (
     id: string,
@@ -73,7 +76,7 @@ export function AssetsDebts({
   projects,
   transactions,
   liquidBalanceCents,
-  monthlySurplusCents,
+  goalPlanContext,
   savingsRemindersEnabled,
   onCreateLiability,
   onUpdateLiability,
@@ -88,20 +91,15 @@ export function AssetsDebts({
   onRenewSavings,
   onCreateGoal,
   onUpdateGoal,
+  onApplyGoalPlan,
   onStartGoal,
   onSettleGoal,
   onCancelGoal,
   onCreateProject,
   onOpenSavingsReminderSettings,
 }: AssetsDebtsProps) {
-  const [tab, setTab] = useState<Tab>(() =>
-    savings.some(
-      (holding) =>
-        !holding.closedAt && holding.goalStatus !== 'settled',
-    )
-      ? 'savings'
-      : 'liabilities',
-  )
+  // 资债页先展示储蓄，负债放在第二个 Tab。
+  const [tab, setTab] = useState<Tab>('savings')
   const savingsTotals = getSavingsTotals(savings, undefined, transactions)
   const liabilityTotals = getLiabilityTotals(liabilities)
   const totalAssetsCents =
@@ -197,7 +195,7 @@ export function AssetsDebts({
           projects={projects}
           transactions={transactions}
           categories={categories}
-          monthlySurplusCents={monthlySurplusCents}
+          goalPlanContext={goalPlanContext}
           remindersEnabled={savingsRemindersEnabled}
           onCreate={onCreateSavings}
           onUpdate={onUpdateSavings}
@@ -207,6 +205,7 @@ export function AssetsDebts({
           onRenew={onRenewSavings}
           onCreateGoal={onCreateGoal}
           onUpdateGoal={onUpdateGoal}
+          onApplyGoalPlan={onApplyGoalPlan}
           onStartGoal={onStartGoal}
           onSettleGoal={onSettleGoal}
           onCancelGoal={onCancelGoal}

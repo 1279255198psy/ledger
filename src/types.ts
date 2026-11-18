@@ -461,6 +461,13 @@ export interface SavingsHolding {
   goalStartedAt?: string
   goalStatus?: SavingsGoalStatus
   goalSettledAt?: string
+  /** The monthly amount the user chose from the planner. */
+  goalMonthlyCents?: number
+  goalPlanLabel?: string
+  /** YYYY-MM; when the chosen pace is expected to finish. */
+  goalPlanFinishMonth?: string
+  goalPlanSource?: 'recommended' | 'custom'
+  goalPlanKey?: GoalPlanKey
   createdAt: string
   updatedAt: string
 }
@@ -479,6 +486,21 @@ export interface SavingsDraft {
   accountId?: string
 }
 
+export type GoalPlanKey =
+  | 'deadline'
+  | 'balanced'
+  | 'steady'
+  | 'fast'
+  | 'custom'
+
+export interface SavingsGoalPlanDraft {
+  monthlyCents: number
+  label: string
+  finishMonth: string
+  source: 'recommended' | 'custom'
+  key: GoalPlanKey
+}
+
 export interface SavingsGoalDraft {
   name: string
   targetCents: number
@@ -489,6 +511,7 @@ export interface SavingsGoalDraft {
   source: SavingsSource
   accountId?: string
   note?: string
+  plan?: SavingsGoalPlanDraft
 }
 
 export interface GoalSettlement {
@@ -505,15 +528,18 @@ export interface SavingsGoalUpdateDraft {
   targetDate?: string
   projectId?: string
   note?: string
+  plan?: SavingsGoalPlanDraft
 }
 
 export interface GoalPlan {
-  key: 'deadline' | 'steady' | 'balanced' | 'fast'
+  key: GoalPlanKey
   label: string
   monthlyCents: number
   months: number
   finishMonth: string
   detail: string
+  feasible: boolean
+  warning?: string
 }
 
 export interface GoalUsage {

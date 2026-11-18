@@ -18,11 +18,16 @@ import {
   sortedSavingsEntries,
   sortSavingsGoals,
 } from '../lib/savings'
+import { DateInput } from '../components/DateInput'
+import { Modal } from '../components/Modal'
+import { SelectMenu } from '../components/SelectMenu'
 import { buildGoalPlans } from '../lib/goalPlans'
+import type { GoalPlanContext } from '../lib/goalPlans'
 import {
   formatMoney,
   formatShortDate,
   localDateKey,
+  shiftMonth,
 } from '../lib/utils'
 import type {
   Account,
@@ -30,8 +35,10 @@ import type {
   LedgerTransaction,
   Project,
   ProjectDraft,
+  GoalPlan,
   SavingsEntryDraft,
   SavingsGoalDraft,
+  SavingsGoalPlanDraft,
   SavingsGoalUpdateDraft,
   SavingsHolding,
 } from '../types'
@@ -42,9 +49,10 @@ interface GoalsProps {
   accounts: Account[]
   categories: Category[]
   transactions: LedgerTransaction[]
-  monthlySurplusCents: number
+  goalPlanContext: GoalPlanContext
   onCreate: (draft: SavingsGoalDraft) => void
   onUpdate: (id: string, draft: SavingsGoalUpdateDraft) => void
+  onApplyPlan: (id: string, plan: SavingsGoalPlanDraft) => void
   onStart: (id: string) => void
   onSettle: (
     id: string,
@@ -111,9 +119,10 @@ export function Goals({
   accounts,
   categories,
   transactions,
-  monthlySurplusCents,
+  goalPlanContext,
   onCreate,
   onUpdate,
+  onApplyPlan,
   onStart,
   onSettle,
   onCancel,
@@ -139,6 +148,9 @@ export function Goals({
   const [accountId, setAccountId] = useState('')
   const [note, setNote] = useState('')
   const [formError, setFormError] = useState('')
+  const [appliedPlan, setAppliedPlan] =
+    useState<SavingsGoalPlanDraft | null>(null)
+  const [customMonthly, setCustomMonthly] = useState('')
   const [projectFormOpen, setProjectFormOpen] = useState(false)
   const [projectDraft, setProjectDraft] = useState<ProjectDraftState>({
     name: '',
@@ -178,16 +190,86 @@ export function Goals({
   const currentBalance = editorHolding
     ? getSavingsSummary(editorHolding, today, transactions).balanceCents
     : 0
+  const editorUsage = editorHolding
+    ? getGoalUsage(editorHolding, transactions, today)
+    : { rawSpendCents: 0, coveredCents: 0, overageCents: 0 }
+  const fundedCents =
+    currentBalance +
+    (editorHolding?.goalStatus === 'using' ? editorUsage.coveredCents : 0)
   const remaining =
-    Number.isFinite(targetCents) && targetCents > currentBalance
-      ? targetCents - currentBalance
+    Number.isFinite(targetCents) && targetCents > fundedCents
+      ? targetCents - fundedCents
       : 0
+  const monthlyCommitmentCents = (goal: SavingsHolding): number => {
+    if (
+      goal.closedAt ||
+      goal.goalStatus === 'settled' ||
+      !goal.goalMonthlyCents
+    ) {
+      return 0
+    }
+    const summary = getSavingsSummary(goal, today, transactions)
+    const usage = getGoalUsage(goal, transactions, today)
+    const funded =
+      summary.balanceCents +
+      (goal.goalStatus === 'using' ? usage.coveredCents : 0)
+    return funded >= (goal.goalTargetCents ?? 0)
+      ? 0
+      : goal.goalMonthlyCents
+  }
+  const committedMonthlyCents = activeGoals
+    .filter((goal) => goal.id !== editor?.id)
+    .reduce((sum, goal) => sum + monthlyCommitmentCents(goal), 0)
+  const averageSurplusCents = Math.max(
+    goalPlanContext.averageIncomeCents -
+      goalPlanContext.averageExpenseCents,
+    0,
+  )
+  const freeMonthlyCents = Math.max(
+    averageSurplusCents -
+      goalPlanContext.monthlyDebtCents -
+      committedMonthlyCents,
+    0,
+  )
   const plans = buildGoalPlans(
     remaining,
-    monthlySurplusCents,
+    goalPlanContext,
     targetDate || undefined,
+    committedMonthlyCents,
     today,
   )
+
+  const planToDraft = (plan: GoalPlan): SavingsGoalPlanDraft => ({
+    monthlyCents: plan.monthlyCents,
+    label: plan.label,
+    finishMonth: plan.finishMonth,
+    source: 'recommended',
+    key: plan.key,
+  })
+
+  const applyPlan = (plan: GoalPlan) => {
+    setAppliedPlan(planToDraft(plan))
+    setCustomMonthly(centsToInput(plan.monthlyCents))
+    setFormError('')
+  }
+
+  const applyCustomPlan = () => {
+    const monthlyCents = Math.round(Number(customMonthly) * 100)
+    if (!Number.isFinite(monthlyCents) || monthlyCents <= 0) {
+      setFormError('请输入大于 0 的每月储蓄金额')
+      return
+    }
+    const months = Math.max(Math.ceil(remaining / monthlyCents), 1)
+    const finishMonth = shiftMonth(today.slice(0, 7), months)
+    setAppliedPlan({
+      monthlyCents,
+      label: '自定义',
+      finishMonth,
+      source: 'custom',
+      key: 'custom',
+    })
+    setFormError('')
+  }
 
   const openCreate = () => {
     setEditor({ mode: 'create' })
@@ -200,6 +282,8 @@ export function Goals({
     setAccountId('')
     setNote('')
     setFormError('')
+    setAppliedPlan(null)
+    setCustomMonthly('')
     setProjectFormOpen(false)
     setProjectDraft({ name: '', endDate: '', budget: '' })
     setProjectError('')
@@ -215,11 +299,27 @@ export function Goals({
     setFormError('')
     setProjectFormOpen(false)
     setProjectError('')
+    setAppliedPlan(
+      goal.goalMonthlyCents
+        ? {
+            monthlyCents: goal.goalMonthlyCents,
+            label: goal.goalPlanLabel ?? '自定义',
+            finishMonth: goal.goalPlanFinishMonth ?? '',
+            source: goal.goalPlanSource ?? 'custom',
+            key: goal.goalPlanKey ?? 'custom',
+          }
+        : null,
+    )
+    setCustomMonthly(
+      goal.goalMonthlyCents ? centsToInput(goal.goalMonthlyCents) : '',
+    )
   }
 
   const closeEditor = () => {
     setEditor(null)
     setFormError('')
+    setAppliedPlan(null)
+    setCustomMonthly('')
     setProjectFormOpen(false)
   }
 
@@ -228,6 +328,8 @@ export function Goals({
     const project = projects.find((item) => item.id === nextId)
     if (project?.budgetCents && !target.trim()) {
       setTarget(centsToInput(project.budgetCents))
+      setAppliedPlan(null)
+      setCustomMonthly('')
     }
   }
 
@@ -257,6 +359,8 @@ export function Goals({
     setProjectId(id)
     if (budgetCents && budgetCents > 0 && !target.trim()) {
       setTarget(centsToInput(budgetCents))
+      setAppliedPlan(null)
+      setCustomMonthly('')
     }
     setProjectFormOpen(false)
     setProjectDraft({ name: '', endDate: '', budget: '' })
@@ -287,6 +391,7 @@ export function Goals({
         ...(targetDate ? { targetDate } : {}),
         ...(projectId ? { projectId } : {}),
         ...(note.trim() ? { note: note.trim().slice(0, 200) } : {}),
+        ...(appliedPlan ? { plan: appliedPlan } : {}),
       })
       closeEditor()
       return
@@ -306,6 +411,7 @@ export function Goals({
       source,
       ...(accountId ? { accountId } : {}),
       ...(note.trim() ? { note: note.trim().slice(0, 200) } : {}),
+      ...(appliedPlan ? { plan: appliedPlan } : {}),
     })
     closeEditor()
   }
@@ -407,9 +513,15 @@ export function Goals({
       </section>
 
       {editor ? (
+        <Modal
+          open
+          onClose={closeEditor}
+          labelledBy="goal-editor-title"
+          className="goal-editor-modal"
+        >
         <form className="liability-editor goal-editor" onSubmit={handleSubmit}>
           <div className="liability-editor-head">
-            <strong>
+            <strong id="goal-editor-title">
               {editor.mode === 'edit' ? '编辑目标' : '新建目标'}
             </strong>
             <button
@@ -444,6 +556,8 @@ export function Goals({
                 value={target}
                 onChange={(event) => {
                   setTarget(sanitizeMoney(event.target.value))
+                  setAppliedPlan(null)
+                  setCustomMonthly('')
                   setFormError('')
                 }}
                 placeholder="0.00"
@@ -453,33 +567,35 @@ export function Goals({
               <span className="field-label">
                 目标日期 <span className="optional">选填</span>
               </span>
-              <input
-                type="date"
+              <DateInput
                 value={targetDate}
                 min={today}
-                onChange={(event) => {
-                  setTargetDate(event.target.value)
+                ariaLabel="目标日期"
+                onChange={(next) => {
+                  setTargetDate(next)
+                  setAppliedPlan(null)
+                  setCustomMonthly('')
                   setFormError('')
                 }}
               />
             </label>
-            <label className="field">
+            <div className="field">
               <span className="field-label">
                 关联项目 <span className="optional">选填</span>
               </span>
-              <select
+              <SelectMenu
                 value={projectId}
-                onChange={(event) => handleProjectSelect(event.target.value)}
+                options={goalProjects.map((project) => ({
+                  value: project.id,
+                  label: project.name,
+                }))}
+                onChange={handleProjectSelect}
+                ariaLabel="关联项目"
+                allLabel="不关联项目"
                 disabled={editorHolding?.goalStatus === 'using'}
-              >
-                <option value="">不关联项目</option>
-                {goalProjects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                elevated
+              />
+            </div>
           </div>
 
           {editorHolding?.goalStatus === 'using' ? (
@@ -506,7 +622,14 @@ export function Goals({
                 没有合适的项目？直接新建
               </button>
             ) : (
-              <form className="goal-project-form" onSubmit={handleProjectCreate}>
+              <div
+                className="goal-project-form"
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  handleProjectCreate()
+                }}
+              >
                 <div className="goal-project-form-row">
                   <label className="field">
                     <span className="field-label">项目名称</span>
@@ -524,14 +647,14 @@ export function Goals({
                   </label>
                   <label className="field">
                     <span className="field-label">结束日期</span>
-                    <input
-                      type="date"
+                    <DateInput
                       value={projectDraft.endDate}
                       min={today}
-                      onChange={(event) =>
+                      ariaLabel="项目结束日期"
+                      onChange={(next) =>
                         setProjectDraft((current) => ({
                           ...current,
-                          endDate: event.target.value,
+                          endDate: next,
                         }))
                       }
                     />
@@ -564,11 +687,15 @@ export function Goals({
                   >
                     取消
                   </button>
-                  <button type="submit" className="button secondary">
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={handleProjectCreate}
+                  >
                     创建并选中
                   </button>
                 </div>
-              </form>
+              </div>
             )}
           </div>
 
@@ -589,33 +716,36 @@ export function Goals({
                   placeholder="0.00"
                 />
               </label>
-              <label className="field">
+              <div className="field">
                 <span className="field-label">资金来源</span>
-                <select
+                <SelectMenu
                   value={source}
-                  onChange={(event) =>
-                    setSource(event.target.value as 'ledger' | 'external')
+                  options={[
+                    { value: 'ledger', label: '从流动资金转入' },
+                    { value: 'external', label: '账外已有资金' },
+                  ]}
+                  onChange={(next) =>
+                    setSource(next as 'ledger' | 'external')
                   }
-                >
-                  <option value="ledger">从流动资金转入</option>
-                  <option value="external">账外已有资金</option>
-                </select>
-              </label>
+                  ariaLabel="目标资金来源"
+                  elevated
+                />
+              </div>
               {source === 'ledger' ? (
-                <label className="field">
+                <div className="field">
                   <span className="field-label">账户</span>
-                  <select
+                  <SelectMenu
                     value={accountId}
-                    onChange={(event) => setAccountId(event.target.value)}
-                  >
-                    <option value="">不指定</option>
-                    {accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    options={accounts.map((account) => ({
+                      value: account.id,
+                      label: account.name,
+                    }))}
+                    onChange={setAccountId}
+                    ariaLabel="目标账户"
+                    allLabel="不指定"
+                    elevated
+                  />
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -633,29 +763,105 @@ export function Goals({
             />
           </label>
 
-          {plans.length > 0 ? (
-            <div className="goal-plans">
-              <div className="goal-plans-head">
-                <Target size={14} />
-                <span>
-                  近 6 个月平均结余 {formatMoney(monthlySurplusCents / 100)}，
-                  可以参考这些节奏：
-                </span>
-              </div>
-              <div className="goal-plan-list">
-                {plans.map((plan) => (
-                  <div key={plan.key} className="goal-plan">
-                    <strong>{plan.label}</strong>
-                    <span>每月 {formatMoney(plan.monthlyCents / 100)}</span>
-                    <small>
-                      约 {plan.months} 个月 · {formatMonth(plan.finishMonth)}
-                    </small>
-                  </div>
-                ))}
-              </div>
-              <p className="goal-plan-note">{plans[0]?.detail}</p>
+          <div className="goal-plans">
+            <div className="goal-plans-head">
+              <Target size={14} />
+              <span>
+                近{' '}
+                {goalPlanContext.monthCount > 0
+                  ? `${goalPlanContext.monthCount} 个完整月`
+                  : '现有数据'}
+                平均结余 {formatMoney(averageSurplusCents / 100)}；扣除还款与其他目标后，
+                每月可安排 {formatMoney(freeMonthlyCents / 100)}。
+              </span>
             </div>
-          ) : null}
+            {targetCents > 0 && remaining > 0 ? (
+              <>
+                {plans.length > 0 ? (
+                  <div className="goal-plan-list">
+                    {plans.map((plan) => {
+                      const selected =
+                        appliedPlan?.source === 'recommended' &&
+                        appliedPlan.key === plan.key
+                      return (
+                        <button
+                          key={plan.key}
+                          type="button"
+                          className={`goal-plan${selected ? ' is-selected' : ''}`}
+                          onClick={() => applyPlan(plan)}
+                        >
+                          <span className="goal-plan-title">
+                            <strong>{plan.label}</strong>
+                            {selected ? <CheckCircle2 size={13} /> : null}
+                          </span>
+                          <span>
+                            每月 {formatMoney(plan.monthlyCents / 100)}
+                          </span>
+                          <small>
+                            约 {plan.months} 个月 ·{' '}
+                            {formatMonth(plan.finishMonth)}
+                          </small>
+                          {plan.warning ? (
+                            <em>{plan.warning}</em>
+                          ) : null}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="goal-plan-note">
+                    近 6 个月没有可安排的结余，可以先设一个更长的目标日期。
+                  </p>
+                )}
+                <div className="goal-custom-plan">
+                  <span>自定义每月</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={customMonthly}
+                    onChange={(event) => {
+                      setCustomMonthly(sanitizeMoney(event.target.value))
+                      setFormError('')
+                    }}
+                    placeholder="金额"
+                    aria-label="自定义每月储蓄金额"
+                  />
+                  <button
+                    type="button"
+                    className="button ghost"
+                    onClick={applyCustomPlan}
+                  >
+                    应用
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="goal-plan-note">
+                {targetCents > 0
+                  ? '目标金额已经攒够，不需要新的储蓄计划。'
+                  : '先填写目标金额，就会生成可应用的计划。'}
+              </p>
+            )}
+            {appliedPlan ? (
+              <div className="goal-applied-plan">
+                <CheckCircle2 size={14} />
+                <span>
+                  已选「{appliedPlan.label}」：每月{' '}
+                  {formatMoney(appliedPlan.monthlyCents / 100)}，预计{' '}
+                  {appliedPlan.finishMonth
+                    ? formatMonth(appliedPlan.finishMonth)
+                    : '—'}
+                </span>
+                <button
+                  type="button"
+                  className="button ghost"
+                  onClick={() => setAppliedPlan(null)}
+                >
+                  清除
+                </button>
+              </div>
+            ) : null}
+          </div>
 
           {formError ? (
             <p className="form-error" role="alert">
@@ -675,6 +881,7 @@ export function Goals({
             </button>
           </div>
         </form>
+        </Modal>
       ) : null}
 
       {activeGoals.length === 0 && closedGoals.length === 0 && !editor ? (
@@ -715,12 +922,29 @@ export function Goals({
               targetCentsValue - fundedCents,
               0,
             )
+            const committedForGoal = activeGoals
+              .filter((item) => item.id !== goal.id)
+              .reduce(
+                (sum, item) => sum + monthlyCommitmentCents(item),
+                0,
+              )
             const plans = buildGoalPlans(
               remainingCents,
-              monthlySurplusCents,
-              goal.goalDate,
+              goalPlanContext,
+              goal.goalDate ?? undefined,
+              committedForGoal,
               today,
             )
+            const appliedPlanDraft: SavingsGoalPlanDraft | null =
+              goal.goalMonthlyCents
+                ? {
+                    monthlyCents: goal.goalMonthlyCents,
+                    label: goal.goalPlanLabel ?? '自定义',
+                    finishMonth: goal.goalPlanFinishMonth ?? '',
+                    source: goal.goalPlanSource ?? 'custom',
+                    key: goal.goalPlanKey ?? 'custom',
+                  }
+                : null
             return (
               <article className="goal-card" key={goal.id}>
                 <div className="goal-card-head">
@@ -746,6 +970,9 @@ export function Goals({
                         <FolderPlus size={12} />
                         {project?.name ?? '项目已删除'}
                       </span>
+                    ) : null}
+                    {appliedPlanDraft ? (
+                      <span className="goal-plan-badge">已定计划</span>
                     ) : null}
                   </div>
                   <div className="liability-item-actions">
@@ -798,17 +1025,29 @@ export function Goals({
                     </strong>
                   </div>
                   <div>
-                    <span>建议每月</span>
+                    <span>
+                      {appliedPlanDraft ? '计划每月' : '建议每月'}
+                    </span>
                     <strong>
-                      {plans[0]
-                        ? formatMoney(plans[0].monthlyCents / 100)
-                        : '—'}
+                      {appliedPlanDraft
+                        ? formatMoney(appliedPlanDraft.monthlyCents / 100)
+                        : plans[0]
+                          ? formatMoney(plans[0].monthlyCents / 100)
+                          : '—'}
                     </strong>
                   </div>
                   <div>
-                    <span>预计达成</span>
+                    <span>
+                      {appliedPlanDraft ? '计划达成' : '预计达成'}
+                    </span>
                     <strong>
-                      {plans[0] ? formatMonth(plans[0].finishMonth) : '—'}
+                      {appliedPlanDraft
+                        ? appliedPlanDraft.finishMonth
+                          ? formatMonth(appliedPlanDraft.finishMonth)
+                          : '—'
+                        : plans[0]
+                          ? formatMonth(plans[0].finishMonth)
+                          : '—'}
                     </strong>
                   </div>
                   <div>
@@ -836,12 +1075,34 @@ export function Goals({
                   </div>
                 ) : null}
 
-                {plans.length > 0 && !reached ? (
-                  <p className="goal-recommendation">
-                    {plans[0].detail}：每月存{' '}
-                    {formatMoney(plans[0].monthlyCents / 100)}，约{' '}
-                    {plans[0].months} 个月达成。
-                  </p>
+                {appliedPlanDraft ? (
+                  <div className="goal-recommendation goal-recommendation--applied">
+                    <span>
+                      <CheckCircle2 size={13} />
+                      已应用「{appliedPlanDraft.label}」计划：每月{' '}
+                      {formatMoney(appliedPlanDraft.monthlyCents / 100)}
+                    </span>
+                    <button
+                      type="button"
+                      className="goal-text-action"
+                      onClick={() => openEdit(goal)}
+                    >
+                      重新计划
+                    </button>
+                  </div>
+                ) : plans.length > 0 && !reached ? (
+                  <div className="goal-recommendation-row">
+                    <p className="goal-recommendation">
+                      {plans[0].detail}
+                    </p>
+                    <button
+                      type="button"
+                      className="button ghost goal-apply-plan"
+                      onClick={() => onApplyPlan(goal.id, planToDraft(plans[0]))}
+                    >
+                      应用推荐
+                    </button>
+                  </div>
                 ) : null}
 
                 <div className="goal-actions">
@@ -920,42 +1181,34 @@ export function Goals({
                         placeholder="金额"
                         aria-label="存入金额"
                       />
-                      <input
-                        type="date"
+                      <DateInput
                         value={depositDate}
                         max={localDateKey()}
-                        onChange={(event) =>
-                          setDepositDate(event.target.value)
-                        }
-                        aria-label="存入日期"
+                        ariaLabel="存入日期"
+                        onChange={setDepositDate}
                       />
-                      <select
+                      <SelectMenu
                         value={depositSource}
-                        onChange={(event) =>
-                          setDepositSource(
-                            event.target.value as 'ledger' | 'external',
-                          )
+                        options={[
+                          { value: 'ledger', label: '从流动资金转入' },
+                          { value: 'external', label: '账外资金' },
+                        ]}
+                        onChange={(next) =>
+                          setDepositSource(next as 'ledger' | 'external')
                         }
-                        aria-label="资金来源"
-                      >
-                        <option value="ledger">从流动资金转入</option>
-                        <option value="external">账外资金</option>
-                      </select>
+                        ariaLabel="存入资金来源"
+                      />
                       {depositSource === 'ledger' ? (
-                        <select
+                        <SelectMenu
                           value={depositAccount}
-                          onChange={(event) =>
-                            setDepositAccount(event.target.value)
-                          }
-                          aria-label="账户"
-                        >
-                          <option value="">不指定账户</option>
-                          {accounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.name}
-                            </option>
-                          ))}
-                        </select>
+                          options={accounts.map((account) => ({
+                            value: account.id,
+                            label: account.name,
+                          }))}
+                          onChange={setDepositAccount}
+                          ariaLabel="存入账户"
+                          allLabel="不指定账户"
+                        />
                       ) : null}
                       <input
                         type="text"
@@ -1035,42 +1288,36 @@ export function Goals({
                         </label>
                         {writeToFlow ? (
                           <>
-                            <label className="field">
+                            <div className="field">
                               <span className="field-label">分类</span>
-                              <select
+                              <SelectMenu
                                 value={settleCategory}
-                                onChange={(event) =>
-                                  setSettleCategory(event.target.value)
-                                }
-                              >
-                                {categories
+                                options={categories
                                   .filter(
                                     (category) =>
                                       category.type === 'expense' &&
                                       !category.parentId,
                                   )
-                                  .map((category) => (
-                                    <option key={category.id} value={category.id}>
-                                      {category.name}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                            <label className="field">
+                                  .map((category) => ({
+                                    value: category.id,
+                                    label: category.name,
+                                  }))}
+                                onChange={setSettleCategory}
+                                ariaLabel="结算支出分类"
+                              />
+                            </div>
+                            <div className="field">
                               <span className="field-label">账户</span>
-                              <select
+                              <SelectMenu
                                 value={settleAccount}
-                                onChange={(event) =>
-                                  setSettleAccount(event.target.value)
-                                }
-                              >
-                                {accounts.map((account) => (
-                                  <option key={account.id} value={account.id}>
-                                    {account.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
+                                options={accounts.map((account) => ({
+                                  value: account.id,
+                                  label: account.name,
+                                }))}
+                                onChange={setSettleAccount}
+                                ariaLabel="结算账户"
+                              />
+                            </div>
                           </>
                         ) : (
                           <p className="goal-hint">

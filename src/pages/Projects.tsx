@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { CategoryIcon } from '../components/CategoryIcon'
+import { DateInput } from '../components/DateInput'
 import { ProjectTimingSummary } from '../components/ProjectTimingSummary'
 import { TransactionRow } from '../components/TransactionRow'
 import { getTopLevelCategories } from '../lib/categories'
@@ -554,14 +555,14 @@ export function Projects({
       <div className="project-form-row">
         <label className="field">
           <span className="field-label">开始日期</span>
-          <input
-            type="date"
+          <DateInput
             value={draft.startDate}
+            ariaLabel="项目开始日期"
             onFocus={() => setPickerTarget('start')}
-            onChange={(event) => {
+            onChange={(next) => {
               setDraft((current) => ({
                 ...current,
-                startDate: event.target.value,
+                startDate: next,
               }))
               setFormError('')
             }}
@@ -571,15 +572,15 @@ export function Projects({
           <span className="field-label">
             截止日期 <span className="optional">选填</span>
           </span>
-          <input
-            type="date"
+          <DateInput
             value={draft.endDate}
             min={draft.startDate}
+            ariaLabel="项目截止日期"
             onFocus={() => setPickerTarget('end')}
-            onChange={(event) => {
+            onChange={(next) => {
               setDraft((current) => ({
                 ...current,
-                endDate: event.target.value,
+                endDate: next,
               }))
               setFormError('')
             }}

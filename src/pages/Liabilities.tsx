@@ -9,6 +9,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { DateInput } from '../components/DateInput'
 import {
   getLiabilitySummary,
   getLiabilityTotals,
@@ -270,10 +271,10 @@ export function Liabilities({
                 <span className="field-label">
                   到期日 <span className="optional">选填</span>
                 </span>
-                <input
-                  type="date"
+                <DateInput
                   value={dueDate}
-                  onChange={(event) => setDueDate(event.target.value)}
+                  ariaLabel="负债到期日"
+                  onChange={setDueDate}
                 />
               </label>
             </div>
@@ -435,15 +436,14 @@ export function Liabilities({
                             placeholder="还款金额"
                             aria-label="还款金额"
                           />
-                          <input
-                            type="date"
+                          <DateInput
                             value={repayDate}
                             max={localDateKey()}
-                            onChange={(event) => {
-                              setRepayDate(event.target.value)
+                            ariaLabel="还款日期"
+                            onChange={(next) => {
+                              setRepayDate(next)
                               setRepayError('')
                             }}
-                            aria-label="还款日期"
                           />
                           <input
                             type="text"

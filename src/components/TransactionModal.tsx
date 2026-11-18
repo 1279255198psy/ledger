@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import { Modal } from './Modal'
+import { DateInput } from './DateInput'
 import { SelectMenu } from './SelectMenu'
 import {
   CATEGORY_ICON_OPTIONS,
@@ -1890,13 +1891,13 @@ export function TransactionModal({
                   <div className="recurring-dates">
                     <label className="field">
                       <span className="field-label">开始日期</span>
-                      <input
-                        type="date"
+                      <DateInput
                         value={recurringForm.startDate}
-                        onChange={(event) =>
+                        ariaLabel="周期开始日期"
+                        onChange={(next) =>
                           setRecurringForm((current) => ({
                             ...current,
-                            startDate: event.target.value,
+                            startDate: next,
                           }))
                         }
                       />
@@ -1917,17 +1918,16 @@ export function TransactionModal({
                         一直重复
                       </label>
                       {!recurringForm.endless ? (
-                        <input
-                          type="date"
+                        <DateInput
                           value={recurringForm.endDate}
                           min={recurringForm.startDate || undefined}
-                          onChange={(event) =>
+                          onChange={(next) =>
                             setRecurringForm((current) => ({
                               ...current,
-                              endDate: event.target.value,
+                              endDate: next,
                             }))
                           }
-                          aria-label="周期结束日期"
+                          ariaLabel="周期结束日期"
                         />
                       ) : null}
                     </div>
@@ -1996,19 +1996,18 @@ export function TransactionModal({
                 <span className="field-label">
                   <CalendarDays size={14} /> 日期
                 </span>
-                <input type="date" value={date} disabled />
+                <DateInput value={date} disabled ariaLabel="日期" />
               </label>
             ) : ruleFormMode ? null : (
               <label className="field">
                 <span className="field-label">
                   <CalendarDays size={14} /> 日期
                 </span>
-                <input
-                  type="date"
+                <DateInput
                   value={date}
                   max={localDateKey()}
-                  onChange={(event) => {
-                    const next = event.target.value
+                  ariaLabel="日期"
+                  onChange={(next) => {
                     setRecurringForm((current) =>
                       current.startDate === date
                         ? { ...current, startDate: next }
