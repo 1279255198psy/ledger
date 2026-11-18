@@ -79,6 +79,10 @@ function testBalanceAndInterest() {
   assert.equal(getSavingsSummary(withEntries, today).balanceCents, 996234)
   assert.equal(savingsBalanceAt([withEntries], '2026-06-30'), 1001234)
   assert.equal(savingsBalanceAt([withEntries], '2026-07-01'), 1001234 - 5000)
+
+  // A holding created empty and funded later still earns the estimate.
+  const fundedLater = holding({ principalCents: 0 })
+  assert.equal(expectedInterestCents(fundedLater), interest)
 }
 
 function testLiquidNet() {
@@ -194,8 +198,8 @@ function testSortAndValidation() {
 
   assert.equal(isValidSavingsHolding(holding()), true)
   assert.equal(
-    isValidSavingsHolding(holding({ principalCents: 0 })),
-    false,
+    isValidSavingsHolding(holding({ principalCents: 0, entries: [] })),
+    true,
   )
   assert.equal(
     isValidSavingsHolding(

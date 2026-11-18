@@ -326,11 +326,8 @@ export function Savings({
       return
     }
     const principalCents = Math.round(Number(principal) * 100)
-    if (
-      editor.mode === 'create' &&
-      (!Number.isFinite(principalCents) || principalCents <= 0)
-    ) {
-      setFormError('请输入大于 0 的本金')
+    if (!Number.isFinite(principalCents) || principalCents < 0) {
+      setFormError('本金不能为负数')
       return
     }
     const holding = editor.id

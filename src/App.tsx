@@ -1009,7 +1009,7 @@ export default function App() {
       ...(draft.maturityDate ? { maturityDate: draft.maturityDate } : {}),
       ...(draft.autoRenew ? { autoRenew: true } : {}),
       ...(draft.note ? { note: draft.note } : {}),
-      entries: [entry],
+      entries: draft.principalCents > 0 ? [entry] : [],
       createdAt: now,
       updatedAt: now,
     }
@@ -1017,9 +1017,11 @@ export default function App() {
       sortSavingsHoldings([holding, ...current]),
     )
     showToast(
-      draft.source === 'ledger'
+      draft.principalCents > 0 && draft.source === 'ledger'
         ? `已从流动资金转入储蓄「${holding.name}」`
-        : `储蓄「${holding.name}」已记录`,
+        : draft.principalCents > 0
+          ? `储蓄「${holding.name}」已记录`
+          : `储蓄「${holding.name}」已建好，之后可以随时存入`,
     )
   }
 

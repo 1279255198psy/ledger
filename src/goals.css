@@ -426,14 +426,26 @@
 .date-input input[type='date'] {
   width: 100%;
   min-width: 0;
+  /* Android WebView paints the native value with the input's own text color,
+     so hiding only the ::-webkit-datetime-edit pseudo leaves the localized
+     date (`2026年11月18日`) on top of our display. */
+  -webkit-text-fill-color: transparent;
 }
 
-.date-input input[type='date']::-webkit-datetime-edit {
+.date-input input[type='date']::-webkit-datetime-edit,
+.date-input input[type='date']::-webkit-datetime-edit-fields-wrapper {
   color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
-.date-input input[type='date']:focus::-webkit-datetime-edit {
+.date-input input[type='date']:focus {
+  -webkit-text-fill-color: var(--ink);
+}
+
+.date-input input[type='date']:focus::-webkit-datetime-edit,
+.date-input input[type='date']:focus::-webkit-datetime-edit-fields-wrapper {
   color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
 }
 
 .date-input-display {
@@ -456,6 +468,27 @@
 
 .date-input:focus-within .date-input-display {
   display: none;
+}
+
+/* On touch devices the picker supplies the value, so keep our stable ISO
+   display instead of switching to the platform's localized text on focus. */
+@media (pointer: coarse) {
+  .date-input input[type='date'],
+  .date-input input[type='date']:focus {
+    -webkit-text-fill-color: transparent;
+  }
+
+  .date-input input[type='date']::-webkit-datetime-edit,
+  .date-input input[type='date']::-webkit-datetime-edit-fields-wrapper,
+  .date-input input[type='date']:focus::-webkit-datetime-edit,
+  .date-input input[type='date']:focus::-webkit-datetime-edit-fields-wrapper {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .date-input:focus-within .date-input-display {
+    display: block;
+  }
 }
 
 .date-input.is-disabled {

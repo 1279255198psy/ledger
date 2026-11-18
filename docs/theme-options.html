@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>账页 · 配色与图标方向</title>
+<style>
+  :root {
+    --bg: #0c0c0b;
+    --card: #151513;
+    --card-line: #282822;
+    --txt: #ece7db;
+    --muted: #918b7e;
+    --gold: #c9ad74;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0;
+    padding: 64px 44px 96px;
+    color: var(--txt);
+    background:
+      radial-gradient(1000px 560px at 72% -12%, rgba(150, 121, 64, 0.16) 0%, transparent 62%),
+      radial-gradient(800px 480px at -8% 108%, rgba(120, 105, 78, 0.08) 0%, transparent 66%),
+      var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
+      "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header.page { max-width: 720px; margin-bottom: 56px; }
+  .kicker {
+    display: inline-flex; align-items: center; gap: 10px;
+    margin-bottom: 18px; color: var(--gold);
+    font-size: 10px; font-weight: 650; letter-spacing: 0.28em; text-transform: uppercase;
+  }
+  .kicker::before { content: ""; width: 26px; height: 1px; background: currentColor; opacity: .7; }
+  h1 { margin: 0 0 14px; font-size: 40px; font-weight: 600; letter-spacing: 0.06em; line-height: 1.15; }
+  .lede { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.8; }
+  .lede b { color: var(--txt); font-weight: 550; }
+
+  .palettes { display: grid; gap: 26px; }
+  .palette {
+    padding: 26px 26px 22px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0));
+    border: 1px solid var(--card-line);
+    border-radius: 20px;
+  }
+  .palette-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 4px; }
+  .palette-index {
+    color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .22em;
+  }
+  .palette-name { font-size: 22px; font-weight: 600; letter-spacing: .06em; }
+  .palette-en { color: var(--muted); font-size: 9.5px; font-weight: 650; letter-spacing: .24em; }
+  .badge {
+    margin-left: auto; padding: 5px 11px; color: var(--gold);
+    border: 1px solid rgba(201,173,116,.32); border-radius: 999px;
+    font-size: 9.5px; font-weight: 650; letter-spacing: .14em;
+  }
+  .palette-mood { margin: 0 0 22px; color: var(--muted); font-size: 12.5px; line-height: 1.7; max-width: 760px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } body { padding: 40px 20px 64px; } h1 { font-size: 30px; } }
+
+  .mock {
+    overflow: hidden;
+    background: var(--page);
+    border-radius: 14px;
+    box-shadow: 0 18px 44px rgba(0,0,0,.28);
+    font-size: 10px;
+  }
+  .mock-window { display: grid; grid-template-columns: 104px 1fr; min-height: 236px; }
+  .mock-side {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 16px 12px 14px;
+    background: var(--side);
+    border-right: 1px solid var(--line);
+  }
+  .mock-brand { display: flex; align-items: center; gap: 7px; margin-bottom: 14px; color: var(--ink); font-size: 11.5px; font-weight: 650; letter-spacing: .1em; }
+  .mock-dot {
+    display: grid; place-items: center; width: 22px; height: 22px; flex: 0 0 auto;
+    color: var(--on); background: var(--accent); border-radius: 7px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0;
+  }
+  .mock-nav { padding: 6px 8px; color: var(--muted); border-radius: 6px; }
+  .mock-nav.is-active { color: var(--accent); background: var(--accentSoft); font-weight: 600; }
+  .mock-cta {
+    margin-top: auto; padding: 7px 9px; color: var(--on);
+    background: var(--accent); border-radius: 7px; text-align: center; font-weight: 600;
+  }
+  .mock-main { display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 14px; background: var(--page); }
+  .mock-hero {
+    padding: 14px 15px; color: var(--heroInk);
+    background: linear-gradient(140deg, var(--hero) 0%, var(--hero2) 100%);
+    border-radius: 10px;
+  }
+  .mock-eyebrow { display: block; margin-bottom: 5px; color: var(--heroMuted); font-size: 8px; letter-spacing: .12em; }
+  .mock-hero strong { display: block; font-size: 21px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .mock-hero strong em { font-style: normal; font-size: 12px; opacity: .7; }
+  .mock-metrics { display: flex; gap: 16px; margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,.14); color: var(--heroMuted); font-size: 8.5px; }
+  .mock-metrics b { color: var(--heroInk); font-weight: 550; }
+  .mock-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 4px 9px; color: var(--ink2); background: var(--soft); border: 1px solid var(--line); border-radius: 999px; font-size: 8.5px; }
+  .chip.is-pos { color: var(--pos); background: var(--posSoft); border-color: transparent; }
+  .chip.is-neg { color: var(--neg); background: var(--negSoft); border-color: transparent; }
+  .mock-bars { display: flex; align-items: flex-end; gap: 7px; height: 54px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
+  .mock-bars i { flex: 1; background: var(--accent); border-radius: 3px 3px 1px 1px; opacity: .82; }
+  .mock-bars i:nth-child(even) { background: var(--accentMid); }
+  .mock-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+  .mock-btn { padding: 6px 11px; color: var(--on); background: var(--accent); border-radius: 6px; font-size: 8.5px; font-weight: 600; }
+  .mock-pill { padding: 5px 9px; color: var(--ink2); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; font-size: 8.5px; }
+  .mock-label { display: flex; align-items: center; gap: 6px; margin: 0 0 8px 2px; color: var(--muted); font-size: 8.5px; font-weight: 650; letter-spacing: .18em; }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
+  .sw { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px 5px 5px; color: var(--muted); background: rgba(255,255,255,.022); border: 1px solid var(--card-line); border-radius: 7px; font-size: 9.5px; letter-spacing: .02em; }
+  .sw i { width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }
+  .sw b { color: var(--txt); font-weight: 550; }
+
+  .icons { margin-top: 62px; }
+  .icons h2 { margin: 0 0 8px; font-size: 24px; font-weight: 600; letter-spacing: .06em; }
+  .icons > p { margin: 0 0 26px; color: var(--muted); font-size: 12.5px; line-height: 1.75; }
+  .icon-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  @media (max-width: 900px) { .icon-grid { grid-template-columns: repeat(2, 1fr); } }
+  .icon-card { padding: 22px 20px 18px; background: var(--card); border: 1px solid var(--card-line); border-radius: 18px; text-align: center; }
+  .icon-stage {
+    display: grid; place-items: center; height: 168px; margin-bottom: 16px;
+    background: radial-gradient(circle at 50% 34%, #222019 0%, #131210 68%);
+    border-radius: 12px;
+  }
+  .icon-stage svg { width: 128px; height: 128px; filter: drop-shadow(0 10px 18px rgba(0,0,0,.4)); }
+  .icon-title { font-size: 14px; font-weight: 600; letter-spacing: .05em; }
+  .icon-en { margin-top: 3px; color: var(--muted); font-size: 8.5px; font-weight: 650; letter-spacing: .2em; }
+  .icon-desc { margin: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
+  .thumbs { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--card-line); color: var(--muted); font-size: 8.5px; }
+  .thumbs span { display: inline-flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <div class="kicker">账页 · Design Direction</div>
+    <h1>四种更沉稳的颜色方向</h1>
+    <p class="lede">当前是「森林绿 + 米纸」。下面四套都保留纸张质感与低饱和的安静基调，只换主色与深色模式气质。每套均含<b>浅色 / 深色</b>两种模式的实际界面小样，可直接对比。</p>
+  </header>
+
+  <section class="palettes" id="palettes"></section>
+
+  <section class="icons">
+    <h2>图标方向 · 不再是正方形</h2>
+    <p>四款造型都取自「账簿」的意象，用暗金与墨色重新上色。圆形印章最容易在任务栏 32px 下保持辨识度，也最像一枚落款。</p>
+    <div class="icon-grid" id="iconGrid"></div>
+  </section>
+</div>
+
+<script>
+const palettes = [
+  {
+    index: '01', name: '暗金', en: 'ANTIQUE GOLD', recommend: true,
+    mood: '旧金压住暖象牙纸，深色模式是暗底上的金线。最像一本装帧考究的账簿，贵气但不张扬。',
+    light: {
+      page:'#F4F0E6', side:'#EFEADF', surface:'#FFFCF5', soft:'#F8F3E8', ink:'#221F19', ink2:'#5F5A50', muted:'#8E887C',
+      line:'#E6DFD0', accent:'#7C5A22', accentMid:'#C3A76C', accentSoft:'#F1E6CE', on:'#FBF6E9',
+      hero:'#2B2418', hero2:'#3A3121', heroInk:'#F6EDD8', heroMuted:'#C0B49A',
+      pos:'#2F6B44', posSoft:'#E4EFE5', neg:'#B04A34', negSoft:'#F6E5DE'
+    },
+    dark: {
+      page:'#111110', side:'#161513', surface:'#1C1A17', soft:'#23201B', ink:'#EDE7DA', ink2:'#B9B2A4', muted:'#8C8577',
+      line:'#2F2B24', accent:'#D2B274', accentMid:'#8C7443', accentSoft:'#2E281E', on:'#1C1710',
+      hero:'#201B13', hero2:'#2C2519', heroInk:'#F3ECDC', heroMuted:'#BCB19A',
+      pos:'#83C79C', posSoft:'#20352A', neg:'#E5937C', negSoft:'#3A2620'
+    },
+    swatches: [['主色','#7C5A22'],['深色主色','#D2B274'],['纸色','#F4F0E6'],['暗色底','#111110']]
+  },
+  {
+    index: '02', name: '墨蓝', en: 'INK NAVY',
+    mood: '墨色与藏青，冷静、可信、克制。像私人银行的信笺，比绿色更中性，也更耐看。',
+    light: {
+      page:'#F2F0EA', side:'#EDEAE2', surface:'#FCFBF7', soft:'#F5F3ED', ink:'#1D2227', ink2:'#555C63', muted:'#868C92',
+      line:'#E2DFD7', accent:'#1E3A52', accentMid:'#8FA8BC', accentSoft:'#E2E9EE', on:'#F7F4EC',
+      hero:'#16283A', hero2:'#20374D', heroInk:'#F2F1EA', heroMuted:'#AEBBC6',
+      pos:'#2E6B4E', posSoft:'#E3EFE7', neg:'#B04A38', negSoft:'#F6E5DF'
+    },
+    dark: {
+      page:'#0E1216', side:'#12171B', surface:'#171C21', soft:'#1D242A', ink:'#E8E8E3', ink2:'#B4B8B6', muted:'#868F97',
+      line:'#293138', accent:'#A8C2D8', accentMid:'#5D7C93', accentSoft:'#1F2B34', on:'#0E1720',
+      hero:'#132436', hero2:'#1B3145', heroInk:'#F0F0E9', heroMuted:'#A8B9C7',
+      pos:'#82C5A2', posSoft:'#1F3329', neg:'#E2907C', negSoft:'#37251F'
+    },
+    swatches: [['主色','#1E3A52'],['深色主色','#A8C2D8'],['纸色','#F2F0EA'],['暗色底','#0E1216']]
+  },
+  {
+    index: '03', name: '勃艮第', en: 'OXBLOOD',
+    mood: '酒红与暖纸，编辑感与辨识度最强。注意把「支出红」调向橙红，避免和主色打架。',
+    light: {
+      page:'#F4EFE8', side:'#EFE9E1', surface:'#FFFBF5', soft:'#F8F2EB', ink:'#241F1E', ink2:'#5F5755', muted:'#8C8380',
+      line:'#E7DED4', accent:'#6E2836', accentMid:'#B98A92', accentSoft:'#F2E3E4', on:'#FBF4EE',
+      hero:'#3A1A22', hero2:'#4C232C', heroInk:'#F7EDE7', heroMuted:'#C6ADA9',
+      pos:'#2E6B4B', posSoft:'#E4EFE6', neg:'#B34A2F', negSoft:'#F6E6DF'
+    },
+    dark: {
+      page:'#121011', side:'#171314', surface:'#1C191A', soft:'#241F21', ink:'#ECE5E1', ink2:'#BBB1AE', muted:'#8D8483',
+      line:'#322B2C', accent:'#D8A0AA', accentMid:'#8D5A66', accentSoft:'#342229', on:'#1A1114',
+      hero:'#2A151C', hero2:'#3B1D26', heroInk:'#F6EBE7', heroMuted:'#C4ADAC',
+      pos:'#84C6A0', posSoft:'#20352A', neg:'#E08F78', negSoft:'#3A251F'
+    },
+    swatches: [['主色','#6E2836'],['深色主色','#D8A0AA'],['纸色','#F4EFE8'],['暗色底','#121011']]
+  },
+  {
+    index: '04', name: '曜石铜', en: 'GRAPHITE COPPER',
+    mood: '石墨灰配铜，现代、冷静、偏工具感。比金色低调，适合更「专业软件」的气质。',
+    light: {
+      page:'#F1EFEA', side:'#ECEAE4', surface:'#FCFAF6', soft:'#F5F2ED', ink:'#1F1E1C', ink2:'#575450', muted:'#8A867F',
+      line:'#E3DFD8', accent:'#8A4B2B', accentMid:'#C69A80', accentSoft:'#F3E4DA', on:'#FBF5EE',
+      hero:'#262320', hero2:'#34302B', heroInk:'#F4F0E8', heroMuted:'#BDB5A9',
+      pos:'#356B4E', posSoft:'#E4EFE7', neg:'#B14A34', negSoft:'#F6E5DF'
+    },
+    dark: {
+      page:'#111213', side:'#151617', surface:'#1B1D1E', soft:'#222527', ink:'#E9E7E2', ink2:'#B5B4B0', muted:'#8C8F90',
+      line:'#2E3234', accent:'#C98F6B', accentMid:'#7E5A45', accentSoft:'#32251D', on:'#1A1512',
+      hero:'#1E2123', hero2:'#2A2E31', heroInk:'#EFECE6', heroMuted:'#B2B0A9',
+      pos:'#81C7A1', posSoft:'#20352A', neg:'#E3927C', negSoft:'#39241E'
+    },
+    swatches: [['主色','#8A4B2B'],['深色主色','#C98F6B'],['纸色','#F1EFEA'],['暗色底','#111213']]
+  }
+];
+
+function vars(p) {
+  return [
+    `--page:${p.page}`, `--side:${p.side}`, `--surface:${p.surface}`, `--soft:${p.soft}`,
+    `--ink:${p.ink}`, `--ink2:${p.ink2}`, `--muted:${p.muted}`, `--line:${p.line}`,
+    `--accent:${p.accent}`, `--accentMid:${p.accentMid}`, `--accentSoft:${p.accentSoft}`,
+    `--on:${p.on}`, `--hero:${p.hero}`, `--hero2:${p.hero2}`, `--heroInk:${p.heroInk}`,
+    `--heroMuted:${p.heroMuted}`, `--pos:${p.pos}`, `--posSoft:${p.posSoft}`,
+    `--neg:${p.neg}`, `--negSoft:${p.negSoft}`
+  ].join(';');
+}
+
+function mock(p) {
+  return `
+      <div class="mock" style="${vars(p)}">
+        <div class="mock-window">
+          <aside class="mock-side">
+            <div class="mock-brand"><span class="mock-dot">账</span><span>账页</span></div>
+            <div class="mock-nav is-active">概览</div>
+            <div class="mock-nav">流水</div>
+            <div class="mock-nav">统计</div>
+            <div class="mock-cta">+ 记一笔</div>
+          </aside>
+          <main class="mock-main">
+            <div class="mock-hero">
+              <span class="mock-eyebrow">本月结余</span>
+              <strong>¥ 12,480<em>.00</em></strong>
+              <div class="mock-metrics"><span>收入 <b>+8,240</b></span><span>支出 <b>-3,760</b></span></div>
+            </div>
+            <div class="mock-chips">
+              <span class="chip">餐饮</span><span class="chip">交通</span><span class="chip">房租</span>
+              <span class="chip is-pos">收入 +240</span><span class="chip is-neg">支出 -86</span>
+            </div>
+            <div class="mock-bars">
+              <i style="height:38%"></i><i style="height:58%"></i><i style="height:44%"></i>
+              <i style="height:78%"></i><i style="height:62%"></i><i style="height:88%"></i>
+            </div>
+            <div class="mock-foot"><span class="mock-btn">查看流水</span><span class="mock-pill">预算已用 62%</span></div>
+          </main>
+        </div>
+      </div>`;
+}
+
+document.getElementById('palettes').innerHTML = palettes.map(p => `
+    <article class="palette">
+      <div class="palette-head">
+        <span class="palette-index">${p.index}</span>
+        <span class="palette-name">${p.name}</span>
+        <span class="palette-en">${p.en}</span>
+        ${p.recommend ? '<span class="badge">推荐</span>' : ''}
+      </div>
+      <p class="palette-mood">${p.mood}</p>
+      <div class="pair">
+        <div>
+          <div class="mock-label">LIGHT · 浅色模式</div>
+          ${mock(p.light)}
+        </div>
+        <div>
+          <div class="mock-label">DARK · 深色模式</div>
+          ${mock(p.dark)}
+        </div>
+      </div>
+      <div class="swatches">
+        ${p.swatches.map(([label, hex]) => `<span class="sw"><i style="background:${hex}"></i>${label} <b>${hex}</b></span>`).join('')}
+      </div>
+    </article>
+`).join('');
+
+const gold = `<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#EBD49C"/><stop offset=".48" stop-color="#C9A45E"/><stop offset="1" stop-color="#9C7838"/>
+  </linearGradient>
+</defs>`;
+
+const iconImgs = {
+  seal: `<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">${gold}
+    <circle cx="64" cy="64" r="60" fill="#191510"/>
+    <circle cx="64" cy="64" r="55.5" fill="none" stroke="url(#g1)" stroke-width="2.4"/>
+    <circle cx="64" cy="64" r="48" fill="none" stroke="url(#g1)" stroke-width="1" opacity=".55"/>
+    <text x="64" y="85" text-anchor="middle" font-family="Songti SC, STSong, SimSun, serif" font-size="51" font-weight="600" fill="url(#g1)">账</text>
+  </svg>`,
+  ticket: `<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">${gold}
+    <path d="M34 10 H94 a14 14 0 0 1 14 14 V40 a12 12 0 0 0 0 24 V104 a14 14 0 0 1 -14 14 H34 a14 14 0 0 1 -14 -14 V64 a12 12 0 0 0 0 -24 V24 a14 14 0 0 1 14 -14 Z" fill="#191510" stroke="url(#g1)" stroke-width="2.4"/>
+    <text x="64" y="83" text-anchor="middle" font-family="Songti SC, STSong, SimSun, serif" font-size="47" font-weight="600" fill="url(#g1)">账</text>
+    <path d="M45 96 H83" stroke="url(#g1)" stroke-width="1.2" opacity=".5"/>
+  </svg>`,
+  page: `<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">${gold}
+    <path d="M30 8 H82 L102 28 V120 H30 Z" fill="#F4EDDB"/>
+    <path d="M82 8 V28 H102 Z" fill="#D6C094"/>
+    <path d="M30 8 V120 H102 V28 L82 8 Z" fill="none" stroke="#2B2418" stroke-opacity=".16" stroke-width="1.4"/>
+    <path d="M42 42 H90" stroke="url(#g1)" stroke-width="1.4" opacity=".7"/>
+    <path d="M42 104 H90" stroke="#2B2418" stroke-opacity=".18" stroke-width="1"/>
+    <path d="M42 66 H54 M60 66 H90 M42 78 H54 M60 78 H90" stroke="#2B2418" stroke-opacity=".12" stroke-width="1"/>
+    <text x="66" y="94" text-anchor="middle" font-family="Songti SC, STSong, SimSun, serif" font-size="40" font-weight="600" fill="#2B2418">账</text>
+  </svg>`,
+  arch: `<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">${gold}
+    <path d="M22 118 V60 a42 42 0 0 1 84 0 V118 Z" fill="#191510" stroke="url(#g1)" stroke-width="2.4"/>
+    <path d="M31 118 V61 a33 33 0 0 1 66 0 V118" fill="none" stroke="url(#g1)" stroke-width=".9" opacity=".45"/>
+    <text x="64" y="88" text-anchor="middle" font-family="Songti SC, STSong, SimSun, serif" font-size="45" font-weight="600" fill="url(#g1)">账</text>
+    <path d="M45 101 H83" stroke="url(#g1)" stroke-width="1.1" opacity=".55"/>
+    <circle cx="64" cy="111" r="2" fill="url(#g1)" opacity=".7"/>
+  </svg>`
+};
+
+const icons = [
+  ['seal', '圆形印章', 'SEAL', '双圈金线 + 宋体「账」，像账簿末尾的一枚落款。圆形在任务栏里辨识度最高。'],
+  ['ticket', '票根', 'TICKET', '两侧月牙形缺口，像一张老式票据或书签。轮廓最有记忆点。'],
+  ['page', '折角账页', 'FOLDED PAGE', '一页米纸折起右上角，金线分隔表头。最贴近「账页」的产品名。'],
+  ['arch', '拱门碑额', 'ARCH', '拱形墨底描金，像老账簿的封面题签，稳重且有建筑感。']
+];
+
+document.getElementById('iconGrid').innerHTML = icons.map(([key, name, en, desc]) => `
+    <div class="icon-card">
+      <div class="icon-stage">${iconImgs[key]}</div>
+      <div class="icon-title">${name}</div>
+      <div class="icon-en">${en}</div>
+      <p class="icon-desc">${desc}</p>
+    </div>
+`).join('');
+</script>
+</body>
+</html>

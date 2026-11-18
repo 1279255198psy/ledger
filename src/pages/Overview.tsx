@@ -419,6 +419,15 @@ export function Overview({
                 <strong>{formatMoney(totals.expense)}</strong>
               </div>
             </div>
+            <div className="hero-metric">
+              <span className="hero-metric-icon is-daily">
+                <CalendarRange size={16} />
+              </span>
+              <div>
+                <span>日均消费</span>
+                <strong>{formatMoney(dailyAverage)}</strong>
+              </div>
+            </div>
           </div>
 
           <p className="hero-comparison">

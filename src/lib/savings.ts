@@ -118,7 +118,6 @@ export function isValidSavingsHolding(value: unknown): value is SavingsHolding {
     !isSavingsKind(item.kind) ||
     !Number.isInteger(item.principalCents) ||
     Number(item.principalCents) < 0 ||
-    (item.kind !== 'goal' && Number(item.principalCents) <= 0) ||
     !isDateKey(item.startDate) ||
     !Array.isArray(item.entries) ||
     typeof item.createdAt !== 'string' ||
@@ -250,18 +249,20 @@ export function savingsBalance(holding: SavingsHolding): number {
 }
 
 export function expectedInterestCents(holding: SavingsHolding): number {
+  // The holding may start at 0 and be funded later, so estimate on the
+  // current balance rather than the original principal.
+  const principal = savingsBalance(holding)
   if (
     !holding.maturityDate ||
     !holding.annualRateBps ||
     holding.annualRateBps <= 0 ||
-    holding.principalCents <= 0
+    principal <= 0
   ) {
     return 0
   }
   const days = Math.max(daysBetween(holding.startDate, holding.maturityDate), 0)
   return Math.round(
-    (holding.principalCents * holding.annualRateBps * days) /
-      (10_000 * 365),
+    (principal * holding.annualRateBps * days) / (10_000 * 365),
   )
 }
 
