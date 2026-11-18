@@ -77,7 +77,7 @@ interface EditorState {
 
 interface ProjectDraftState {
   name: string
-  endDate: string
+  startDate: string
   budget: string
 }
 
@@ -154,7 +154,7 @@ export function Goals({
   const [projectFormOpen, setProjectFormOpen] = useState(false)
   const [projectDraft, setProjectDraft] = useState<ProjectDraftState>({
     name: '',
-    endDate: '',
+    startDate: '',
     budget: '',
   })
   const [projectError, setProjectError] = useState('')
@@ -312,7 +312,7 @@ export function Goals({
     setPlanMonthly('')
     setPlanMode('balanced')
     setProjectFormOpen(false)
-    setProjectDraft({ name: '', endDate: '', budget: '' })
+    setProjectDraft({ name: '', startDate: '', budget: '' })
     setProjectError('')
   }
 
@@ -369,8 +369,7 @@ export function Goals({
     }
     const id = onCreateProject({
       name: projectName,
-      startDate: today,
-      ...(projectDraft.endDate ? { endDate: projectDraft.endDate } : {}),
+      startDate: projectDraft.startDate || today,
       ...(budgetCents && budgetCents > 0 ? { budgetCents } : {}),
     })
     setProjectId(id)
@@ -380,7 +379,7 @@ export function Goals({
       setPlanMode('balanced')
     }
     setProjectFormOpen(false)
-    setProjectDraft({ name: '', endDate: '', budget: '' })
+    setProjectDraft({ name: '', startDate: '', budget: '' })
     setProjectError('')
   }
 
@@ -637,7 +636,7 @@ export function Goals({
                   setProjectFormOpen(true)
                   setProjectDraft({
                     name: name ? `${name}项目` : '',
-                    endDate: targetDate,
+                    startDate: targetDate || today,
                     budget: target,
                   })
                 }}
@@ -670,15 +669,14 @@ export function Goals({
                     />
                   </label>
                   <label className="field">
-                    <span className="field-label">结束日期</span>
+                    <span className="field-label">起始日期</span>
                     <DateInput
-                      value={projectDraft.endDate}
-                      min={today}
-                      ariaLabel="项目结束日期"
+                      value={projectDraft.startDate}
+                      ariaLabel="项目起始日期"
                       onChange={(next) =>
                         setProjectDraft((current) => ({
                           ...current,
-                          endDate: next,
+                          startDate: next,
                         }))
                       }
                     />

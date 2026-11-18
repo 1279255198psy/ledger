@@ -1171,6 +1171,22 @@
     padding: 15px;
   }
 
+  /* Long goal names and large amounts wrap instead of being cut off. */
+  .goal-title strong {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+  }
+
+  .goal-progress-copy strong {
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+  }
+
   .goal-form-grid,
   .goal-form-grid--3,
   .goal-facts,

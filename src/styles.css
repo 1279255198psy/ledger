@@ -7497,6 +7497,15 @@ a {
     padding: 15px 18px;
   }
 
+  /* Large balances wrap onto a second line instead of being cut off. */
+  .summary-cell strong {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+  }
+
   .summary-cell:nth-child(3) {
     border-top: 1px solid var(--line);
     border-left: 0;
@@ -9602,6 +9611,30 @@ a {
 }
 
 @media (max-width: 760px) {
+  /* Phones have little room: let long names and big amounts use two lines
+     instead of ending in an ellipsis. */
+  .liability-title strong {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+  }
+
+  .liability-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .liability-metrics strong {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+  }
+
   .liability-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
