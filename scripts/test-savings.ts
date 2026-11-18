@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict'
 import type { LedgerTransaction, SavingsHolding } from '../src/types'
+import { goalSavingPace } from '../src/lib/goalPlans'
 import {
   buildGoalSettlement,
   expectedInterestCents,
@@ -358,6 +359,52 @@ function testGoalOverageAndNoProjectSettlement() {
   assert.equal(plain.closed.closedAt, '2026-03-31')
 }
 
+function testGoalSavingPace() {
+  const base = goalHolding()
+  const withDeposits: SavingsHolding = {
+    ...base,
+    entries: [
+      {
+        id: 'p1',
+        kind: 'deposit',
+        amountCents: 100000,
+        date: '2026-09-01',
+        source: 'external',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+      {
+        id: 'p2',
+        kind: 'deposit',
+        amountCents: 150000,
+        date: '2026-10-01',
+        source: 'external',
+        createdAt: '2026-10-01T00:00:00.000Z',
+      },
+      {
+        id: 'p3',
+        kind: 'withdraw',
+        amountCents: 50000,
+        date: '2026-11-01',
+        createdAt: '2026-11-01T00:00:00.000Z',
+      },
+      {
+        id: 'p4',
+        kind: 'interest',
+        amountCents: 9000,
+        date: '2026-11-01',
+        createdAt: '2026-11-01T00:00:00.000Z',
+      },
+    ],
+  }
+  // June–November is six months; interest is not saving behaviour.
+  assert.deepEqual(goalSavingPace(withDeposits, today), {
+    monthlyCents: 33333,
+    months: 6,
+  })
+  // The first sample entry is outside the six-month window.
+  assert.equal(goalSavingPace(base, today), null)
+}
+
 function main() {
   testBalanceAndInterest()
   testLiquidNet()
@@ -365,6 +412,7 @@ function main() {
   testRenewalDoesNotDoubleCount()
   testGoalUsageAndSettlement()
   testGoalOverageAndNoProjectSettlement()
+  testGoalSavingPace()
   testSortAndValidation()
   console.log('savings checks passed')
 }

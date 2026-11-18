@@ -1,4 +1,4 @@
-import type { GoalPlan, GoalPlanKey } from '../types'
+import type { GoalPlan, GoalPlanKey, SavingsHolding } from '../types'
 import { localDateKey } from './utils'
 
 /**
@@ -38,6 +38,43 @@ function roundFriendly(cents: number): number {
   if (cents <= 0) return 0
   const unit = cents < 100_000 ? 5_000 : cents < 500_000 ? 10_000 : 50_000
   return Math.max(Math.ceil(cents / unit) * unit, unit)
+}
+
+export interface GoalSavingPace {
+  monthlyCents: number
+  /** Months covered by the observation window (1–6). */
+  months: number
+}
+
+/**
+ * Average monthly net deposit into a goal over the last six months (or since
+ * the goal started, when younger). Interest and balance adjustments are not
+ * saving behaviour, so only deposits and withdrawals count. Returns null when
+ * there is no positive pace to project with.
+ */
+export function goalSavingPace(
+  goal: SavingsHolding,
+  today = localDateKey(),
+): GoalSavingPace | null {
+  if (goal.kind !== 'goal') return null
+  const todayMonth = today.slice(0, 7)
+  const startMonth = goal.startDate.slice(0, 7)
+  const windowStart = addMonthsToKey(todayMonth, -5)
+  const from = startMonth > windowStart ? startMonth : windowStart
+  if (from > todayMonth) return null
+  const months = Math.max(
+    monthIndexOf(todayMonth) - monthIndexOf(from) + 1,
+    1,
+  )
+  let net = 0
+  for (const entry of goal.entries) {
+    const month = entry.date.slice(0, 7)
+    if (month < from || month > todayMonth) continue
+    if (entry.kind === 'deposit') net += entry.amountCents
+    else if (entry.kind === 'withdraw') net -= entry.amountCents
+  }
+  if (net <= 0) return null
+  return { monthlyCents: Math.round(net / months), months }
 }
 
 function formatMoneyPlain(cents: number): string {

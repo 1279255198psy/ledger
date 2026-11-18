@@ -21,7 +21,7 @@ import {
 import { DateInput } from '../components/DateInput'
 import { Modal } from '../components/Modal'
 import { SelectMenu } from '../components/SelectMenu'
-import { buildGoalPlans } from '../lib/goalPlans'
+import { buildGoalPlans, goalSavingPace } from '../lib/goalPlans'
 import type { GoalPlanContext } from '../lib/goalPlans'
 import {
   formatMoney,
@@ -1094,6 +1094,27 @@ export function Goals({
                     key: goal.goalPlanKey ?? 'custom',
                   }
                 : null
+            // The projected date follows the money actually saved: observed
+            // pace first, then the applied plan, then the recommendation.
+            const savingPace = goalSavingPace(goal, today)
+            const projectionMonthlyCents =
+              savingPace?.monthlyCents ??
+              appliedPlanDraft?.monthlyCents ??
+              recommendedPlan?.monthlyCents ??
+              0
+            const projectedFinishMonth =
+              remainingCents > 0 && projectionMonthlyCents > 0
+                ? shiftMonth(
+                    today.slice(0, 7),
+                    Math.min(
+                      Math.max(
+                        Math.ceil(remainingCents / projectionMonthlyCents),
+                        1,
+                      ),
+                      600,
+                    ),
+                  )
+                : ''
             return (
               <article className="goal-card" key={goal.id}>
                 <div className="goal-card-head">
@@ -1186,18 +1207,25 @@ export function Goals({
                     </strong>
                   </div>
                   <div>
-                    <span>
-                      {appliedPlanDraft ? '计划达成' : '预计达成'}
-                    </span>
+                    <span>预计达成</span>
                     <strong>
-                      {appliedPlanDraft
-                        ? appliedPlanDraft.finishMonth
-                          ? formatMonth(appliedPlanDraft.finishMonth)
-                          : '—'
-                        : recommendedPlan
-                          ? formatMonth(recommendedPlan.finishMonth)
+                      {reached
+                        ? '已达成'
+                        : projectedFinishMonth
+                          ? formatMonth(projectedFinishMonth)
                           : '—'}
                     </strong>
+                    <small>
+                      {savingPace
+                        ? `近 ${savingPace.months} 月月均存入 ${formatMoney(
+                            savingPace.monthlyCents / 100,
+                          )}`
+                        : projectionMonthlyCents > 0
+                          ? `按每月 ${formatMoney(
+                              projectionMonthlyCents / 100,
+                            )} 估算`
+                          : '还没有存入记录'}
+                    </small>
                   </div>
                   <div>
                     <span>项目已花</span>

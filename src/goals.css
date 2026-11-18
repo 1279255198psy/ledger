@@ -243,6 +243,14 @@
   white-space: nowrap;
 }
 
+.goal-facts small {
+  overflow: hidden;
+  color: var(--ink-faint);
+  font-size: calc(8px * var(--font-scale));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .goal-usage {
   display: flex;
   flex-wrap: wrap;
