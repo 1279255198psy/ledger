@@ -83,16 +83,18 @@ function makePlan(
   warning?: string,
 ): GoalPlan {
   const monthly = Math.max(roundFriendly(monthlyCents), 5_000)
+  const rawMonths = remainingCents / Math.max(monthly, 1)
   const months = Math.min(
-    Math.max(Math.ceil(remainingCents / Math.max(monthly, 1)), 1),
+    Math.max(Math.round(rawMonths * 10) / 10, 0.1),
     600,
   )
+  const finishMonths = Math.min(Math.max(Math.ceil(rawMonths), 1), 600)
   return {
     key,
     label,
     monthlyCents: monthly,
     months,
-    finishMonth: addMonthsToKey(today, months),
+    finishMonth: addMonthsToKey(today, finishMonths),
     detail,
     feasible,
     ...(warning ? { warning } : {}),

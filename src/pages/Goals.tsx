@@ -36,6 +36,7 @@ import type {
   Project,
   ProjectDraft,
   GoalPlan,
+  GoalPlanKey,
   SavingsEntryDraft,
   SavingsGoalDraft,
   SavingsGoalPlanDraft,
@@ -148,9 +149,8 @@ export function Goals({
   const [accountId, setAccountId] = useState('')
   const [note, setNote] = useState('')
   const [formError, setFormError] = useState('')
-  const [appliedPlan, setAppliedPlan] =
-    useState<SavingsGoalPlanDraft | null>(null)
-  const [customMonthly, setCustomMonthly] = useState('')
+  const [planMonthly, setPlanMonthly] = useState('')
+  const [planMode, setPlanMode] = useState<GoalPlanKey>('balanced')
   const [projectFormOpen, setProjectFormOpen] = useState(false)
   const [projectDraft, setProjectDraft] = useState<ProjectDraftState>({
     name: '',
@@ -193,8 +193,13 @@ export function Goals({
   const editorUsage = editorHolding
     ? getGoalUsage(editorHolding, transactions, today)
     : { rawSpendCents: 0, coveredCents: 0, overageCents: 0 }
+  const initialCents =
+    editor?.mode === 'create'
+      ? Math.max(Math.round(Number(initial) * 100) || 0, 0)
+      : 0
   const fundedCents =
     currentBalance +
+    initialCents +
     (editorHolding?.goalStatus === 'using' ? editorUsage.coveredCents : 0)
   const remaining =
     Number.isFinite(targetCents) && targetCents > fundedCents
@@ -239,6 +244,14 @@ export function Goals({
     today,
   )
 
+  const balancedPlan = plans.find((plan) => plan.key === 'balanced')
+  const deadlinePlan = plans.find((plan) => plan.key === 'deadline')
+  const steadyPlan = plans.find((plan) => plan.key === 'steady')
+  const fastPlan = plans.find((plan) => plan.key === 'fast')
+  const otherCommittedGoals = activeGoals.filter(
+    (goal) => goal.id !== editor?.id && monthlyCommitmentCents(goal) > 0,
+  )
+
   const planToDraft = (plan: GoalPlan): SavingsGoalPlanDraft => ({
     monthlyCents: plan.monthlyCents,
     label: plan.label,
@@ -247,27 +260,41 @@ export function Goals({
     key: plan.key,
   })
 
-  const applyPlan = (plan: GoalPlan) => {
-    setAppliedPlan(planToDraft(plan))
-    setCustomMonthly(centsToInput(plan.monthlyCents))
-    setFormError('')
+  const planMonthlyCents = Math.round(Number(planMonthly) * 100)
+  const planMonths =
+    planMonthlyCents > 0 && remaining > 0
+      ? Math.max(remaining / planMonthlyCents, 0.1)
+      : 0
+  const planFinishMonth =
+    planMonths > 0
+      ? shiftMonth(today.slice(0, 7), Math.ceil(planMonths))
+      : ''
+  const planOverCapacity =
+    planMonthlyCents > 0 && planMonthlyCents > freeMonthlyCents
+  const planLate =
+    Boolean(targetDate && planFinishMonth) &&
+    planFinishMonth > targetDate.slice(0, 7)
+  const planModeLabel: Record<GoalPlanKey, string> = {
+    deadline: '按目标日',
+    balanced: '按能力',
+    steady: '轻松',
+    fast: '加速',
+    custom: '自定义',
   }
+  const planDraft: SavingsGoalPlanDraft | undefined =
+    planMonthlyCents > 0 && planMonths > 0
+      ? {
+          monthlyCents: planMonthlyCents,
+          label: planModeLabel[planMode],
+          finishMonth: planFinishMonth,
+          source: planMode === 'custom' ? 'custom' : 'recommended',
+          key: planMode,
+        }
+      : undefined
 
-  const applyCustomPlan = () => {
-    const monthlyCents = Math.round(Number(customMonthly) * 100)
-    if (!Number.isFinite(monthlyCents) || monthlyCents <= 0) {
-      setFormError('请输入大于 0 的每月储蓄金额')
-      return
-    }
-    const months = Math.max(Math.ceil(remaining / monthlyCents), 1)
-    const finishMonth = shiftMonth(today.slice(0, 7), months)
-    setAppliedPlan({
-      monthlyCents,
-      label: '自定义',
-      finishMonth,
-      source: 'custom',
-      key: 'custom',
-    })
+  const selectPlan = (plan: GoalPlan) => {
+    setPlanMode(plan.key)
+    setPlanMonthly(centsToInput(plan.monthlyCents))
     setFormError('')
   }
 
@@ -282,8 +309,8 @@ export function Goals({
     setAccountId('')
     setNote('')
     setFormError('')
-    setAppliedPlan(null)
-    setCustomMonthly('')
+    setPlanMonthly('')
+    setPlanMode('balanced')
     setProjectFormOpen(false)
     setProjectDraft({ name: '', endDate: '', budget: '' })
     setProjectError('')
@@ -299,27 +326,17 @@ export function Goals({
     setFormError('')
     setProjectFormOpen(false)
     setProjectError('')
-    setAppliedPlan(
-      goal.goalMonthlyCents
-        ? {
-            monthlyCents: goal.goalMonthlyCents,
-            label: goal.goalPlanLabel ?? '自定义',
-            finishMonth: goal.goalPlanFinishMonth ?? '',
-            source: goal.goalPlanSource ?? 'custom',
-            key: goal.goalPlanKey ?? 'custom',
-          }
-        : null,
-    )
-    setCustomMonthly(
+    setPlanMonthly(
       goal.goalMonthlyCents ? centsToInput(goal.goalMonthlyCents) : '',
     )
+    setPlanMode(goal.goalPlanKey ?? 'custom')
   }
 
   const closeEditor = () => {
     setEditor(null)
     setFormError('')
-    setAppliedPlan(null)
-    setCustomMonthly('')
+    setPlanMonthly('')
+    setPlanMode('balanced')
     setProjectFormOpen(false)
   }
 
@@ -328,8 +345,8 @@ export function Goals({
     const project = projects.find((item) => item.id === nextId)
     if (project?.budgetCents && !target.trim()) {
       setTarget(centsToInput(project.budgetCents))
-      setAppliedPlan(null)
-      setCustomMonthly('')
+      setPlanMonthly('')
+      setPlanMode('balanced')
     }
   }
 
@@ -359,8 +376,8 @@ export function Goals({
     setProjectId(id)
     if (budgetCents && budgetCents > 0 && !target.trim()) {
       setTarget(centsToInput(budgetCents))
-      setAppliedPlan(null)
-      setCustomMonthly('')
+      setPlanMonthly('')
+      setPlanMode('balanced')
     }
     setProjectFormOpen(false)
     setProjectDraft({ name: '', endDate: '', budget: '' })
@@ -391,7 +408,7 @@ export function Goals({
         ...(targetDate ? { targetDate } : {}),
         ...(projectId ? { projectId } : {}),
         ...(note.trim() ? { note: note.trim().slice(0, 200) } : {}),
-        ...(appliedPlan ? { plan: appliedPlan } : {}),
+        ...(planDraft ? { plan: planDraft } : {}),
       })
       closeEditor()
       return
@@ -411,7 +428,7 @@ export function Goals({
       source,
       ...(accountId ? { accountId } : {}),
       ...(note.trim() ? { note: note.trim().slice(0, 200) } : {}),
-      ...(appliedPlan ? { plan: appliedPlan } : {}),
+      ...(planDraft ? { plan: planDraft } : {}),
     })
     closeEditor()
   }
@@ -534,8 +551,15 @@ export function Goals({
             </button>
           </div>
 
-          <div className="savings-form-grid">
-            <label className="field">
+          <section className="goal-form-section goal-form-main">
+            <div className="goal-form-section-head">
+              <div>
+                <h4>目标</h4>
+                <p>攒什么、攒到多少，以及希望什么时候用。</p>
+              </div>
+            </div>
+            <div className="goal-form-grid">
+            <label className="field goal-field-full">
               <span className="field-label">目标名称</span>
               <input
                 type="text"
@@ -556,8 +580,8 @@ export function Goals({
                 value={target}
                 onChange={(event) => {
                   setTarget(sanitizeMoney(event.target.value))
-                  setAppliedPlan(null)
-                  setCustomMonthly('')
+                  setPlanMonthly('')
+      setPlanMode('balanced')
                   setFormError('')
                 }}
                 placeholder="0.00"
@@ -573,13 +597,13 @@ export function Goals({
                 ariaLabel="目标日期"
                 onChange={(next) => {
                   setTargetDate(next)
-                  setAppliedPlan(null)
-                  setCustomMonthly('')
+                  setPlanMonthly('')
+      setPlanMode('balanced')
                   setFormError('')
                 }}
               />
             </label>
-            <div className="field">
+            <div className="field goal-field-full">
               <span className="field-label">
                 关联项目 <span className="optional">选填</span>
               </span>
@@ -698,9 +722,17 @@ export function Goals({
               </div>
             )}
           </div>
+          </section>
 
           {editor.mode === 'create' ? (
-            <div className="savings-form-grid">
+            <section className="goal-form-section goal-form-main">
+              <div className="goal-form-section-head">
+                <div>
+                  <h4>初始资金</h4>
+                  <p>先把已经存进去的钱记上；没有也可以从零开始。</p>
+                </div>
+              </div>
+              <div className="goal-form-grid goal-form-grid--3">
               <label className="field">
                 <span className="field-label">
                   初始存入 <span className="optional">选填</span>
@@ -748,120 +780,230 @@ export function Goals({
                 </div>
               ) : null}
             </div>
+            </section>
           ) : null}
 
-          <label className="field">
-            <span className="field-label">
-              备注 <span className="optional">选填</span>
-            </span>
-            <input
-              type="text"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="为什么攒这笔钱，或达成后的打算"
-              maxLength={200}
-            />
-          </label>
-
-          <div className="goal-plans">
-            <div className="goal-plans-head">
-              <Target size={14} />
-              <span>
-                近{' '}
-                {goalPlanContext.monthCount > 0
-                  ? `${goalPlanContext.monthCount} 个完整月`
-                  : '现有数据'}
-                平均结余 {formatMoney(averageSurplusCents / 100)}；扣除还款与其他目标后，
-                每月可安排 {formatMoney(freeMonthlyCents / 100)}。
-              </span>
+          <section className="budget-block goal-plan-block goal-form-side">
+            <div className="budget-block-head">
+              <div>
+                <h4>储蓄计划</h4>
+                <p>
+                  先看每月能安排多少，再选择节奏；计划会随目标一起保存。
+                </p>
+              </div>
             </div>
+
+            <p className="goal-plan-task-line">
+              {targetCents > 0 ? (
+                <>
+                  目标 {formatMoney(targetCents / 100)} · 已存{' '}
+                  {formatMoney(fundedCents / 100)} · 还差{' '}
+                  {formatMoney(remaining / 100)}
+                </>
+              ) : (
+                '填写目标金额后，这里会显示任务量和计划。'
+              )}
+            </p>
+
+            <div className="goal-plan-facts">
+              <div>
+                <span>每月可安排</span>
+                <strong>{formatMoney(freeMonthlyCents / 100)}</strong>
+                <small>已扣除还款与其他目标</small>
+              </div>
+              <div>
+                <span>其他目标占用</span>
+                <strong>{formatMoney(committedMonthlyCents / 100)}</strong>
+                <small>{otherCommittedGoals.length} 个已定计划目标</small>
+              </div>
+              <div>
+                <span>目标日所需</span>
+                <strong>
+                  {deadlinePlan
+                    ? formatMoney(deadlinePlan.monthlyCents / 100)
+                    : '—'}
+                </strong>
+                <small>{targetDate ? `截至 ${targetDate}` : '未设置目标日'}</small>
+              </div>
+              <div>
+                <span>
+                  {goalPlanContext.monthCount > 0
+                    ? `近 ${goalPlanContext.monthCount} 月平均结余`
+                    : '平均结余'}
+                </span>
+                <strong>{formatMoney(averageSurplusCents / 100)}</strong>
+                <small>
+                  每月还款 {formatMoney(goalPlanContext.monthlyDebtCents / 100)}
+                </small>
+              </div>
+            </div>
+
             {targetCents > 0 && remaining > 0 ? (
               <>
-                {plans.length > 0 ? (
-                  <div className="goal-plan-list">
-                    {plans.map((plan) => {
-                      const selected =
-                        appliedPlan?.source === 'recommended' &&
-                        appliedPlan.key === plan.key
-                      return (
-                        <button
-                          key={plan.key}
-                          type="button"
-                          className={`goal-plan${selected ? ' is-selected' : ''}`}
-                          onClick={() => applyPlan(plan)}
-                        >
-                          <span className="goal-plan-title">
-                            <strong>{plan.label}</strong>
-                            {selected ? <CheckCircle2 size={13} /> : null}
-                          </span>
-                          <span>
-                            每月 {formatMoney(plan.monthlyCents / 100)}
-                          </span>
-                          <small>
-                            约 {plan.months} 个月 ·{' '}
-                            {formatMonth(plan.finishMonth)}
-                          </small>
-                          {plan.warning ? (
-                            <em>{plan.warning}</em>
-                          ) : null}
-                        </button>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <p className="goal-plan-note">
-                    近 6 个月没有可安排的结余，可以先设一个更长的目标日期。
-                  </p>
-                )}
-                <div className="goal-custom-plan">
-                  <span>自定义每月</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={customMonthly}
-                    onChange={(event) => {
-                      setCustomMonthly(sanitizeMoney(event.target.value))
-                      setFormError('')
-                    }}
-                    placeholder="金额"
-                    aria-label="自定义每月储蓄金额"
-                  />
-                  <button
-                    type="button"
-                    className="button ghost"
-                    onClick={applyCustomPlan}
-                  >
-                    应用
-                  </button>
+                <div
+                  className="goal-plan-modes"
+                  role="group"
+                  aria-label="计划方式"
+                >
+                  {[
+                    {
+                      key: 'balanced' as const,
+                      label: '按能力',
+                      plan: balancedPlan,
+                    },
+                    {
+                      key: 'deadline' as const,
+                      label: '按目标日',
+                      plan: deadlinePlan,
+                    },
+                    { key: 'steady' as const, label: '轻松', plan: steadyPlan },
+                    { key: 'fast' as const, label: '加速', plan: fastPlan },
+                  ]
+                    .filter((item) => item.plan)
+                    .map(({ key, label, plan }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={
+                          planMode === key &&
+                          plan?.monthlyCents === planMonthlyCents
+                            ? 'is-active'
+                            : ''
+                        }
+                        onClick={() => plan && selectPlan(plan)}
+                      >
+                        <span>{label}</span>
+                        <strong>
+                          {plan ? formatMoney(plan.monthlyCents / 100) : '—'}
+                        </strong>
+                        <small>
+                          {plan ? `约 ${plan.months.toFixed(1)} 个月` : ''}
+                        </small>
+                        {plan && !plan.feasible ? (
+                          <em>超出能力</em>
+                        ) : null}
+                      </button>
+                    ))}
                 </div>
+
+                <div className="goal-plan-input-row">
+                  <label className="goal-plan-amount">
+                    <span>每月存入</span>
+                    <div className="budget-input">
+                      <span>¥</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={planMonthly}
+                        onChange={(event) => {
+                          setPlanMonthly(sanitizeMoney(event.target.value))
+                          setPlanMode('custom')
+                          setFormError('')
+                        }}
+                        placeholder="0.00"
+                        aria-label="每月储蓄金额"
+                      />
+                    </div>
+                  </label>
+                  <div className="goal-plan-preview">
+                    {planMonthlyCents > 0 ? (
+                      <>
+                        <span>
+                          按每月 {formatMoney(planMonthlyCents / 100)} 计算
+                        </span>
+                        <strong>
+                          {planMonths > 0
+                            ? `约 ${planMonths.toFixed(
+                                1,
+                              )} 个月 · ${formatMonth(planFinishMonth)}`
+                            : '目标已达成'}
+                        </strong>
+                        <p
+                          className={
+                            planOverCapacity || planLate ? 'is-warning' : ''
+                          }
+                        >
+                          {planOverCapacity
+                            ? `超过每月可安排 ${formatMoney(
+                                freeMonthlyCents / 100,
+                              )}，建议降低金额或延长时间。`
+                            : planLate
+                              ? `比目标日晚一些，按当前速度会在 ${formatMonth(
+                                  planFinishMonth,
+                                )}达成。`
+                              : freeMonthlyCents > 0
+                                ? `占每月可安排结余的 ${Math.round(
+                                    (planMonthlyCents / freeMonthlyCents) * 100,
+                                  )}%。`
+                                : '先增加每月可安排的结余。'}
+                        </p>
+                      </>
+                    ) : plans.length > 0 ? (
+                      <span>选择一个方案，或填入每月能存的钱。</span>
+                    ) : (
+                      <span>
+                        当前没有可安排的结余，可以直接填一个每月金额，或把目标日期往后放。
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {plans.find((plan) => plan.key === planMode)?.warning ? (
+                  <p className="goal-plan-warning">
+                    {plans.find((plan) => plan.key === planMode)?.warning}
+                  </p>
+                ) : null}
+
+                {otherCommittedGoals.length > 0 ? (
+                  <details className="goal-other-goals">
+                    <summary>
+                      其他目标每月占用{' '}
+                      {formatMoney(committedMonthlyCents / 100)}
+                    </summary>
+                    <ul>
+                      {otherCommittedGoals.map((other) => (
+                        <li key={other.id}>
+                          <span>{other.name}</span>
+                          <strong>
+                            {formatMoney(
+                              monthlyCommitmentCents(other) / 100,
+                            )}
+                          </strong>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
               </>
             ) : (
-              <p className="goal-plan-note">
+              <p className="budget-mode-note">
                 {targetCents > 0
                   ? '目标金额已经攒够，不需要新的储蓄计划。'
-                  : '先填写目标金额，就会生成可应用的计划。'}
+                  : '先填写目标金额，计划会在下面出现。'}
               </p>
             )}
-            {appliedPlan ? (
-              <div className="goal-applied-plan">
-                <CheckCircle2 size={14} />
-                <span>
-                  已选「{appliedPlan.label}」：每月{' '}
-                  {formatMoney(appliedPlan.monthlyCents / 100)}，预计{' '}
-                  {appliedPlan.finishMonth
-                    ? formatMonth(appliedPlan.finishMonth)
-                    : '—'}
-                </span>
-                <button
-                  type="button"
-                  className="button ghost"
-                  onClick={() => setAppliedPlan(null)}
-                >
-                  清除
-                </button>
+          </section>
+
+          <section className="goal-form-section goal-form-main">
+            <div className="goal-form-section-head">
+              <div>
+                <h4>备注</h4>
+                <p>写一句为什么攒这笔钱，或者达成后的打算。</p>
               </div>
-            ) : null}
-          </div>
+            </div>
+            <label className="field">
+              <span className="field-label">
+                备注 <span className="optional">选填</span>
+              </span>
+              <input
+                type="text"
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="为什么攒这笔钱，或达成后的打算"
+                maxLength={200}
+              />
+            </label>
+          </section>
 
           {formError ? (
             <p className="form-error" role="alert">
@@ -935,6 +1077,15 @@ export function Goals({
               committedForGoal,
               today,
             )
+            const recommendedPlan =
+              plans.find(
+                (plan) => plan.key === 'deadline' && plan.feasible,
+              ) ??
+              plans.find(
+                (plan) => plan.key === 'balanced' && plan.feasible,
+              ) ??
+              plans.find((plan) => plan.feasible) ??
+              plans[0]
             const appliedPlanDraft: SavingsGoalPlanDraft | null =
               goal.goalMonthlyCents
                 ? {
@@ -1031,8 +1182,8 @@ export function Goals({
                     <strong>
                       {appliedPlanDraft
                         ? formatMoney(appliedPlanDraft.monthlyCents / 100)
-                        : plans[0]
-                          ? formatMoney(plans[0].monthlyCents / 100)
+                        : recommendedPlan
+                          ? formatMoney(recommendedPlan.monthlyCents / 100)
                           : '—'}
                     </strong>
                   </div>
@@ -1045,8 +1196,8 @@ export function Goals({
                         ? appliedPlanDraft.finishMonth
                           ? formatMonth(appliedPlanDraft.finishMonth)
                           : '—'
-                        : plans[0]
-                          ? formatMonth(plans[0].finishMonth)
+                        : recommendedPlan
+                          ? formatMonth(recommendedPlan.finishMonth)
                           : '—'}
                     </strong>
                   </div>
@@ -1093,12 +1244,12 @@ export function Goals({
                 ) : plans.length > 0 && !reached ? (
                   <div className="goal-recommendation-row">
                     <p className="goal-recommendation">
-                      {plans[0].detail}
+                      {recommendedPlan.detail}
                     </p>
                     <button
                       type="button"
                       className="button ghost goal-apply-plan"
-                      onClick={() => onApplyPlan(goal.id, planToDraft(plans[0]))}
+                      onClick={() => onApplyPlan(goal.id, planToDraft(recommendedPlan))}
                     >
                       应用推荐
                     </button>
